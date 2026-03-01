@@ -1,7 +1,14 @@
 mod commands;
+mod constants;
+mod crypto;
 mod error;
+mod keychain;
 mod models;
+mod recovery;
 mod state;
+
+#[cfg(test)]
+mod integration_tests;
 
 use state::AppState;
 
