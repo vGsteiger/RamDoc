@@ -2,7 +2,8 @@ use tauri::State;
 use crate::audit::{self, AuditAction};
 use crate::error::AppError;
 use crate::state::AppState;
-use crate::models::patient::{Patient, CreatePatient, UpdatePatient};
+use crate::models::patient::{self, Patient, CreatePatient, UpdatePatient};
+use crate::search;
 
 #[tauri::command]
 pub async fn create_patient(
@@ -15,12 +16,15 @@ pub async fn create_patient(
     // Begin transaction to ensure atomicity
     let tx = conn.unchecked_transaction()?;
 
-    let patient = crate::models::patient::create_patient(&tx, input)?;
+    let patient = patient::create_patient(&tx, input)?;
 
     // PKG-6: Audit logging (within same transaction)
     audit::log(&tx, AuditAction::Create, "patient", Some(&patient.id), None)?;
 
     tx.commit()?;
+
+    // Index patient for search (after commit so the row is visible)
+    search::index_patient(&conn, &patient)?;
 
     Ok(patient)
 }
@@ -32,7 +36,7 @@ pub async fn get_patient(
 ) -> Result<Patient, AppError> {
     let pool = state.get_db()?;
     let conn = pool.conn()?;
-    let patient = crate::models::patient::get_patient(&conn, &id)?;
+    let patient = patient::get_patient(&conn, &id)?;
 
     // PKG-6: Audit logging
     audit::log(&conn, AuditAction::View, "patient", Some(&id), None)?;
@@ -50,7 +54,7 @@ pub async fn list_patients(
     let conn = pool.conn()?;
     let limit = limit.unwrap_or(50);
     let offset = offset.unwrap_or(0);
-    let patients = crate::models::patient::list_patients(&conn, limit, offset)?;
+    let patients = patient::list_patients(&conn, limit, offset)?;
 
     // PKG-6: Audit logging for list operations
     audit::log(&conn, AuditAction::View, "patient", None, Some(&format!("list: {} patients", patients.len())))?;
@@ -85,7 +89,7 @@ pub async fn update_patient(
     if input.gp_address.is_some() { changed_fields.push("gp_address"); }
     if input.notes.is_some() { changed_fields.push("notes"); }
 
-    let patient = crate::models::patient::update_patient(&tx, &id, input)?;
+    let patient = patient::update_patient(&tx, &id, input)?;
 
     // PKG-6: Audit logging with field tracking (within same transaction)
     let details = if !changed_fields.is_empty() {
@@ -96,6 +100,9 @@ pub async fn update_patient(
     audit::log(&tx, AuditAction::Update, "patient", Some(&id), details.as_deref())?;
 
     tx.commit()?;
+
+    // Re-index patient for search
+    search::index_patient(&conn, &patient)?;
 
     Ok(patient)
 }
@@ -111,7 +118,10 @@ pub async fn delete_patient(
     // Begin transaction to ensure atomicity
     let tx = conn.unchecked_transaction()?;
 
-    crate::models::patient::delete_patient(&tx, &id)?;
+    // Remove from search index
+    search::remove_from_index(&tx, "patient", &id)?;
+
+    patient::delete_patient(&tx, &id)?;
 
     // PKG-6: Audit logging (within same transaction)
     audit::log(&tx, AuditAction::Delete, "patient", Some(&id), None)?;

@@ -9,6 +9,7 @@ mod keychain;
 mod llm;  // PKG-4: LLM Engine (placeholder with security utilities)
 mod models;
 mod recovery;
+mod search;
 mod state;
 
 #[cfg(test)]
@@ -44,6 +45,7 @@ pub fn run() {
             commands::sessions::create_session,
             commands::reports::generate_report,
             commands::search::search_patients,
+            commands::search::global_search,
             commands::settings::get_settings,
             commands::settings::update_settings,
         ])
