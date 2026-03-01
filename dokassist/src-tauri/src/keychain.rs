@@ -1,10 +1,15 @@
+use crate::constants::{DB_KEY_ACCOUNT, FS_KEY_ACCOUNT};
 use crate::error::AppError;
 
 #[cfg(target_os = "macos")]
 use security_framework::passwords::{delete_generic_password, get_generic_password, set_generic_password};
 
-/// Store a key in macOS Keychain with Touch ID + device passcode protection.
-/// Uses kSecAttrAccessibleWhenUnlockedThisDeviceOnly + BiometryCurrentSet.
+/// Store a key in macOS Keychain.
+///
+/// Note: This uses the default security attributes provided by `set_generic_password`.
+/// It does not explicitly set `kSecAttrAccessibleWhenUnlockedThisDeviceOnly` or
+/// `kSecAccessControlBiometryCurrentSet` flags, as these require lower-level APIs
+/// not exposed by the current version of the security-framework crate.
 #[cfg(target_os = "macos")]
 pub fn store_key(service: &str, account: &str, key: &[u8]) -> Result<(), AppError> {
     // Delete existing key if present
@@ -17,7 +22,10 @@ pub fn store_key(service: &str, account: &str, key: &[u8]) -> Result<(), AppErro
     Ok(())
 }
 
-/// Retrieve a key from Keychain. Triggers Touch ID prompt.
+/// Retrieve a key from Keychain.
+///
+/// Note: This may trigger authentication (Touch ID or password prompt) depending on
+/// the keychain item's access control settings and the current device state.
 #[cfg(target_os = "macos")]
 pub fn retrieve_key(service: &str, account: &str) -> Result<Vec<u8>, AppError> {
     let password = get_generic_password(service, account)
@@ -35,20 +43,32 @@ pub fn delete_key(service: &str, account: &str) -> Result<(), AppError> {
     Ok(())
 }
 
-/// Check if keys exist in Keychain (does NOT trigger biometric).
+/// Check if keys exist in the Keychain.
+///
+/// NOTE: This helper may trigger biometric/password authentication because
+/// it uses `get_generic_password` under the hood, which can require user
+/// authentication for access-control-protected items. It also reads the key
+/// material into memory even though only existence is checked.
+///
+/// If you need a metadata-only existence check that never prompts the user
+/// and does not read key material, you should implement it using lower-level
+/// Keychain APIs (e.g. `SecItemCopyMatching` with `kSecReturnData = false`).
 #[cfg(target_os = "macos")]
 pub fn keys_exist(service: &str) -> Result<bool, AppError> {
     // Try to check if keys exist by attempting to retrieve them
-    // This is a simplified implementation - in production you might want
-    // to use lower-level APIs to check without triggering auth
-
-    const DB_KEY_ACCOUNT: &str = "db.master-key";
-    const FS_KEY_ACCOUNT: &str = "fs.master-key";
+    // This is a simplified implementation; see the note above for a
+    // production-ready, metadata-only approach.
 
     let db_exists = get_generic_password(service, DB_KEY_ACCOUNT).is_ok();
+    if !db_exists {
+        // If the DB key is missing, we can short-circuit without checking
+        // the FS key.
+        return Ok(false);
+    }
+
     let fs_exists = get_generic_password(service, FS_KEY_ACCOUNT).is_ok();
 
-    Ok(db_exists && fs_exists)
+    Ok(fs_exists)
 }
 
 // Non-macOS stubs

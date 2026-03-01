@@ -1,7 +1,5 @@
 use std::sync::Mutex;
-
-const KEYCHAIN_SERVICE: &str = "ch.dokassist.app";
-const RECOVERY_FILENAME: &str = "recovery.vault";
+use crate::constants::{KEYCHAIN_SERVICE, RECOVERY_FILENAME};
 
 /// Application state shared across all Tauri commands.
 pub struct AppState {
@@ -40,17 +38,41 @@ fn determine_initial_auth_state(data_dir: &std::path::Path) -> AuthState {
     // Check if keys exist in keychain (macOS only)
     #[cfg(target_os = "macos")]
     {
-        let keys_in_keychain = crate::keychain::keys_exist(KEYCHAIN_SERVICE).unwrap_or(false);
+        let keys_in_keychain = match crate::keychain::keys_exist(KEYCHAIN_SERVICE) {
+            Ok(present) => Some(present),
+            Err(err) => {
+                // On keychain access error, avoid forcing RecoveryRequired.
+                // Treat as "unknown" so the app can default to a safer state.
+                eprintln!("Failed to check keys in keychain for service {}: {}", KEYCHAIN_SERVICE, err);
+                None
+            }
+        };
 
-        if vault_exists && keys_in_keychain {
-            // Normal case: keys in keychain, app is locked
-            AuthState::Locked
-        } else if vault_exists && !keys_in_keychain {
-            // Recovery case: vault exists but no keychain keys
-            AuthState::RecoveryRequired
-        } else {
-            // First run: no vault, no keys
-            AuthState::FirstRun
+        match keys_in_keychain {
+            Some(true) => {
+                if vault_exists {
+                    // Normal case: keys in keychain and vault exists, app is locked
+                    AuthState::Locked
+                } else {
+                    // Inconsistent state: keys exist in keychain but vault file is missing.
+                    // Treat as a recovery scenario rather than first run to avoid reinitializing keys.
+                    AuthState::RecoveryRequired
+                }
+            }
+            Some(false) => {
+                if vault_exists {
+                    // Recovery case: vault exists but no keychain keys
+                    AuthState::RecoveryRequired
+                } else {
+                    // First run: no vault and no keys
+                    AuthState::FirstRun
+                }
+            }
+            None => {
+                // Keychain access failed (e.g., locked or permission issue).
+                // Safer to treat as locked so UI can prompt for unlock/retry.
+                AuthState::Locked
+            }
         }
     }
 

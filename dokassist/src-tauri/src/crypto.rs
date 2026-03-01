@@ -4,7 +4,6 @@ use aes_gcm::{
     Aes256Gcm, Nonce,
 };
 use rand::RngCore;
-use zeroize::Zeroize;
 
 /// Generate a cryptographically random 256-bit key
 pub fn generate_key() -> [u8; 32] {

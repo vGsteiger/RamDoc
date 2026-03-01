@@ -1,4 +1,5 @@
 mod commands;
+mod constants;
 mod crypto;
 mod error;
 mod keychain;

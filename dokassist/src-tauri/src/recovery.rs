@@ -24,6 +24,7 @@ pub fn create_recovery(
     // Use entropy as encryption key for recovery vault
     let mut recovery_key = [0u8; 32];
     recovery_key.copy_from_slice(&entropy);
+    entropy.zeroize();
 
     // Create recovery vault data: [db_key || fs_key] = 64 bytes
     let mut vault_plaintext = Vec::with_capacity(64);
@@ -61,21 +62,28 @@ pub fn recover_from_mnemonic(
     vault_path: &Path,
 ) -> Result<([u8; 32], [u8; 32]), AppError> {
     // Reconstruct mnemonic from words
-    let mnemonic_string = words.join(" ");
+    let mut mnemonic_string = words.join(" ");
     let mnemonic = Mnemonic::parse_in(Language::English, &mnemonic_string)
         .map_err(|_| AppError::InvalidRecoveryPhrase)?;
 
+    // Zeroize mnemonic string after parsing
+    mnemonic_string.zeroize();
+
     // Get entropy from mnemonic
-    let entropy = mnemonic.to_entropy();
+    let mut entropy = mnemonic.to_entropy();
 
     // Verify we have 32 bytes of entropy
     if entropy.len() != 32 {
+        entropy.zeroize();
         return Err(AppError::Crypto("Invalid mnemonic entropy".to_string()));
     }
 
     // Derive recovery key from entropy
     let mut recovery_key = [0u8; 32];
     recovery_key.copy_from_slice(&entropy);
+
+    // Zeroize entropy after copying
+    entropy.zeroize();
 
     // Read encrypted vault
     let encrypted_vault = fs::read(vault_path).map_err(|e| {
@@ -86,13 +94,14 @@ pub fn recover_from_mnemonic(
     })?;
 
     // Decrypt vault
-    let vault_plaintext = crypto::decrypt(&recovery_key, &encrypted_vault)?;
+    let mut vault_plaintext = crypto::decrypt(&recovery_key, &encrypted_vault)?;
 
     // Zeroize recovery key
     recovery_key.zeroize();
 
     // Verify vault has correct length (64 bytes = 2 × 32-byte keys)
     if vault_plaintext.len() != 64 {
+        vault_plaintext.zeroize();
         return Err(AppError::Crypto(
             "Invalid recovery vault format".to_string(),
         ));
@@ -103,6 +112,9 @@ pub fn recover_from_mnemonic(
     let mut fs_key = [0u8; 32];
     db_key.copy_from_slice(&vault_plaintext[..32]);
     fs_key.copy_from_slice(&vault_plaintext[32..]);
+
+    // Zeroize vault plaintext after extraction
+    vault_plaintext.zeroize();
 
     Ok((db_key, fs_key))
 }

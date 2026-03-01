@@ -1,12 +1,8 @@
 use tauri::State;
+use crate::constants::{KEYCHAIN_SERVICE, DB_KEY_ACCOUNT, FS_KEY_ACCOUNT, RECOVERY_FILENAME};
 use crate::error::AppError;
 use crate::state::{AppState, AuthState};
 use crate::{crypto, keychain, recovery};
-
-const KEYCHAIN_SERVICE: &str = "ch.dokassist.app";
-const DB_KEY_ACCOUNT: &str = "db.master-key";
-const FS_KEY_ACCOUNT: &str = "fs.master-key";
-const RECOVERY_FILENAME: &str = "recovery.vault";
 
 /// Returns "first_run" | "locked" | "unlocked" | "recovery_required"
 #[tauri::command]
@@ -65,11 +61,14 @@ pub async fn unlock_app(state: State<'_, AppState>) -> Result<bool, AppError> {
     }
 
     // Retrieve keys from Keychain (triggers Touch ID)
-    let db_key_vec = keychain::retrieve_key(KEYCHAIN_SERVICE, DB_KEY_ACCOUNT)?;
-    let fs_key_vec = keychain::retrieve_key(KEYCHAIN_SERVICE, FS_KEY_ACCOUNT)?;
+    let mut db_key_vec = keychain::retrieve_key(KEYCHAIN_SERVICE, DB_KEY_ACCOUNT)?;
+    let mut fs_key_vec = keychain::retrieve_key(KEYCHAIN_SERVICE, FS_KEY_ACCOUNT)?;
 
     // Convert to fixed-size arrays
     if db_key_vec.len() != 32 || fs_key_vec.len() != 32 {
+        // Zeroize before returning error
+        zeroize::Zeroize::zeroize(&mut db_key_vec);
+        zeroize::Zeroize::zeroize(&mut fs_key_vec);
         return Err(AppError::Keychain("Invalid key size".to_string()));
     }
 
@@ -77,6 +76,10 @@ pub async fn unlock_app(state: State<'_, AppState>) -> Result<bool, AppError> {
     let mut fs_key = [0u8; 32];
     db_key.copy_from_slice(&db_key_vec);
     fs_key.copy_from_slice(&fs_key_vec);
+
+    // Zeroize original key vectors now that we've copied their contents
+    zeroize::Zeroize::zeroize(&mut db_key_vec);
+    zeroize::Zeroize::zeroize(&mut fs_key_vec);
 
     // Transition to Unlocked state
     *auth = AuthState::Unlocked {
