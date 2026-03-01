@@ -1,4 +1,5 @@
 use tauri::State;
+use crate::audit::{self, AuditAction};
 use crate::error::AppError;
 use crate::state::AppState;
 use crate::models::patient::{Patient, CreatePatient, UpdatePatient};
@@ -10,7 +11,12 @@ pub async fn create_patient(
 ) -> Result<Patient, AppError> {
     let pool = state.get_db()?;
     let conn = pool.conn()?;
-    crate::models::patient::create_patient(&conn, input)
+    let patient = crate::models::patient::create_patient(&conn, input)?;
+
+    // PKG-6: Audit logging
+    audit::log(&conn, AuditAction::Create, "patient", Some(&patient.id), None)?;
+
+    Ok(patient)
 }
 
 #[tauri::command]
@@ -20,7 +26,12 @@ pub async fn get_patient(
 ) -> Result<Patient, AppError> {
     let pool = state.get_db()?;
     let conn = pool.conn()?;
-    crate::models::patient::get_patient(&conn, &id)
+    let patient = crate::models::patient::get_patient(&conn, &id)?;
+
+    // PKG-6: Audit logging
+    audit::log(&conn, AuditAction::View, "patient", Some(&id), None)?;
+
+    Ok(patient)
 }
 
 #[tauri::command]
@@ -33,7 +44,12 @@ pub async fn list_patients(
     let conn = pool.conn()?;
     let limit = limit.unwrap_or(50);
     let offset = offset.unwrap_or(0);
-    crate::models::patient::list_patients(&conn, limit, offset)
+    let patients = crate::models::patient::list_patients(&conn, limit, offset)?;
+
+    // PKG-6: Audit logging for list operations
+    audit::log(&conn, AuditAction::View, "patient", None, Some(&format!("list: {} patients", patients.len())))?;
+
+    Ok(patients)
 }
 
 #[tauri::command]
@@ -44,7 +60,33 @@ pub async fn update_patient(
 ) -> Result<Patient, AppError> {
     let pool = state.get_db()?;
     let conn = pool.conn()?;
-    crate::models::patient::update_patient(&conn, &id, input)
+
+    // Build details string with changed field names only (no PHI values)
+    let mut changed_fields = Vec::new();
+    if input.first_name.is_some() { changed_fields.push("first_name"); }
+    if input.last_name.is_some() { changed_fields.push("last_name"); }
+    if input.date_of_birth.is_some() { changed_fields.push("date_of_birth"); }
+    if input.gender.is_some() { changed_fields.push("gender"); }
+    if input.ahv_number.is_some() { changed_fields.push("ahv_number"); }
+    if input.address.is_some() { changed_fields.push("address"); }
+    if input.phone.is_some() { changed_fields.push("phone"); }
+    if input.email.is_some() { changed_fields.push("email"); }
+    if input.insurance.is_some() { changed_fields.push("insurance"); }
+    if input.gp_name.is_some() { changed_fields.push("gp_name"); }
+    if input.gp_address.is_some() { changed_fields.push("gp_address"); }
+    if input.notes.is_some() { changed_fields.push("notes"); }
+
+    let patient = crate::models::patient::update_patient(&conn, &id, input)?;
+
+    // PKG-6: Audit logging with field tracking
+    let details = if !changed_fields.is_empty() {
+        Some(format!("fields: {}", changed_fields.join(",")))
+    } else {
+        None
+    };
+    audit::log(&conn, AuditAction::Update, "patient", Some(&id), details.as_deref())?;
+
+    Ok(patient)
 }
 
 #[tauri::command]
@@ -54,5 +96,10 @@ pub async fn delete_patient(
 ) -> Result<(), AppError> {
     let pool = state.get_db()?;
     let conn = pool.conn()?;
-    crate::models::patient::delete_patient(&conn, &id)
+    crate::models::patient::delete_patient(&conn, &id)?;
+
+    // PKG-6: Audit logging
+    audit::log(&conn, AuditAction::Delete, "patient", Some(&id), None)?;
+
+    Ok(())
 }

@@ -1,3 +1,4 @@
+pub mod audit;
 pub mod auth;
 pub mod patients;
 pub mod files;
