@@ -5,6 +5,7 @@ mod crypto;
 mod database;
 mod error;
 mod keychain;
+mod llm;  // PKG-4: LLM Engine (placeholder with security utilities)
 mod models;
 mod recovery;
 mod state;

@@ -174,6 +174,8 @@ All entities implement full CRUD pattern:
 ✅ Prepared statements (rusqlite) prevent SQL injection
 ✅ Memory-safe Rust for all database operations
 
+**For comprehensive security documentation**, including prompt injection prevention guidelines for PKG-4, see [`SECURITY.md`](./SECURITY.md).
+
 ## Dependencies
 
 **Required from PKG-1**:
