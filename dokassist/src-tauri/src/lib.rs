@@ -1,6 +1,9 @@
 mod commands;
+mod crypto;
 mod error;
+mod keychain;
 mod models;
+mod recovery;
 mod state;
 
 use state::AppState;
