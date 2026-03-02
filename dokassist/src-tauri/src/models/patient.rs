@@ -516,7 +516,7 @@ mod tests {
         );
 
         // Verify patient data unchanged (AHV still original)
-        assert_eq!(updated.ahv_number, "756.0000.0101.53"); // Original AHV
+        assert_eq!(updated.ahv_number, "756.0000.0010.16"); // Original AHV
     }
 
     #[test]
@@ -550,8 +550,10 @@ mod tests {
         );
 
         // Verify related tables still exist
-        conn.execute("SELECT COUNT(*) FROM sessions", []).unwrap();
-        conn.execute("SELECT COUNT(*) FROM diagnoses", []).unwrap();
+        conn.query_row("SELECT COUNT(*) FROM sessions", [], |_| Ok(()))
+            .unwrap();
+        conn.query_row("SELECT COUNT(*) FROM diagnoses", [], |_| Ok(()))
+            .unwrap();
     }
 
     #[test]

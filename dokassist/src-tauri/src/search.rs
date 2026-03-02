@@ -235,8 +235,11 @@ fn normalize_ahv_for_search(query: &str) -> String {
     let digits_only: String = query.chars().filter(|c| c.is_ascii_digit()).collect();
 
     if digits_only.len() == 13 && digits_only.starts_with("756") {
-        // Return both formats for matching
-        format!("{} OR {}", query, digits_only)
+        // Search using plain digits only — FTS5 treats dots as separators,
+        // making "756.1234.5678.97" a syntax error as an unquoted query term.
+        // The content is indexed with both dotted and plain formats, so
+        // matching the plain digits is sufficient.
+        digits_only
     } else {
         query.to_string()
     }

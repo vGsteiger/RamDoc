@@ -86,6 +86,10 @@ jobs:
       uses: actions/dependency-review-action@v4
       with:
         fail-on-severity: moderate
+        # GHSA-wrw7-89jp-8q8g = RUSTSEC-2024-0429: glib VariantStrIter unsoundness.
+        # Transitive Linux-only dep from Tauri's GTK backend; not reachable in our code.
+        # Pinned by gtk 0.18.2 in Tauri 2.x; no compatible glib fix available.
+        allow-ghsas: GHSA-wrw7-89jp-8q8g
 
   rust-security-scan:
     name: Rust Security Scan
