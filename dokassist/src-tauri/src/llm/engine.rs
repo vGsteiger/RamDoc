@@ -4,6 +4,9 @@ use llama_cpp::{LlamaModel, LlamaParams, SessionParams};
 use llama_cpp::standard_sampler::{StandardSampler, SamplerStage};
 use crate::error::AppError;
 
+/// Sentinel value for n_gpu_layers that offloads all layers to Metal GPU.
+const ALL_GPU_LAYERS: i32 = 999;
+
 pub struct LlmEngine {
     model: Option<LlamaModel>,
     model_path: PathBuf,
@@ -23,14 +26,14 @@ pub struct EngineStatus {
     pub is_loaded: bool,
     pub model_name: Option<String>,
     pub model_path: Option<String>,
-    pub available_ram_bytes: u64,
+    pub total_ram_bytes: u64,
 }
 
 impl LlmEngine {
     /// Load a GGUF model from disk, offloading all layers to Metal.
     pub fn load(model_path: PathBuf, model_name: String) -> Result<Self, AppError> {
         let params = LlamaParams {
-            n_gpu_layers: 999,
+            n_gpu_layers: ALL_GPU_LAYERS,
             use_mmap: true,
             ..Default::default()
         };
@@ -111,7 +114,7 @@ impl LlmEngine {
             is_loaded: self.model.is_some(),
             model_name: self.model.as_ref().map(|_| self.model_name.clone()),
             model_path: self.model.as_ref().map(|_| self.model_path.to_string_lossy().into_owned()),
-            available_ram_bytes: Self::available_ram(),
+            total_ram_bytes: Self::total_ram(),
         }
     }
 
@@ -120,7 +123,7 @@ impl LlmEngine {
     }
 
     /// Return the total system RAM in bytes (macOS via sysctl).
-    pub fn available_ram() -> u64 {
+    pub fn total_ram() -> u64 {
         #[cfg(target_os = "macos")]
         {
             unsafe {
@@ -145,7 +148,7 @@ impl LlmEngine {
 
     /// Choose the best model for the available RAM.
     pub fn recommended_model() -> ModelChoice {
-        let ram = Self::available_ram();
+        let ram = Self::total_ram();
         const GB: u64 = 1024 * 1024 * 1024;
 
         if ram >= 24 * GB {

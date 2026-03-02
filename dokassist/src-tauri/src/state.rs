@@ -1,4 +1,4 @@
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use crate::constants::{KEYCHAIN_SERVICE, RECOVERY_FILENAME};
 use crate::database::DbPool;
 use crate::llm::LlmEngine;
@@ -8,7 +8,7 @@ pub struct AppState {
     pub auth: Mutex<AuthState>,
     pub data_dir: std::path::PathBuf,
     pub db: Mutex<Option<DbPool>>,
-    pub llm: Mutex<Option<LlmEngine>>,
+    pub llm: Mutex<Option<Arc<LlmEngine>>>,
 }
 
 pub enum AuthState {
