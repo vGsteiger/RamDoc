@@ -47,10 +47,7 @@ pub fn create_recovery(
     })?;
 
     // Return mnemonic words
-    let words: Vec<String> = mnemonic
-        .word_iter()
-        .map(|w: &str| w.to_string())
-        .collect();
+    let words: Vec<String> = mnemonic.word_iter().map(|w: &str| w.to_string()).collect();
 
     Ok(words)
 }

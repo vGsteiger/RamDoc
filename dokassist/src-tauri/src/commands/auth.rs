@@ -1,8 +1,8 @@
-use tauri::State;
-use crate::constants::{KEYCHAIN_SERVICE, DB_KEY_ACCOUNT, FS_KEY_ACCOUNT, RECOVERY_FILENAME};
+use crate::constants::{DB_KEY_ACCOUNT, FS_KEY_ACCOUNT, KEYCHAIN_SERVICE, RECOVERY_FILENAME};
 use crate::error::AppError;
 use crate::state::{AppState, AuthState};
 use crate::{crypto, keychain, recovery};
+use tauri::State;
 
 /// Returns "first_run" | "locked" | "unlocked" | "recovery_required"
 #[tauri::command]
@@ -100,17 +100,12 @@ pub async fn unlock_app(state: State<'_, AppState>) -> Result<bool, AppError> {
 
 /// Recover keys from 24-word mnemonic.
 #[tauri::command]
-pub async fn recover_app(
-    state: State<'_, AppState>,
-    words: Vec<String>,
-) -> Result<bool, AppError> {
+pub async fn recover_app(state: State<'_, AppState>, words: Vec<String>) -> Result<bool, AppError> {
     let mut auth = state.auth.lock().unwrap();
 
     // Verify we're in RecoveryRequired state
     if !matches!(*auth, AuthState::RecoveryRequired) {
-        return Err(AppError::Validation(
-            "Recovery is not required".to_string(),
-        ));
+        return Err(AppError::Validation("Recovery is not required".to_string()));
     }
 
     // Recover keys from mnemonic

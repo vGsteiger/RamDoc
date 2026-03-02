@@ -23,9 +23,7 @@ use state::AppState;
 pub fn run() {
     env_logger::init();
 
-    let data_dir = dirs::home_dir()
-        .unwrap_or_default()
-        .join("DokAssist");
+    let data_dir = dirs::home_dir().unwrap_or_default().join("DokAssist");
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())

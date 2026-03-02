@@ -1,9 +1,9 @@
 pub mod audit;
 pub mod auth;
-pub mod patients;
 pub mod files;
-pub mod sessions;
+pub mod llm;
+pub mod patients;
 pub mod reports;
 pub mod search;
+pub mod sessions;
 pub mod settings;
-pub mod llm;

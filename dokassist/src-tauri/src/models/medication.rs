@@ -135,10 +135,7 @@ pub fn update_medication(
         return get_medication(conn, id);
     }
 
-    let query = format!(
-        "UPDATE medications SET {} WHERE id = ?",
-        updates.join(", ")
-    );
+    let query = format!("UPDATE medications SET {} WHERE id = ?", updates.join(", "));
     values.push(Box::new(id.to_string()));
 
     let params: Vec<&dyn rusqlite::ToSql> = values.iter().map(|v| v.as_ref()).collect();
@@ -151,10 +148,7 @@ pub fn delete_medication(conn: &Connection, id: &str) -> Result<(), AppError> {
     let rows_affected = conn.execute("DELETE FROM medications WHERE id = ?", params![id])?;
 
     if rows_affected == 0 {
-        return Err(AppError::NotFound(format!(
-            "Medication not found: {}",
-            id
-        )));
+        return Err(AppError::NotFound(format!("Medication not found: {}", id)));
     }
 
     Ok(())

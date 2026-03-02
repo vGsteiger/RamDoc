@@ -1,6 +1,9 @@
-use tauri::Emitter;
+use super::{
+    engine::LlmEngine,
+    prompts::{self, ReportType},
+};
 use crate::error::AppError;
-use super::{engine::LlmEngine, prompts::{self, ReportType}};
+use tauri::Emitter;
 
 /// Generate a report using the built-in system prompt.
 pub fn generate_report_streaming(

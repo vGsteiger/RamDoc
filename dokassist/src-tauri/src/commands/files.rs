@@ -1,8 +1,8 @@
-use tauri::State;
 use crate::error::AppError;
-use crate::state::{AppState, AuthState};
-use crate::models::file_record::{self, FileRecord};
 use crate::filesystem;
+use crate::models::file_record::{self, FileRecord};
+use crate::state::{AppState, AuthState};
+use tauri::State;
 
 #[tauri::command]
 pub async fn upload_file(
@@ -19,7 +19,7 @@ pub async fn upload_file(
     let auth = state.auth.lock().map_err(|_| {
         AppError::Database(rusqlite::Error::SqliteFailure(
             rusqlite::ffi::Error::new(1),
-            Some("Auth state mutex poisoned".to_string())
+            Some("Auth state mutex poisoned".to_string()),
         ))
     })?;
 
@@ -30,12 +30,7 @@ pub async fn upload_file(
     drop(auth);
 
     // Store encrypted file in vault
-    let vault_path = filesystem::store_file(
-        &state.data_dir,
-        &fs_key,
-        &patient_id,
-        &data,
-    )?;
+    let vault_path = filesystem::store_file(&state.data_dir, &fs_key, &patient_id, &data)?;
 
     // Create database record
     let db = state.get_db()?;
@@ -80,7 +75,7 @@ pub async fn download_file(
     let auth = state.auth.lock().map_err(|_| {
         AppError::Database(rusqlite::Error::SqliteFailure(
             rusqlite::ffi::Error::new(1),
-            Some("Auth state mutex poisoned".to_string())
+            Some("Auth state mutex poisoned".to_string()),
         ))
     })?;
 
@@ -110,10 +105,7 @@ pub async fn list_files(
 }
 
 #[tauri::command]
-pub async fn delete_file(
-    state: State<'_, AppState>,
-    file_id: String,
-) -> Result<(), AppError> {
+pub async fn delete_file(state: State<'_, AppState>, file_id: String) -> Result<(), AppError> {
     // Get file record to find vault path
     let db = state.get_db()?;
     let conn = db.conn()?;

@@ -1,31 +1,39 @@
-use std::sync::Arc;
-use tauri::{AppHandle, Emitter, State};
 use crate::error::AppError;
 use crate::llm::{
-    self, download, LlmEngine, ReportType, EngineStatus, ModelChoice, SYSTEM_PROMPT_DE,
+    self, download, EngineStatus, LlmEngine, ModelChoice, ReportType, SYSTEM_PROMPT_DE,
 };
 use crate::state::{AppState, AuthState};
+use std::sync::Arc;
+use tauri::{AppHandle, Emitter, State};
 
 /// Validate a model filename to prevent path traversal attacks.
 /// Returns an error if the filename contains path separators or parent directory components.
 fn validate_model_filename(filename: &str) -> Result<(), AppError> {
     if filename.is_empty() {
-        return Err(AppError::Validation("Model filename cannot be empty".to_string()));
+        return Err(AppError::Validation(
+            "Model filename cannot be empty".to_string(),
+        ));
     }
 
     // Check for path separators
     if filename.contains('/') || filename.contains('\\') {
-        return Err(AppError::Validation("Model filename cannot contain path separators".to_string()));
+        return Err(AppError::Validation(
+            "Model filename cannot contain path separators".to_string(),
+        ));
     }
 
     // Check for parent directory components
     if filename.contains("..") {
-        return Err(AppError::Validation("Model filename cannot contain parent directory references".to_string()));
+        return Err(AppError::Validation(
+            "Model filename cannot contain parent directory references".to_string(),
+        ));
     }
 
     // Ensure it ends with .gguf
     if !filename.ends_with(".gguf") {
-        return Err(AppError::Validation("Model filename must end with .gguf".to_string()));
+        return Err(AppError::Validation(
+            "Model filename must end with .gguf".to_string(),
+        ));
     }
 
     Ok(())
@@ -33,9 +41,10 @@ fn validate_model_filename(filename: &str) -> Result<(), AppError> {
 
 /// Check that the user is authenticated before processing sensitive patient data.
 fn check_auth(state: &AppState) -> Result<(), AppError> {
-    let auth = state.auth.lock().map_err(|_| {
-        AppError::Llm("Auth state mutex poisoned".to_string())
-    })?;
+    let auth = state
+        .auth
+        .lock()
+        .map_err(|_| AppError::Llm("Auth state mutex poisoned".to_string()))?;
 
     if !matches!(*auth, AuthState::Unlocked { .. }) {
         return Err(AppError::AuthRequired);
@@ -139,8 +148,8 @@ pub async fn extract_file_metadata(
     let metadata = tokio::task::spawn_blocking(move || {
         llm::extract_metadata_with_prompt(&engine, &document_text, &prompt)
     })
-        .await
-        .map_err(|e| AppError::Llm(format!("spawn_blocking error: {e}")))??;
+    .await
+    .map_err(|e| AppError::Llm(format!("spawn_blocking error: {e}")))??;
 
     Ok(metadata)
 }
@@ -164,7 +173,11 @@ pub async fn generate_report(
         "Befundbericht" => ReportType::Befundbericht,
         "Verlaufsbericht" => ReportType::Verlaufsbericht,
         "Ueberweisungsschreiben" => ReportType::Ueberweisungsschreiben,
-        other => return Err(AppError::Validation(format!("Unknown report type: {other}"))),
+        other => {
+            return Err(AppError::Validation(format!(
+                "Unknown report type: {other}"
+            )))
+        }
     };
 
     // Acquire the engine handle under the mutex, but do not run inference while holding the lock.
@@ -182,10 +195,17 @@ pub async fn generate_report(
 
     // Run the potentially long-running report generation on a blocking thread.
     let report = tokio::task::spawn_blocking(move || {
-        llm::generate_report_streaming_with_prompt(&app, &engine, rt, &patient_context, &session_notes, &prompt)
+        llm::generate_report_streaming_with_prompt(
+            &app,
+            &engine,
+            rt,
+            &patient_context,
+            &session_notes,
+            &prompt,
+        )
     })
-        .await
-        .map_err(|e| AppError::Llm(format!("spawn_blocking error: {e}")))??;
+    .await
+    .map_err(|e| AppError::Llm(format!("spawn_blocking error: {e}")))??;
 
     let _ = app.emit("report-done", ());
     Ok(report)

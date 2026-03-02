@@ -73,13 +73,7 @@ pub fn log(
     conn.execute(
         "INSERT INTO audit_log (timestamp, action, entity_type, entity_id, details)
          VALUES (?1, ?2, ?3, ?4, ?5)",
-        rusqlite::params![
-            timestamp,
-            action.as_str(),
-            entity_type,
-            entity_id,
-            details,
-        ],
+        rusqlite::params![timestamp, action.as_str(), entity_type, entity_id, details,],
     )?;
 
     Ok(())
@@ -110,7 +104,7 @@ pub fn query_log(
     let mut query = String::from(
         "SELECT id, timestamp, action, entity_type, entity_id, details
          FROM audit_log
-         WHERE 1=1"
+         WHERE 1=1",
     );
 
     let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
@@ -142,17 +136,18 @@ pub fn query_log(
     let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|b| b.as_ref()).collect();
 
     let mut stmt = conn.prepare(&query)?;
-    let entries = stmt.query_map(&param_refs[..], |row| {
-        Ok(AuditEntry {
-            id: row.get(0)?,
-            timestamp: row.get(1)?,
-            action: row.get(2)?,
-            entity_type: row.get(3)?,
-            entity_id: row.get(4)?,
-            details: row.get(5)?,
-        })
-    })?
-    .collect::<Result<Vec<_>, _>>()?;
+    let entries = stmt
+        .query_map(&param_refs[..], |row| {
+            Ok(AuditEntry {
+                id: row.get(0)?,
+                timestamp: row.get(1)?,
+                action: row.get(2)?,
+                entity_type: row.get(3)?,
+                entity_id: row.get(4)?,
+                details: row.get(5)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
 
     Ok(entries)
 }
@@ -205,9 +200,30 @@ mod tests {
         let conn = setup_test_db();
 
         // Log some entries
-        log(&conn, AuditAction::Create, "patient", Some("patient-123"), None).unwrap();
-        log(&conn, AuditAction::View, "patient", Some("patient-123"), None).unwrap();
-        log(&conn, AuditAction::Update, "patient", Some("patient-123"), Some("fields: first_name")).unwrap();
+        log(
+            &conn,
+            AuditAction::Create,
+            "patient",
+            Some("patient-123"),
+            None,
+        )
+        .unwrap();
+        log(
+            &conn,
+            AuditAction::View,
+            "patient",
+            Some("patient-123"),
+            None,
+        )
+        .unwrap();
+        log(
+            &conn,
+            AuditAction::Update,
+            "patient",
+            Some("patient-123"),
+            Some("fields: first_name"),
+        )
+        .unwrap();
 
         // Query all entries
         let entries = query_log(&conn, None, None, None, None, 100, 0).unwrap();
@@ -223,9 +239,23 @@ mod tests {
     fn test_filter_by_entity_type() {
         let conn = setup_test_db();
 
-        log(&conn, AuditAction::Create, "patient", Some("patient-123"), None).unwrap();
+        log(
+            &conn,
+            AuditAction::Create,
+            "patient",
+            Some("patient-123"),
+            None,
+        )
+        .unwrap();
         log(&conn, AuditAction::Create, "file", Some("file-456"), None).unwrap();
-        log(&conn, AuditAction::Create, "patient", Some("patient-789"), None).unwrap();
+        log(
+            &conn,
+            AuditAction::Create,
+            "patient",
+            Some("patient-789"),
+            None,
+        )
+        .unwrap();
 
         let entries = query_log(&conn, Some("patient"), None, None, None, 100, 0).unwrap();
         assert_eq!(entries.len(), 2);
@@ -239,9 +269,30 @@ mod tests {
     fn test_filter_by_entity_id() {
         let conn = setup_test_db();
 
-        log(&conn, AuditAction::Create, "patient", Some("patient-123"), None).unwrap();
-        log(&conn, AuditAction::View, "patient", Some("patient-123"), None).unwrap();
-        log(&conn, AuditAction::View, "patient", Some("patient-456"), None).unwrap();
+        log(
+            &conn,
+            AuditAction::Create,
+            "patient",
+            Some("patient-123"),
+            None,
+        )
+        .unwrap();
+        log(
+            &conn,
+            AuditAction::View,
+            "patient",
+            Some("patient-123"),
+            None,
+        )
+        .unwrap();
+        log(
+            &conn,
+            AuditAction::View,
+            "patient",
+            Some("patient-456"),
+            None,
+        )
+        .unwrap();
 
         let entries = query_log(&conn, None, Some("patient-123"), None, None, 100, 0).unwrap();
         assert_eq!(entries.len(), 2);
@@ -257,7 +308,14 @@ mod tests {
 
         // Create 10 entries
         for i in 0..10 {
-            log(&conn, AuditAction::View, "patient", Some(&format!("patient-{}", i)), None).unwrap();
+            log(
+                &conn,
+                AuditAction::View,
+                "patient",
+                Some(&format!("patient-{}", i)),
+                None,
+            )
+            .unwrap();
         }
 
         // Get first 5
@@ -277,8 +335,14 @@ mod tests {
         let conn = setup_test_db();
 
         // Correct usage: only field names, no values
-        log(&conn, AuditAction::Update, "patient", Some("patient-123"),
-            Some("fields: first_name,last_name,date_of_birth")).unwrap();
+        log(
+            &conn,
+            AuditAction::Update,
+            "patient",
+            Some("patient-123"),
+            Some("fields: first_name,last_name,date_of_birth"),
+        )
+        .unwrap();
 
         let entries = query_log(&conn, None, None, None, None, 100, 0).unwrap();
         assert_eq!(entries.len(), 1);

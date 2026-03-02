@@ -12,12 +12,12 @@ pub struct DbPool {
 impl DbPool {
     /// Get a connection from the pool
     pub fn conn(&self) -> Result<std::sync::MutexGuard<Connection>, AppError> {
-        self.conn
-            .lock()
-            .map_err(|_| AppError::Database(rusqlite::Error::SqliteFailure(
+        self.conn.lock().map_err(|_| {
+            AppError::Database(rusqlite::Error::SqliteFailure(
                 rusqlite::ffi::Error::new(1),
-                Some("Database connection pool poisoned".to_string())
-            )))
+                Some("Database connection pool poisoned".to_string()),
+            ))
+        })
     }
 }
 
@@ -59,8 +59,7 @@ pub fn init_db(db_path: &Path, key: &[u8; 32]) -> Result<DbPool, AppError> {
 /// Run database migrations
 fn run_migrations(conn: &Connection) -> Result<(), AppError> {
     // Check current schema version
-    let version: i32 = conn
-        .query_row("PRAGMA user_version;", [], |row| row.get(0))?;
+    let version: i32 = conn.query_row("PRAGMA user_version;", [], |row| row.get(0))?;
 
     log::info!("Current database schema version: {}", version);
 

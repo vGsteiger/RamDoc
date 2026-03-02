@@ -1,7 +1,7 @@
-use std::sync::{Arc, Mutex};
 use crate::constants::{KEYCHAIN_SERVICE, RECOVERY_FILENAME};
 use crate::database::DbPool;
 use crate::llm::LlmEngine;
+use std::sync::{Arc, Mutex};
 
 /// Application state shared across all Tauri commands.
 pub struct AppState {
@@ -42,7 +42,7 @@ impl AppState {
         let mut db_lock = self.db.lock().map_err(|_| {
             crate::error::AppError::Database(rusqlite::Error::SqliteFailure(
                 rusqlite::ffi::Error::new(1),
-                Some("Database state mutex poisoned".to_string())
+                Some("Database state mutex poisoned".to_string()),
             ))
         })?;
         *db_lock = Some(pool);
@@ -56,7 +56,7 @@ impl AppState {
         let auth = self.auth.lock().map_err(|_| {
             crate::error::AppError::Database(rusqlite::Error::SqliteFailure(
                 rusqlite::ffi::Error::new(1),
-                Some("Auth state mutex poisoned".to_string())
+                Some("Auth state mutex poisoned".to_string()),
             ))
         })?;
 
@@ -69,7 +69,7 @@ impl AppState {
         let db_lock = self.db.lock().map_err(|_| {
             crate::error::AppError::Database(rusqlite::Error::SqliteFailure(
                 rusqlite::ffi::Error::new(1),
-                Some("Database state mutex poisoned".to_string())
+                Some("Database state mutex poisoned".to_string()),
             ))
         })?;
         db_lock
@@ -83,7 +83,7 @@ impl AppState {
         let mut db_lock = self.db.lock().map_err(|_| {
             crate::error::AppError::Database(rusqlite::Error::SqliteFailure(
                 rusqlite::ffi::Error::new(1),
-                Some("Database state mutex poisoned".to_string())
+                Some("Database state mutex poisoned".to_string()),
             ))
         })?;
         *db_lock = None;
@@ -103,7 +103,10 @@ fn determine_initial_auth_state(data_dir: &std::path::Path) -> AuthState {
             Err(err) => {
                 // On keychain access error, avoid forcing RecoveryRequired.
                 // Treat as "unknown" so the app can default to a safer state.
-                eprintln!("Failed to check keys in keychain for service {}: {}", KEYCHAIN_SERVICE, err);
+                eprintln!(
+                    "Failed to check keys in keychain for service {}: {}",
+                    KEYCHAIN_SERVICE, err
+                );
                 None
             }
         };

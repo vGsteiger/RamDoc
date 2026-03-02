@@ -1,8 +1,8 @@
-use std::path::PathBuf;
-use serde::{Deserialize, Serialize};
-use llama_cpp::{LlamaModel, LlamaParams, SessionParams};
-use llama_cpp::standard_sampler::{StandardSampler, SamplerStage};
 use crate::error::AppError;
+use llama_cpp::standard_sampler::{SamplerStage, StandardSampler};
+use llama_cpp::{LlamaModel, LlamaParams, SessionParams};
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 /// Sentinel value for n_gpu_layers that offloads all layers to Metal GPU.
 const ALL_GPU_LAYERS: i32 = 999;
@@ -55,10 +55,16 @@ impl LlmEngine {
         temperature: f32,
     ) -> Result<String, AppError> {
         let mut result = String::new();
-        self.generate_streaming(system_prompt, user_message, max_tokens, temperature, |token| {
-            result.push_str(token);
-            true
-        })?;
+        self.generate_streaming(
+            system_prompt,
+            user_message,
+            max_tokens,
+            temperature,
+            |token| {
+                result.push_str(token);
+                true
+            },
+        )?;
         Ok(result)
     }
 
@@ -72,7 +78,9 @@ impl LlmEngine {
         temperature: f32,
         mut on_token: impl FnMut(&str) -> bool,
     ) -> Result<(), AppError> {
-        let model = self.model.as_ref()
+        let model = self
+            .model
+            .as_ref()
             .ok_or_else(|| AppError::Llm("Model not loaded".to_string()))?;
 
         let prompt = format_chatml(system_prompt, user_message);
@@ -81,10 +89,12 @@ impl LlmEngine {
             n_ctx: 4096,
             ..Default::default()
         };
-        let mut session = model.create_session(session_params)
+        let mut session = model
+            .create_session(session_params)
             .map_err(|e| AppError::Llm(format!("Failed to create session: {e}")))?;
 
-        session.advance_context(&prompt)
+        session
+            .advance_context(&prompt)
             .map_err(|e| AppError::Llm(format!("Failed to advance context: {e}")))?;
 
         let sampler = StandardSampler::new_softmax(
@@ -113,7 +123,10 @@ impl LlmEngine {
         EngineStatus {
             is_loaded: self.model.is_some(),
             model_name: self.model.as_ref().map(|_| self.model_name.clone()),
-            model_path: self.model.as_ref().map(|_| self.model_path.to_string_lossy().into_owned()),
+            model_path: self
+                .model
+                .as_ref()
+                .map(|_| self.model_path.to_string_lossy().into_owned()),
             total_ram_bytes: Self::total_ram(),
         }
     }

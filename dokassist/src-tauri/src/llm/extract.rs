@@ -1,6 +1,6 @@
-use serde::{Deserialize, Serialize};
-use crate::error::AppError;
 use super::{engine::LlmEngine, prompts};
+use crate::error::AppError;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileMetadata {

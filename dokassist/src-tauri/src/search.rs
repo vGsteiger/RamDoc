@@ -73,7 +73,7 @@ pub fn index_patient(conn: &Connection, patient: &Patient) -> Result<(), AppErro
         patient.first_name.clone(),
         patient.last_name.clone(),
         patient.ahv_number.clone(),
-        patient.ahv_number.replace(".", ""),  // Also index plain format
+        patient.ahv_number.replace(".", ""), // Also index plain format
     ];
 
     // Index both dotted and plain AHV formats

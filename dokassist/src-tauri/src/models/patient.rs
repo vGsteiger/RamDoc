@@ -494,7 +494,9 @@ mod tests {
         let malicious_update = UpdatePatient {
             email: Some("admin@test.com' OR '1'='1".to_string()),
             notes: Some("'; DELETE FROM patients WHERE '1'='1".to_string()),
-            address: Some("123 Main St'; UPDATE patients SET ahv_number='000' WHERE '1'='1".to_string()),
+            address: Some(
+                "123 Main St'; UPDATE patients SET ahv_number='000' WHERE '1'='1".to_string(),
+            ),
             ..Default::default()
         };
 
@@ -504,8 +506,14 @@ mod tests {
         // Verify all malicious strings were stored as literal data
         let updated = get_patient(&conn, &patient.id).unwrap();
         assert_eq!(updated.email.unwrap(), "admin@test.com' OR '1'='1");
-        assert_eq!(updated.notes.unwrap(), "'; DELETE FROM patients WHERE '1'='1");
-        assert_eq!(updated.address.unwrap(), "123 Main St'; UPDATE patients SET ahv_number='000' WHERE '1'='1");
+        assert_eq!(
+            updated.notes.unwrap(),
+            "'; DELETE FROM patients WHERE '1'='1"
+        );
+        assert_eq!(
+            updated.address.unwrap(),
+            "123 Main St'; UPDATE patients SET ahv_number='000' WHERE '1'='1"
+        );
 
         // Verify patient data unchanged (AHV still original)
         assert_eq!(updated.ahv_number, "756.0000.0101.53"); // Original AHV
@@ -528,7 +536,9 @@ mod tests {
             insurance: None,
             gp_name: None,
             gp_address: None,
-            notes: Some("Patient fine. '; DROP TABLE sessions; DROP TABLE diagnoses; --".to_string()),
+            notes: Some(
+                "Patient fine. '; DROP TABLE sessions; DROP TABLE diagnoses; --".to_string(),
+            ),
         };
 
         let patient = create_patient(&conn, malicious_input).unwrap();
@@ -592,7 +602,9 @@ mod tests {
             gender: Some("male\x00admin".to_string()), // Null byte injection attempt
             address: Some("Straße 123\'; DELETE FROM patients WHERE \'x\'=\'x".to_string()),
             phone: None,
-            email: Some("test@test.com\"; UPDATE patients SET notes='hacked' WHERE \"\"=\"".to_string()),
+            email: Some(
+                "test@test.com\"; UPDATE patients SET notes='hacked' WHERE \"\"=\"".to_string(),
+            ),
             insurance: None,
             gp_name: None,
             gp_address: None,

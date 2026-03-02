@@ -1,7 +1,7 @@
-use tauri::State;
 use crate::error::AppError;
-use crate::state::AppState;
 use crate::search::{self, SearchResult};
+use crate::state::AppState;
+use tauri::State;
 
 #[tauri::command]
 pub async fn global_search(

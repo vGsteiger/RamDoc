@@ -87,11 +87,7 @@ pub fn get_report(conn: &Connection, id: &str) -> Result<Report, AppError> {
     Ok(report)
 }
 
-pub fn update_report(
-    conn: &Connection,
-    id: &str,
-    input: UpdateReport,
-) -> Result<Report, AppError> {
+pub fn update_report(conn: &Connection, id: &str, input: UpdateReport) -> Result<Report, AppError> {
     get_report(conn, id)?;
 
     let mut updates = Vec::new();

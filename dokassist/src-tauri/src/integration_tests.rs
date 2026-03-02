@@ -31,8 +31,7 @@ mod integration_tests {
         assert_eq!(fs_key, recovered_fs_key);
 
         // Step 5: Verify recovered key can decrypt data
-        let decrypted_with_recovered =
-            crypto::decrypt(&recovered_db_key, &ciphertext).unwrap();
+        let decrypted_with_recovered = crypto::decrypt(&recovered_db_key, &ciphertext).unwrap();
         assert_eq!(plaintext.as_slice(), decrypted_with_recovered.as_slice());
     }
 
