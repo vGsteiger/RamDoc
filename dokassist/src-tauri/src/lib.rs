@@ -5,11 +5,13 @@ mod constants;
 mod crypto;
 mod database;
 mod error;
+mod filesystem;  // PKG-3: Encrypted Filesystem
 mod keychain;
 mod llm;
 mod models;
 mod recovery;
 mod search;
+mod spotlight;  // PKG-3: macOS Spotlight exclusion
 mod state;
 
 #[cfg(test)]
