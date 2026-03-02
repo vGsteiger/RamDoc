@@ -9,6 +9,7 @@ mod keychain;
 mod llm;
 mod models;
 mod recovery;
+mod search;
 mod state;
 
 #[cfg(test)]
@@ -45,6 +46,7 @@ pub fn run() {
             commands::files::delete_file,
             commands::sessions::create_session,
             commands::search::search_patients,
+            commands::search::global_search,
             commands::settings::get_settings,
             commands::settings::update_settings,
             commands::llm::get_engine_status,

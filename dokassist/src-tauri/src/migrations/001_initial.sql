@@ -103,14 +103,16 @@ CREATE TABLE IF NOT EXISTS audit_log (
     details TEXT
 );
 
--- FTS5 virtual table for full-text search (PKG-5, placeholder structure)
+-- FTS5 virtual table for full-text search (PKG-5)
 CREATE VIRTUAL TABLE IF NOT EXISTS search_index USING fts5(
     entity_type,
     entity_id,
     patient_id,
     patient_name,
+    title,
     content,
-    tokenize = 'porter'
+    date,
+    tokenize = 'unicode61 remove_diacritics 2'
 );
 
 -- Indexes for performance
