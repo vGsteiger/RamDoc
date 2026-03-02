@@ -17,7 +17,13 @@ pub async fn create_medication(
 
     let medication = medication::create_medication(&tx, input)?;
 
-    audit::log(&tx, AuditAction::Create, "medication", Some(&medication.id), None)?;
+    audit::log(
+        &tx,
+        AuditAction::Create,
+        "medication",
+        Some(&medication.id),
+        None,
+    )?;
 
     tx.commit()?;
 
@@ -27,7 +33,10 @@ pub async fn create_medication(
 }
 
 #[tauri::command]
-pub async fn get_medication(state: State<'_, AppState>, id: String) -> Result<Medication, AppError> {
+pub async fn get_medication(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<Medication, AppError> {
     let pool = state.get_db()?;
     let conn = pool.conn()?;
     let medication = medication::get_medication(&conn, &id)?;
@@ -55,7 +64,11 @@ pub async fn list_medications_for_patient(
         AuditAction::View,
         "medication",
         None,
-        Some(&format!("list: {} medications for patient {}", medications.len(), patient_id)),
+        Some(&format!(
+            "list: {} medications for patient {}",
+            medications.len(),
+            patient_id
+        )),
     )?;
 
     Ok(medications)

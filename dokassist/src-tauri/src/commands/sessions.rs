@@ -55,7 +55,11 @@ pub async fn list_sessions_for_patient(
         AuditAction::View,
         "session",
         None,
-        Some(&format!("list: {} sessions for patient {}", sessions.len(), patient_id)),
+        Some(&format!(
+            "list: {} sessions for patient {}",
+            sessions.len(),
+            patient_id
+        )),
     )?;
 
     Ok(sessions)

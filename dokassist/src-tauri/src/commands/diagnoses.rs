@@ -17,7 +17,13 @@ pub async fn create_diagnosis(
 
     let diagnosis = diagnosis::create_diagnosis(&tx, input)?;
 
-    audit::log(&tx, AuditAction::Create, "diagnosis", Some(&diagnosis.id), None)?;
+    audit::log(
+        &tx,
+        AuditAction::Create,
+        "diagnosis",
+        Some(&diagnosis.id),
+        None,
+    )?;
 
     tx.commit()?;
 
@@ -55,7 +61,11 @@ pub async fn list_diagnoses_for_patient(
         AuditAction::View,
         "diagnosis",
         None,
-        Some(&format!("list: {} diagnoses for patient {}", diagnoses.len(), patient_id)),
+        Some(&format!(
+            "list: {} diagnoses for patient {}",
+            diagnoses.len(),
+            patient_id
+        )),
     )?;
 
     Ok(diagnoses)

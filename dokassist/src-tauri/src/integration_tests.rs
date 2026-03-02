@@ -742,7 +742,8 @@ fn test_pkg10_session_crud() {
         amdp_data: None,
     };
 
-    let updated_session = session::update_session(&conn, &created_session.id, update_input).unwrap();
+    let updated_session =
+        session::update_session(&conn, &created_session.id, update_input).unwrap();
     assert_eq!(updated_session.session_type, "Follow-up");
     assert_eq!(updated_session.duration_minutes, Some(45));
     assert_eq!(updated_session.notes, Some("Updated notes".to_string()));
@@ -803,7 +804,10 @@ fn test_pkg10_diagnosis_crud() {
     // Read diagnosis
     let read_diagnosis = diagnosis::get_diagnosis(&conn, &created_diagnosis.id).unwrap();
     assert_eq!(read_diagnosis.id, created_diagnosis.id);
-    assert_eq!(read_diagnosis.description, "Mittelgradige depressive Episode");
+    assert_eq!(
+        read_diagnosis.description,
+        "Mittelgradige depressive Episode"
+    );
 
     // Update diagnosis
     let update_input = UpdateDiagnosis {
