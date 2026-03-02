@@ -21,7 +21,7 @@ pub async fn create_session(
 
     tx.commit()?;
 
-    search::index_session(&conn, &session)?;
+    search::index_session_from_model(&conn, &session)?;
 
     Ok(session)
 }
@@ -78,7 +78,7 @@ pub async fn update_session(
 
     tx.commit()?;
 
-    search::index_session(&conn, &session)?;
+    search::index_session_from_model(&conn, &session)?;
 
     Ok(session)
 }
