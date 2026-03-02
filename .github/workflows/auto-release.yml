@@ -1,0 +1,30 @@
+name: Auto-release Comment
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  notify-autorelease:
+    if: github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'autorelease')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add comment to PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          COMMENT_BODY="🚀 This PR has the \`autorelease\` label. A release will be created automatically by the [release workflow](https://github.com/${{ github.repository }}/actions/workflows/release.yml).
+
+          Version bump will be determined by:
+          - PR labels (\`major\`, \`minor\`, \`patch\`) - highest priority
+          - Conventional commit format in PR title
+          - Default: patch bump
+
+          Check the [Actions tab](https://github.com/${{ github.repository }}/actions/workflows/release.yml) to monitor release progress."
+
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --repo ${{ github.repository }} \
+            --body "$COMMENT_BODY"
