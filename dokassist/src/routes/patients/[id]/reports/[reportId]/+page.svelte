@@ -1,0 +1,161 @@
+<script lang="ts">
+  import { page } from '$app/stores';
+  import { goto } from '$app/navigation';
+  import { onMount } from 'svelte';
+  import { getReport, updateReport, deleteReport, type Report, type UpdateReport } from '$lib/api';
+  import ReportEditor from '$lib/components/ReportEditor.svelte';
+
+  $: patientId = $page.params.id;
+  $: reportId = $page.params.reportId;
+
+  let report: Report | null = null;
+  let editMode = false;
+  let editableContent = '';
+  let loading = true;
+  let error = '';
+
+  async function loadReport() {
+    try {
+      loading = true;
+      error = '';
+      report = await getReport(reportId);
+      editableContent = report.content;
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function saveChanges() {
+    if (!report) return;
+
+    try {
+      error = '';
+      const input: UpdateReport = { content: editableContent };
+      await updateReport(reportId, input);
+      report.content = editableContent;
+      editMode = false;
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  async function handleDeleteReport() {
+    if (!confirm('Are you sure you want to delete this report?')) {
+      return;
+    }
+    try {
+      await deleteReport(reportId);
+      await goto(`/patients/${patientId}/reports`);
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  function formatDate(dateStr: string): string {
+    return new Date(dateStr).toLocaleDateString('de-DE', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }
+
+  function formatReportType(type: string): string {
+    switch (type) {
+      case 'Befundbericht':
+        return 'Befundbericht';
+      case 'Verlaufsbericht':
+        return 'Verlaufsbericht';
+      case 'Ueberweisungsschreiben':
+        return 'Überweisungsschreiben';
+      default:
+        return type;
+    }
+  }
+
+  onMount(() => {
+    loadReport();
+  });
+</script>
+
+<div class="p-8">
+  <div class="max-w-5xl mx-auto">
+    {#if loading}
+      <div class="text-gray-400">Loading report...</div>
+    {:else if error}
+      <div class="p-4 bg-red-900/20 border border-red-500 rounded text-red-400">
+        Error: {error}
+      </div>
+    {:else if report}
+      <div class="mb-6">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-2xl font-bold text-gray-100">
+              {formatReportType(report.report_type)}
+            </h2>
+            <p class="text-sm text-gray-400 mt-1">
+              Generated: {formatDate(report.generated_at)}
+            </p>
+            {#if report.model_name}
+              <p class="text-xs text-gray-500 mt-1">Model: {report.model_name}</p>
+            {/if}
+          </div>
+          <a
+            href={`/patients/${patientId}/reports`}
+            class="text-sm text-gray-400 hover:text-gray-300"
+          >
+            ← Back to Reports
+          </a>
+        </div>
+
+        <div class="flex space-x-4 mb-6">
+          {#if !editMode}
+            <button
+              on:click={() => (editMode = true)}
+              class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+            >
+              Edit
+            </button>
+          {:else}
+            <button
+              on:click={saveChanges}
+              class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+            >
+              Save Changes
+            </button>
+            <button
+              on:click={() => {
+                editMode = false;
+                editableContent = report.content;
+              }}
+              class="px-4 py-2 bg-gray-700 text-gray-300 rounded hover:bg-gray-600 transition-colors"
+            >
+              Cancel
+            </button>
+          {/if}
+          <button
+            on:click={handleDeleteReport}
+            class="px-4 py-2 bg-red-900/20 text-red-400 rounded hover:bg-red-900/40 transition-colors"
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+
+      {#if editMode}
+        <div class="h-[600px]">
+          <ReportEditor bind:content={editableContent} />
+        </div>
+      {:else}
+        <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+          <div class="prose prose-invert max-w-none">
+            <pre class="whitespace-pre-wrap font-sans text-gray-100">{report.content}</pre>
+          </div>
+        </div>
+      {/if}
+    {/if}
+  </div>
+</div>

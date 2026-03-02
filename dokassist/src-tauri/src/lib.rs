@@ -72,6 +72,11 @@ pub fn run() {
             commands::llm::load_model,
             commands::llm::extract_file_metadata,
             commands::llm::generate_report,
+            commands::reports::create_report,
+            commands::reports::get_report,
+            commands::reports::list_reports,
+            commands::reports::update_report,
+            commands::reports::delete_report,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

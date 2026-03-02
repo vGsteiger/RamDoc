@@ -164,7 +164,8 @@ export async function globalSearch(
   return await invoke<SearchResult[]>("global_search", { query, limit });
 }
 
-// Session types and commands
+// === Session Types ===
+
 export interface Session {
   id: string;
   patient_id: string;
@@ -195,34 +196,38 @@ export interface UpdateSession {
 }
 
 export async function createSession(input: CreateSession): Promise<Session> {
-  return await invoke<Session>('create_session', { input });
+  return await invoke<Session>("create_session", { input });
 }
 
 export async function getSession(id: string): Promise<Session> {
-  return await invoke<Session>('get_session', { id });
+  return await invoke<Session>("get_session", { id });
 }
 
 export async function listSessionsForPatient(
   patientId: string,
   limit?: number,
-  offset?: number
+  offset?: number,
 ): Promise<Session[]> {
-  return await invoke<Session[]>('list_sessions_for_patient', {
+  return await invoke<Session[]>("list_sessions_for_patient", {
     patientId,
     limit,
-    offset
+    offset,
   });
 }
 
-export async function updateSession(id: string, input: UpdateSession): Promise<Session> {
-  return await invoke<Session>('update_session', { id, input });
+export async function updateSession(
+  id: string,
+  input: UpdateSession,
+): Promise<Session> {
+  return await invoke<Session>("update_session", { id, input });
 }
 
 export async function deleteSession(id: string): Promise<void> {
-  return await invoke<void>('delete_session', { id });
+  return await invoke<void>("delete_session", { id });
 }
 
-// Diagnosis types and commands
+// === Diagnosis Types ===
+
 export interface Diagnosis {
   id: string;
   patient_id: string;
@@ -255,35 +260,41 @@ export interface UpdateDiagnosis {
   notes?: string;
 }
 
-export async function createDiagnosis(input: CreateDiagnosis): Promise<Diagnosis> {
-  return await invoke<Diagnosis>('create_diagnosis', { input });
+export async function createDiagnosis(
+  input: CreateDiagnosis,
+): Promise<Diagnosis> {
+  return await invoke<Diagnosis>("create_diagnosis", { input });
 }
 
 export async function getDiagnosis(id: string): Promise<Diagnosis> {
-  return await invoke<Diagnosis>('get_diagnosis', { id });
+  return await invoke<Diagnosis>("get_diagnosis", { id });
 }
 
 export async function listDiagnosesForPatient(
   patientId: string,
   limit?: number,
-  offset?: number
+  offset?: number,
 ): Promise<Diagnosis[]> {
-  return await invoke<Diagnosis[]>('list_diagnoses_for_patient', {
+  return await invoke<Diagnosis[]>("list_diagnoses_for_patient", {
     patientId,
     limit,
-    offset
+    offset,
   });
 }
 
-export async function updateDiagnosis(id: string, input: UpdateDiagnosis): Promise<Diagnosis> {
-  return await invoke<Diagnosis>('update_diagnosis', { id, input });
+export async function updateDiagnosis(
+  id: string,
+  input: UpdateDiagnosis,
+): Promise<Diagnosis> {
+  return await invoke<Diagnosis>("update_diagnosis", { id, input });
 }
 
 export async function deleteDiagnosis(id: string): Promise<void> {
-  return await invoke<void>('delete_diagnosis', { id });
+  return await invoke<void>("delete_diagnosis", { id });
 }
 
-// Medication types and commands
+// === Medication Types ===
+
 export interface Medication {
   id: string;
   patient_id: string;
@@ -316,30 +327,113 @@ export interface UpdateMedication {
   notes?: string;
 }
 
-export async function createMedication(input: CreateMedication): Promise<Medication> {
-  return await invoke<Medication>('create_medication', { input });
+export async function createMedication(
+  input: CreateMedication,
+): Promise<Medication> {
+  return await invoke<Medication>("create_medication", { input });
 }
 
 export async function getMedication(id: string): Promise<Medication> {
-  return await invoke<Medication>('get_medication', { id });
+  return await invoke<Medication>("get_medication", { id });
 }
 
 export async function listMedicationsForPatient(
   patientId: string,
   limit?: number,
-  offset?: number
+  offset?: number,
 ): Promise<Medication[]> {
-  return await invoke<Medication[]>('list_medications_for_patient', {
+  return await invoke<Medication[]>("list_medications_for_patient", {
     patientId,
     limit,
-    offset
+    offset,
   });
 }
 
-export async function updateMedication(id: string, input: UpdateMedication): Promise<Medication> {
-  return await invoke<Medication>('update_medication', { id, input });
+export async function updateMedication(
+  id: string,
+  input: UpdateMedication,
+): Promise<Medication> {
+  return await invoke<Medication>("update_medication", { id, input });
 }
 
 export async function deleteMedication(id: string): Promise<void> {
-  return await invoke<void>('delete_medication', { id });
+  return await invoke<void>("delete_medication", { id });
+}
+
+// === Report Types ===
+
+export interface Report {
+  id: string;
+  patient_id: string;
+  report_type: string;
+  content: string;
+  generated_at: string;
+  model_name: string | null;
+  prompt_hash: string | null;
+  session_ids: string | null;
+  created_at: string;
+}
+
+export interface CreateReport {
+  patient_id: string;
+  report_type: string;
+  content: string;
+  model_name: string | null;
+  prompt_hash: string | null;
+  session_ids: string | null;
+}
+
+export interface UpdateReport {
+  report_type?: string;
+  content?: string;
+  model_name?: string;
+  prompt_hash?: string;
+  session_ids?: string;
+}
+
+// === Report API ===
+
+export async function createReport(input: CreateReport): Promise<Report> {
+  return await invoke<Report>("create_report", { input });
+}
+
+export async function getReport(id: string): Promise<Report> {
+  return await invoke<Report>("get_report", { id });
+}
+
+export async function listReports(
+  patientId: string,
+  limit?: number,
+  offset?: number,
+): Promise<Report[]> {
+  return await invoke<Report[]>("list_reports", {
+    patient_id: patientId,
+    limit,
+    offset,
+  });
+}
+
+export async function updateReport(
+  id: string,
+  input: UpdateReport,
+): Promise<Report> {
+  return await invoke<Report>("update_report", { id, input });
+}
+
+export async function deleteReport(id: string): Promise<void> {
+  return await invoke<void>("delete_report", { id });
+}
+
+export async function generateReport(
+  patientContext: string,
+  reportType: string,
+  sessionNotes: string,
+  systemPrompt?: string,
+): Promise<string> {
+  return await invoke<string>("generate_report", {
+    patient_context: patientContext,
+    report_type: reportType,
+    session_notes: sessionNotes,
+    system_prompt: systemPrompt,
+  });
 }
