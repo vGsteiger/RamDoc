@@ -1,9 +1,48 @@
+use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 use crate::error::AppError;
 use crate::llm::{
     self, download, LlmEngine, ReportType, EngineStatus, ModelChoice, SYSTEM_PROMPT_DE,
 };
-use crate::state::AppState;
+use crate::state::{AppState, AuthState};
+
+/// Validate a model filename to prevent path traversal attacks.
+/// Returns an error if the filename contains path separators or parent directory components.
+fn validate_model_filename(filename: &str) -> Result<(), AppError> {
+    if filename.is_empty() {
+        return Err(AppError::Validation("Model filename cannot be empty".to_string()));
+    }
+
+    // Check for path separators
+    if filename.contains('/') || filename.contains('\\') {
+        return Err(AppError::Validation("Model filename cannot contain path separators".to_string()));
+    }
+
+    // Check for parent directory components
+    if filename.contains("..") {
+        return Err(AppError::Validation("Model filename cannot contain parent directory references".to_string()));
+    }
+
+    // Ensure it ends with .gguf
+    if !filename.ends_with(".gguf") {
+        return Err(AppError::Validation("Model filename must end with .gguf".to_string()));
+    }
+
+    Ok(())
+}
+
+/// Check that the user is authenticated before processing sensitive patient data.
+fn check_auth(state: &AppState) -> Result<(), AppError> {
+    let auth = state.auth.lock().map_err(|_| {
+        AppError::Llm("Auth state mutex poisoned".to_string())
+    })?;
+
+    if !matches!(*auth, AuthState::Unlocked { .. }) {
+        return Err(AppError::AuthRequired);
+    }
+
+    Ok(())
+}
 
 /// Return the current engine status (safe to call before a model is loaded).
 #[tauri::command]
@@ -15,7 +54,7 @@ pub async fn get_engine_status(state: State<'_, AppState>) -> Result<EngineStatu
             is_loaded: false,
             model_name: None,
             model_path: None,
-            available_ram_bytes: LlmEngine::available_ram(),
+            total_ram_bytes: LlmEngine::total_ram(),
         }),
     }
 }
@@ -37,12 +76,13 @@ pub async fn get_default_system_prompt() -> Result<String, AppError> {
 #[tauri::command]
 pub async fn download_model(
     app: AppHandle,
+    state: State<'_, AppState>,
     model: ModelChoice,
 ) -> Result<(), AppError> {
-    let dest_dir = dirs::home_dir()
-        .unwrap_or_default()
-        .join("DokAssist")
-        .join("models");
+    // Validate filename to prevent path traversal
+    validate_model_filename(&model.filename)?;
+
+    let dest_dir = state.data_dir.join("models");
     tokio::fs::create_dir_all(&dest_dir).await?;
 
     let dest_path = dest_dir.join(&model.filename);
@@ -57,18 +97,17 @@ pub async fn load_model(
     state: State<'_, AppState>,
     model_filename: String,
 ) -> Result<(), AppError> {
-    let model_path = dirs::home_dir()
-        .unwrap_or_default()
-        .join("DokAssist")
-        .join("models")
-        .join(&model_filename);
+    // Validate filename to prevent path traversal
+    validate_model_filename(&model_filename)?;
+
+    let model_path = state.data_dir.join("models").join(&model_filename);
     let model_name = model_filename.clone();
 
     let engine = tokio::task::spawn_blocking(move || LlmEngine::load(model_path, model_name))
         .await
         .map_err(|e| AppError::Llm(format!("spawn_blocking error: {e}")))??;
 
-    *state.llm.lock().unwrap() = Some(engine);
+    *state.llm.lock().unwrap() = Some(Arc::new(engine));
     Ok(())
 }
 
@@ -80,12 +119,30 @@ pub async fn extract_file_metadata(
     document_text: String,
     system_prompt: Option<String>,
 ) -> Result<llm::FileMetadata, AppError> {
-    let llm = state.llm.lock().unwrap();
-    let engine = llm
-        .as_ref()
-        .ok_or_else(|| AppError::Llm("Model not loaded".to_string()))?;
-    let prompt = system_prompt.as_deref().unwrap_or(SYSTEM_PROMPT_DE);
-    llm::extract_metadata_with_prompt(engine, &document_text, prompt)
+    // Check authentication before processing patient data
+    check_auth(&state)?;
+
+    // Acquire the engine handle under the mutex, but do not run inference while holding the lock.
+    let engine = {
+        let llm = state.llm.lock().unwrap();
+        let engine = llm
+            .as_ref()
+            .ok_or_else(|| AppError::Llm("Model not loaded".to_string()))?;
+        // Clone the Arc so we can release the lock before inference.
+        Arc::clone(engine)
+    };
+
+    // Resolve the system prompt into an owned String we can move into the blocking task.
+    let prompt: String = system_prompt.unwrap_or_else(|| SYSTEM_PROMPT_DE.to_string());
+
+    // Run the potentially long-running metadata extraction on a blocking thread.
+    let metadata = tokio::task::spawn_blocking(move || {
+        llm::extract_metadata_with_prompt(&engine, &document_text, &prompt)
+    })
+        .await
+        .map_err(|e| AppError::Llm(format!("spawn_blocking error: {e}")))??;
+
+    Ok(metadata)
 }
 
 /// Generate a psychiatric report with streaming output.
@@ -100,6 +157,9 @@ pub async fn generate_report(
     session_notes: String,
     system_prompt: Option<String>,
 ) -> Result<String, AppError> {
+    // Check authentication before processing patient data
+    check_auth(&state)?;
+
     let rt = match report_type.as_str() {
         "Befundbericht" => ReportType::Befundbericht,
         "Verlaufsbericht" => ReportType::Verlaufsbericht,
@@ -107,14 +167,26 @@ pub async fn generate_report(
         other => return Err(AppError::Validation(format!("Unknown report type: {other}"))),
     };
 
-    let llm = state.llm.lock().unwrap();
-    let engine = llm
-        .as_ref()
-        .ok_or_else(|| AppError::Llm("Model not loaded".to_string()))?;
-    let prompt = system_prompt.as_deref().unwrap_or(SYSTEM_PROMPT_DE);
+    // Acquire the engine handle under the mutex, but do not run inference while holding the lock.
+    let engine = {
+        let llm = state.llm.lock().unwrap();
+        let engine = llm
+            .as_ref()
+            .ok_or_else(|| AppError::Llm("Model not loaded".to_string()))?;
+        // Clone the Arc so we can release the lock before inference.
+        Arc::clone(engine)
+    };
 
-    let report =
-        llm::generate_report_streaming_with_prompt(&app, engine, rt, &patient_context, &session_notes, prompt)?;
+    // Resolve the system prompt into an owned String we can move into the blocking task.
+    let prompt: String = system_prompt.unwrap_or_else(|| SYSTEM_PROMPT_DE.to_string());
+
+    // Run the potentially long-running report generation on a blocking thread.
+    let report = tokio::task::spawn_blocking(move || {
+        llm::generate_report_streaming_with_prompt(&app, &engine, rt, &patient_context, &session_notes, &prompt)
+    })
+        .await
+        .map_err(|e| AppError::Llm(format!("spawn_blocking error: {e}")))??;
+
     let _ = app.emit("report-done", ());
     Ok(report)
 }
