@@ -1,4 +1,5 @@
 mod ahv;
+mod audit;
 mod commands;
 mod constants;
 mod crypto;
@@ -25,6 +26,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .manage(AppState::new(data_dir))
         .invoke_handler(tauri::generate_handler![
+            commands::audit::query_audit_log,
             commands::auth::check_auth,
             commands::auth::initialize_app,
             commands::auth::unlock_app,

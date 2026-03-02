@@ -122,6 +122,7 @@ CREATE INDEX IF NOT EXISTS idx_diagnoses_patient ON diagnoses(patient_id, status
 CREATE INDEX IF NOT EXISTS idx_medications_patient ON medications(patient_id, start_date DESC);
 CREATE INDEX IF NOT EXISTS idx_reports_patient ON reports(patient_id, generated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_log(entity_type, entity_id);
 
 -- Trigger to update updated_at on patients
 CREATE TRIGGER IF NOT EXISTS patients_updated_at
