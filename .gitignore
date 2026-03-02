@@ -59,6 +59,3 @@ temp/
 # Test coverage
 coverage/
 .nyc_output/
-
-# Claude Code temporary files
-.claude/packages/
