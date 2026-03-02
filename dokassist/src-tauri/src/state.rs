@@ -1,4 +1,6 @@
-use crate::constants::{KEYCHAIN_SERVICE, RECOVERY_FILENAME};
+#[cfg(target_os = "macos")]
+use crate::constants::KEYCHAIN_SERVICE;
+use crate::constants::RECOVERY_FILENAME;
 use crate::database::DbPool;
 use crate::llm::LlmEngine;
 use std::sync::{Arc, Mutex};

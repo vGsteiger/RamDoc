@@ -1,3 +1,4 @@
+#[cfg(target_os = "macos")]
 use crate::constants::{DB_KEY_ACCOUNT, FS_KEY_ACCOUNT};
 use crate::error::AppError;
 
