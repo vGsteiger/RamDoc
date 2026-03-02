@@ -1,4 +1,7 @@
+use crate::models::diagnosis::{self, CreateDiagnosis, UpdateDiagnosis};
+use crate::models::medication::{self, CreateMedication, UpdateMedication};
 use crate::models::patient::{self, CreatePatient, UpdatePatient};
+use crate::models::session::{self, CreateSession, UpdateSession};
 use crate::{ahv, audit, crypto, database, filesystem, recovery, search};
 use tempfile::TempDir;
 
@@ -678,4 +681,309 @@ fn test_pkg7_auth_state_module_exists() {
     // - State transitions: FirstRun -> Unlocked
     // - State transitions: Locked -> Unlocked
     // - State transitions: RecoveryRequired -> Unlocked
+}
+
+// ===========================
+// PKG-10: Clinical Workflows Tests
+// ===========================
+
+#[test]
+fn test_pkg10_session_crud() {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("test.db");
+    let key = crypto::generate_key();
+
+    let pool = database::init_db(&db_path, &key).unwrap();
+    let conn = pool.conn().unwrap();
+
+    // First create a patient
+    let patient_input = CreatePatient {
+        ahv_number: "756.1234.5678.97".to_string(),
+        first_name: "Maria".to_string(),
+        last_name: "Schmidt".to_string(),
+        date_of_birth: "1985-05-20".to_string(),
+        gender: Some("F".to_string()),
+        address: None,
+        phone: None,
+        email: None,
+        insurance: None,
+        gp_name: None,
+        gp_address: None,
+        notes: None,
+    };
+    let patient = patient::create_patient(&conn, patient_input).unwrap();
+
+    // Create session
+    let create_input = CreateSession {
+        patient_id: patient.id.clone(),
+        session_date: "2026-03-01".to_string(),
+        session_type: "Initial Assessment".to_string(),
+        duration_minutes: Some(60),
+        notes: Some("First session with patient".to_string()),
+        amdp_data: Some(r#"{"consciousness":"clear","orientation":"full"}"#.to_string()),
+    };
+
+    let created_session = session::create_session(&conn, create_input).unwrap();
+    assert_eq!(created_session.session_type, "Initial Assessment");
+    assert_eq!(created_session.patient_id, patient.id);
+    assert_eq!(created_session.duration_minutes, Some(60));
+
+    // Read session
+    let read_session = session::get_session(&conn, &created_session.id).unwrap();
+    assert_eq!(read_session.id, created_session.id);
+    assert_eq!(read_session.session_date, "2026-03-01");
+
+    // Update session
+    let update_input = UpdateSession {
+        session_type: Some("Follow-up".to_string()),
+        duration_minutes: Some(45),
+        notes: Some("Updated notes".to_string()),
+        session_date: None,
+        amdp_data: None,
+    };
+
+    let updated_session =
+        session::update_session(&conn, &created_session.id, update_input).unwrap();
+    assert_eq!(updated_session.session_type, "Follow-up");
+    assert_eq!(updated_session.duration_minutes, Some(45));
+    assert_eq!(updated_session.notes, Some("Updated notes".to_string()));
+
+    // List sessions for patient
+    let sessions = session::list_sessions_for_patient(&conn, &patient.id, 10, 0).unwrap();
+    assert_eq!(sessions.len(), 1);
+    assert_eq!(sessions[0].id, created_session.id);
+
+    // Delete session
+    session::delete_session(&conn, &created_session.id).unwrap();
+    let result = session::get_session(&conn, &created_session.id);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_pkg10_diagnosis_crud() {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("test.db");
+    let key = crypto::generate_key();
+
+    let pool = database::init_db(&db_path, &key).unwrap();
+    let conn = pool.conn().unwrap();
+
+    // First create a patient
+    let patient_input = CreatePatient {
+        ahv_number: "756.2345.6789.08".to_string(),
+        first_name: "Peter".to_string(),
+        last_name: "Weber".to_string(),
+        date_of_birth: "1978-11-10".to_string(),
+        gender: Some("M".to_string()),
+        address: None,
+        phone: None,
+        email: None,
+        insurance: None,
+        gp_name: None,
+        gp_address: None,
+        notes: None,
+    };
+    let patient = patient::create_patient(&conn, patient_input).unwrap();
+
+    // Create diagnosis
+    let create_input = CreateDiagnosis {
+        patient_id: patient.id.clone(),
+        icd10_code: "F32.1".to_string(),
+        description: "Mittelgradige depressive Episode".to_string(),
+        status: Some("active".to_string()),
+        diagnosed_date: "2026-02-15".to_string(),
+        resolved_date: None,
+        notes: Some("Initial diagnosis".to_string()),
+    };
+
+    let created_diagnosis = diagnosis::create_diagnosis(&conn, create_input).unwrap();
+    assert_eq!(created_diagnosis.icd10_code, "F32.1");
+    assert_eq!(created_diagnosis.status, "active");
+    assert_eq!(created_diagnosis.patient_id, patient.id);
+
+    // Read diagnosis
+    let read_diagnosis = diagnosis::get_diagnosis(&conn, &created_diagnosis.id).unwrap();
+    assert_eq!(read_diagnosis.id, created_diagnosis.id);
+    assert_eq!(
+        read_diagnosis.description,
+        "Mittelgradige depressive Episode"
+    );
+
+    // Update diagnosis
+    let update_input = UpdateDiagnosis {
+        status: Some("remission".to_string()),
+        notes: Some("Patient shows improvement".to_string()),
+        icd10_code: None,
+        description: None,
+        diagnosed_date: None,
+        resolved_date: None,
+    };
+
+    let updated_diagnosis =
+        diagnosis::update_diagnosis(&conn, &created_diagnosis.id, update_input).unwrap();
+    assert_eq!(updated_diagnosis.status, "remission");
+    assert_eq!(
+        updated_diagnosis.notes,
+        Some("Patient shows improvement".to_string())
+    );
+
+    // List diagnoses for patient
+    let diagnoses = diagnosis::list_diagnoses_for_patient(&conn, &patient.id, 10, 0).unwrap();
+    assert_eq!(diagnoses.len(), 1);
+    assert_eq!(diagnoses[0].id, created_diagnosis.id);
+
+    // Delete diagnosis
+    diagnosis::delete_diagnosis(&conn, &created_diagnosis.id).unwrap();
+    let result = diagnosis::get_diagnosis(&conn, &created_diagnosis.id);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_pkg10_medication_crud() {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("test.db");
+    let key = crypto::generate_key();
+
+    let pool = database::init_db(&db_path, &key).unwrap();
+    let conn = pool.conn().unwrap();
+
+    // First create a patient
+    let patient_input = CreatePatient {
+        ahv_number: "756.3456.7890.19".to_string(),
+        first_name: "Anna".to_string(),
+        last_name: "Meier".to_string(),
+        date_of_birth: "1990-07-22".to_string(),
+        gender: Some("F".to_string()),
+        address: None,
+        phone: None,
+        email: None,
+        insurance: None,
+        gp_name: None,
+        gp_address: None,
+        notes: None,
+    };
+    let patient = patient::create_patient(&conn, patient_input).unwrap();
+
+    // Create medication
+    let create_input = CreateMedication {
+        patient_id: patient.id.clone(),
+        substance: "Sertralin".to_string(),
+        dosage: "50mg".to_string(),
+        frequency: "1x täglich".to_string(),
+        start_date: "2026-03-01".to_string(),
+        end_date: None,
+        notes: Some("Start with low dose".to_string()),
+    };
+
+    let created_medication = medication::create_medication(&conn, create_input).unwrap();
+    assert_eq!(created_medication.substance, "Sertralin");
+    assert_eq!(created_medication.dosage, "50mg");
+    assert_eq!(created_medication.patient_id, patient.id);
+
+    // Read medication
+    let read_medication = medication::get_medication(&conn, &created_medication.id).unwrap();
+    assert_eq!(read_medication.id, created_medication.id);
+    assert_eq!(read_medication.frequency, "1x täglich");
+
+    // Update medication
+    let update_input = UpdateMedication {
+        dosage: Some("100mg".to_string()),
+        notes: Some("Increased dosage after 2 weeks".to_string()),
+        substance: None,
+        frequency: None,
+        start_date: None,
+        end_date: None,
+    };
+
+    let updated_medication =
+        medication::update_medication(&conn, &created_medication.id, update_input).unwrap();
+    assert_eq!(updated_medication.dosage, "100mg");
+    assert_eq!(
+        updated_medication.notes,
+        Some("Increased dosage after 2 weeks".to_string())
+    );
+
+    // List medications for patient
+    let medications = medication::list_medications_for_patient(&conn, &patient.id, 10, 0).unwrap();
+    assert_eq!(medications.len(), 1);
+    assert_eq!(medications[0].id, created_medication.id);
+
+    // Delete medication
+    medication::delete_medication(&conn, &created_medication.id).unwrap();
+    let result = medication::get_medication(&conn, &created_medication.id);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_pkg10_multiple_sessions_ordering() {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("test.db");
+    let key = crypto::generate_key();
+
+    let pool = database::init_db(&db_path, &key).unwrap();
+    let conn = pool.conn().unwrap();
+
+    // Create patient
+    let patient_input = CreatePatient {
+        ahv_number: "756.4567.8901.20".to_string(),
+        first_name: "Test".to_string(),
+        last_name: "Patient".to_string(),
+        date_of_birth: "1980-01-01".to_string(),
+        gender: None,
+        address: None,
+        phone: None,
+        email: None,
+        insurance: None,
+        gp_name: None,
+        gp_address: None,
+        notes: None,
+    };
+    let patient = patient::create_patient(&conn, patient_input).unwrap();
+
+    // Create multiple sessions with different dates
+    let session1 = session::create_session(
+        &conn,
+        CreateSession {
+            patient_id: patient.id.clone(),
+            session_date: "2026-01-15".to_string(),
+            session_type: "Session 1".to_string(),
+            duration_minutes: None,
+            notes: None,
+            amdp_data: None,
+        },
+    )
+    .unwrap();
+
+    let session2 = session::create_session(
+        &conn,
+        CreateSession {
+            patient_id: patient.id.clone(),
+            session_date: "2026-03-15".to_string(),
+            session_type: "Session 2".to_string(),
+            duration_minutes: None,
+            notes: None,
+            amdp_data: None,
+        },
+    )
+    .unwrap();
+
+    let session3 = session::create_session(
+        &conn,
+        CreateSession {
+            patient_id: patient.id.clone(),
+            session_date: "2026-02-15".to_string(),
+            session_type: "Session 3".to_string(),
+            duration_minutes: None,
+            notes: None,
+            amdp_data: None,
+        },
+    )
+    .unwrap();
+
+    // List sessions - should be ordered by date DESC
+    let sessions = session::list_sessions_for_patient(&conn, &patient.id, 10, 0).unwrap();
+    assert_eq!(sessions.len(), 3);
+    assert_eq!(sessions[0].id, session2.id); // 2026-03-15
+    assert_eq!(sessions[1].id, session3.id); // 2026-02-15
+    assert_eq!(sessions[2].id, session1.id); // 2026-01-15
 }

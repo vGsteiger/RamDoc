@@ -1,5 +1,8 @@
 use crate::error::AppError;
+use crate::models::diagnosis::Diagnosis;
+use crate::models::medication::Medication;
 use crate::models::patient::Patient;
+use crate::models::session::Session;
 use rusqlite::Connection;
 use serde::Serialize;
 
@@ -242,6 +245,116 @@ pub fn remove_from_index(
     conn.execute(
         "DELETE FROM search_index WHERE entity_type = ?1 AND entity_id = ?2",
         (entity_type, entity_id),
+    )?;
+
+    Ok(())
+}
+
+// Wrapper functions that take model structs directly
+
+pub fn index_session_from_model(conn: &Connection, session: &Session) -> Result<(), AppError> {
+    // Get patient name from database
+    let patient_name: String = conn
+        .query_row(
+            "SELECT first_name || ' ' || last_name FROM patients WHERE id = ?",
+            [&session.patient_id],
+            |row| row.get(0),
+        )
+        .unwrap_or_else(|_| "Unknown Patient".to_string());
+
+    index_session(
+        conn,
+        &session.id,
+        &session.patient_id,
+        &patient_name,
+        &session.session_type,
+        session.notes.as_deref().unwrap_or(""),
+        &session.session_date,
+    )
+}
+
+pub fn index_diagnosis_from_model(
+    conn: &Connection,
+    diagnosis: &Diagnosis,
+) -> Result<(), AppError> {
+    // Get patient name from database
+    let patient_name: String = conn
+        .query_row(
+            "SELECT first_name || ' ' || last_name FROM patients WHERE id = ?",
+            [&diagnosis.patient_id],
+            |row| row.get(0),
+        )
+        .unwrap_or_else(|_| "Unknown Patient".to_string());
+
+    // Remove existing diagnosis index entry
+    remove_from_index(conn, "diagnosis", &diagnosis.id)?;
+
+    let title = format!("{} - {}", diagnosis.icd10_code, diagnosis.description);
+    let content = format!(
+        "{} {} {}",
+        diagnosis.description,
+        diagnosis.icd10_code,
+        diagnosis.notes.as_deref().unwrap_or("")
+    );
+
+    conn.execute(
+        r#"
+        INSERT INTO search_index (entity_type, entity_id, patient_id, patient_name, title, content, date)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+        "#,
+        (
+            "diagnosis",
+            &diagnosis.id,
+            &diagnosis.patient_id,
+            &patient_name,
+            &title,
+            &content,
+            &diagnosis.diagnosed_date,
+        ),
+    )?;
+
+    Ok(())
+}
+
+pub fn index_medication_from_model(
+    conn: &Connection,
+    medication: &Medication,
+) -> Result<(), AppError> {
+    // Get patient name from database
+    let patient_name: String = conn
+        .query_row(
+            "SELECT first_name || ' ' || last_name FROM patients WHERE id = ?",
+            [&medication.patient_id],
+            |row| row.get(0),
+        )
+        .unwrap_or_else(|_| "Unknown Patient".to_string());
+
+    // Remove existing medication index entry
+    remove_from_index(conn, "medication", &medication.id)?;
+
+    let title = format!("{} - {}", medication.substance, medication.dosage);
+    let content = format!(
+        "{} {} {} {}",
+        medication.substance,
+        medication.dosage,
+        medication.frequency,
+        medication.notes.as_deref().unwrap_or("")
+    );
+
+    conn.execute(
+        r#"
+        INSERT INTO search_index (entity_type, entity_id, patient_id, patient_name, title, content, date)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+        "#,
+        (
+            "medication",
+            &medication.id,
+            &medication.patient_id,
+            &patient_name,
+            &title,
+            &content,
+            &medication.start_date,
+        ),
     )?;
 
     Ok(())
