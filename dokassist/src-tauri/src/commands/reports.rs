@@ -1,12 +1,2 @@
-use tauri::State;
-use crate::error::AppError;
-use crate::state::AppState;
-
-#[tauri::command]
-pub async fn generate_report(
-    state: State<'_, AppState>,
-    patient_id: String,
-) -> Result<String, AppError> {
-    // PKG-5: implement
-    Err(AppError::Llm("Not implemented".to_string()))
-}
+// Report generation is handled by commands::llm::generate_report (PKG-4).
+// Additional report management commands (list, export, etc.) will be added in PKG-5.

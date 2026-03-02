@@ -1,13 +1,14 @@
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use crate::constants::{KEYCHAIN_SERVICE, RECOVERY_FILENAME};
 use crate::database::DbPool;
+use crate::llm::LlmEngine;
 
 /// Application state shared across all Tauri commands.
 pub struct AppState {
     pub auth: Mutex<AuthState>,
     pub data_dir: std::path::PathBuf,
     pub db: Mutex<Option<DbPool>>,
-    // llm: Option<LlmEngine>,   // added in PKG-4
+    pub llm: Mutex<Option<Arc<LlmEngine>>>,
 }
 
 pub enum AuthState {
@@ -29,6 +30,7 @@ impl AppState {
             auth: Mutex::new(initial_state),
             data_dir,
             db: Mutex::new(None),
+            llm: Mutex::new(None),
         }
     }
 

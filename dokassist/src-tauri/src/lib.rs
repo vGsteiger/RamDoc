@@ -6,7 +6,7 @@ mod crypto;
 mod database;
 mod error;
 mod keychain;
-mod llm;  // PKG-4: LLM Engine (placeholder with security utilities)
+mod llm;
 mod models;
 mod recovery;
 mod state;
@@ -20,7 +20,9 @@ use state::AppState;
 pub fn run() {
     env_logger::init();
 
-    let data_dir = std::path::PathBuf::from(".");
+    let data_dir = dirs::home_dir()
+        .unwrap_or_default()
+        .join("DokAssist");
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -42,10 +44,16 @@ pub fn run() {
             commands::files::list_files,
             commands::files::delete_file,
             commands::sessions::create_session,
-            commands::reports::generate_report,
             commands::search::search_patients,
             commands::settings::get_settings,
             commands::settings::update_settings,
+            commands::llm::get_engine_status,
+            commands::llm::get_recommended_model,
+            commands::llm::get_default_system_prompt,
+            commands::llm::download_model,
+            commands::llm::load_model,
+            commands::llm::extract_file_metadata,
+            commands::llm::generate_report,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
