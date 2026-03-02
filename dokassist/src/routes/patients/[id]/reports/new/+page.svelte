@@ -2,18 +2,12 @@
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { onMount, onDestroy } from 'svelte';
-  import { invoke } from '@tauri-apps/api/core';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+  import { getEngineStatus, createReport, type LlmEngineStatus, type CreateReport } from '$lib/api';
+  import { invoke } from '@tauri-apps/api/core';
   import ReportTypeSelector from '$lib/components/ReportTypeSelector.svelte';
   import ReportStream from '$lib/components/ReportStream.svelte';
   import ReportEditor from '$lib/components/ReportEditor.svelte';
-
-  interface LlmEngineStatus {
-    is_loaded: boolean;
-    model_name: string | null;
-    model_path: string | null;
-    total_ram_bytes: number;
-  }
 
   $: patientId = $page.params.id;
 
@@ -32,7 +26,7 @@
 
   async function checkLlmStatus() {
     try {
-      llmStatus = await invoke<LlmEngineStatus>('get_engine_status');
+      llmStatus = await getEngineStatus();
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     }
@@ -50,6 +44,16 @@
     }
 
     try {
+      // Unlisten from previous listeners if they exist
+      if (unlistenChunk) {
+        unlistenChunk();
+        unlistenChunk = null;
+      }
+      if (unlistenDone) {
+        unlistenDone();
+        unlistenDone = null;
+      }
+
       isGenerating = true;
       error = '';
       generatedContent = '';
@@ -63,34 +67,51 @@
         isGenerating = false;
         editableContent = generatedContent;
         isEditing = true;
+        // Unlisten after completion
+        if (unlistenChunk) {
+          unlistenChunk();
+          unlistenChunk = null;
+        }
+        if (unlistenDone) {
+          unlistenDone();
+          unlistenDone = null;
+        }
       });
 
-      // Start generation
+      // Start generation with snake_case keys
       await invoke('generate_report', {
-        patientContext,
-        reportType: selectedType,
-        sessionNotes,
-        systemPrompt: null
+        patient_context: patientContext,
+        report_type: selectedType,
+        session_notes: sessionNotes,
+        system_prompt: null
       });
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
       isGenerating = false;
+      // Unlisten on error
+      if (unlistenChunk) {
+        unlistenChunk();
+        unlistenChunk = null;
+      }
+      if (unlistenDone) {
+        unlistenDone();
+        unlistenDone = null;
+      }
     }
   }
 
   async function saveReport() {
     try {
-      const report = await invoke('create_report', {
-        input: {
-          patient_id: patientId,
-          report_type: selectedType,
-          content: editableContent,
-          model_name: llmStatus?.model_name || null,
-          prompt_hash: null,
-          session_ids: null
-        }
-      });
+      const input: CreateReport = {
+        patient_id: patientId,
+        report_type: selectedType,
+        content: editableContent,
+        model_name: llmStatus?.model_name || null,
+        prompt_hash: null,
+        session_ids: null
+      };
 
+      await createReport(input);
       await goto(`/patients/${patientId}/reports`);
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
@@ -122,7 +143,7 @@
     <div class="flex items-center justify-between mb-6">
       <h2 class="text-2xl font-bold text-gray-100">Generate Report</h2>
       <a
-        href="/patients/{patientId}/reports"
+        href={`/patients/${patientId}/reports`}
         class="text-sm text-gray-400 hover:text-gray-300"
       >
         ← Back to Reports
@@ -179,7 +200,7 @@
         {#if isGenerating}
           <div class="space-y-4">
             <h3 class="text-lg font-semibold text-gray-100">Generated Report</h3>
-            <ReportStream content={generatedContent} {isGenerating} />
+            <ReportStream content={generatedContent} isStreaming={isGenerating} />
           </div>
         {/if}
 

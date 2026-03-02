@@ -2,20 +2,8 @@
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
-  import { invoke } from '@tauri-apps/api/core';
+  import { getReport, updateReport, deleteReport, type Report, type UpdateReport } from '$lib/api';
   import ReportEditor from '$lib/components/ReportEditor.svelte';
-
-  interface Report {
-    id: string;
-    patient_id: string;
-    report_type: string;
-    content: string;
-    generated_at: string;
-    model_name: string | null;
-    prompt_hash: string | null;
-    session_ids: string | null;
-    created_at: string;
-  }
 
   $: patientId = $page.params.id;
   $: reportId = $page.params.reportId;
@@ -30,7 +18,7 @@
     try {
       loading = true;
       error = '';
-      report = await invoke<Report>('get_report', { id: reportId });
+      report = await getReport(reportId);
       editableContent = report.content;
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
@@ -44,10 +32,8 @@
 
     try {
       error = '';
-      await invoke('update_report', {
-        id: reportId,
-        input: { content: editableContent }
-      });
+      const input: UpdateReport = { content: editableContent };
+      await updateReport(reportId, input);
       report.content = editableContent;
       editMode = false;
     } catch (e) {
@@ -55,12 +41,12 @@
     }
   }
 
-  async function deleteReport() {
+  async function handleDeleteReport() {
     if (!confirm('Are you sure you want to delete this report?')) {
       return;
     }
     try {
-      await invoke('delete_report', { id: reportId });
+      await deleteReport(reportId);
       await goto(`/patients/${patientId}/reports`);
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
@@ -118,7 +104,7 @@
             {/if}
           </div>
           <a
-            href="/patients/{patientId}/reports"
+            href={`/patients/${patientId}/reports`}
             class="text-sm text-gray-400 hover:text-gray-300"
           >
             ← Back to Reports
@@ -151,7 +137,7 @@
             </button>
           {/if}
           <button
-            on:click={deleteReport}
+            on:click={handleDeleteReport}
             class="px-4 py-2 bg-red-900/20 text-red-400 rounded hover:bg-red-900/40 transition-colors"
           >
             Delete

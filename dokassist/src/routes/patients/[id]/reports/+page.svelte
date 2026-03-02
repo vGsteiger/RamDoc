@@ -1,19 +1,7 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import { onMount } from 'svelte';
-  import { invoke } from '@tauri-apps/api/core';
-
-  interface Report {
-    id: string;
-    patient_id: string;
-    report_type: string;
-    content: string;
-    generated_at: string;
-    model_name: string | null;
-    prompt_hash: string | null;
-    session_ids: string | null;
-    created_at: string;
-  }
+  import { listReports, deleteReport, type Report } from '$lib/api';
 
   $: patientId = $page.params.id;
   let reports: Report[] = [];
@@ -24,7 +12,7 @@
     try {
       loading = true;
       error = '';
-      reports = await invoke<Report[]>('list_reports', { patientId });
+      reports = await listReports(patientId);
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     } finally {
@@ -32,12 +20,12 @@
     }
   }
 
-  async function deleteReport(reportId: string) {
+  async function handleDeleteReport(reportId: string) {
     if (!confirm('Are you sure you want to delete this report?')) {
       return;
     }
     try {
-      await invoke('delete_report', { id: reportId });
+      await deleteReport(reportId);
       await loadReports();
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
@@ -76,7 +64,7 @@
   <div class="flex justify-between items-center mb-6">
     <h2 class="text-2xl font-bold text-gray-100">Reports</h2>
     <a
-      href="/patients/{patientId}/reports/new"
+      href={`/patients/${patientId}/reports/new`}
       class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
     >
       Generate New Report
@@ -93,7 +81,7 @@
     <div class="text-center py-12">
       <p class="text-gray-400 mb-4">No reports yet.</p>
       <a
-        href="/patients/{patientId}/reports/new"
+        href={`/patients/${patientId}/reports/new`}
         class="inline-block px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
       >
         Generate Your First Report
@@ -117,13 +105,13 @@
             </div>
             <div class="flex space-x-2">
               <a
-                href="/patients/{patientId}/reports/{report.id}"
+                href={`/patients/${patientId}/reports/${report.id}`}
                 class="px-3 py-1 text-sm bg-gray-700 text-gray-300 rounded hover:bg-gray-600 transition-colors"
               >
                 View
               </a>
               <button
-                on:click={() => deleteReport(report.id)}
+                on:click={() => handleDeleteReport(report.id)}
                 class="px-3 py-1 text-sm bg-red-900/20 text-red-400 rounded hover:bg-red-900/40 transition-colors"
               >
                 Delete

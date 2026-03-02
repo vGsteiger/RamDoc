@@ -29,7 +29,7 @@
     {#if showPreview}
       <div class="p-6 prose prose-invert max-w-none">
         {#if content}
-          {@html content.replace(/\n/g, '<br>')}
+          <pre class="whitespace-pre-wrap font-sans text-gray-100">{content}</pre>
         {:else}
           <p class="text-gray-500 italic">No content to preview</p>
         {/if}
