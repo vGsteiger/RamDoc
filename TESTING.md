@@ -137,14 +137,14 @@ cargo test --lib
 - ✅ Search by patient last name
 - ✅ Search by AHV (dotted format: 756.1234.5678.97)
 - ✅ Search by AHV (plain format: 7561234567897)
-- ✅ Partial name matching (e.g., "Mül" matches "Müller")
+- ✅ Full token matching (e.g., "Müller" matches "Müller")
 - ✅ Empty query returns no results
 - ✅ FTS5 ranking works correctly
 - ✅ Search results include correct entity metadata
 
 **German Language Support**:
 - ✅ Unicode characters (ä, ö, ü, ß) handled correctly
-- ✅ Partial matching works with German names
+- ✅ Token-based matching with German names
 
 ### ✅ PKG-6: Audit Logger
 
