@@ -2,6 +2,25 @@
 
 This repository includes several automation workflows to streamline development and release processes.
 
+## Auto-labeling Workflow
+
+### Overview
+When a PR is opened or reopened, the auto-labeling workflow automatically applies the `autorelease` and `merge when ready` labels to enable automated release creation and PR merging.
+
+### Default Labels Applied
+- **`autorelease`** - Indicates that a release will be created when the PR is merged
+- **`merge when ready`** - Enables automatic merging when all checks pass
+
+### How to Customize
+You can remove or modify these labels after the PR is created:
+- **Remove `merge when ready`** if you want to merge manually
+- **Remove `autorelease`** if you don't want the informational comment (release still happens by default)
+- **Add version labels** (`major`, `minor`, `patch`) to control the version bump
+- **Add `skip-release`** to prevent any release from being created
+
+### Workflow File
+- `.github/workflows/auto-label.yml`
+
 ## Auto-merge Workflow
 
 ### Overview
@@ -75,14 +94,16 @@ For additional safety, consider enabling branch protection on `main`:
 
 ## Summary of Labels
 
-| Label | Purpose | Effect |
-|-------|---------|--------|
-| `merge when ready` | Auto-merge | PR will be automatically merged when checks pass |
-| `autorelease` | Release intent | Adds informational comment; release happens automatically anyway |
-| `major` | Version bump | Creates a major version bump (e.g., v1.0.0 → v2.0.0) |
-| `minor` | Version bump | Creates a minor version bump (e.g., v1.0.0 → v1.1.0) |
-| `patch` | Version bump | Creates a patch version bump (e.g., v1.0.0 → v1.0.1) |
-| `skip-release` | Skip release | Prevents automatic release creation |
+All PRs are automatically labeled with `autorelease` and `merge when ready` when opened. You can customize or remove these labels as needed.
+
+| Label | Purpose | Effect | Applied By |
+|-------|---------|--------|------------|
+| `merge when ready` | Auto-merge | PR will be automatically merged when checks pass | Auto-label workflow (default) |
+| `autorelease` | Release intent | Adds informational comment; release happens automatically anyway | Auto-label workflow (default) |
+| `major` | Version bump | Creates a major version bump (e.g., v1.0.0 → v2.0.0) | Manual |
+| `minor` | Version bump | Creates a minor version bump (e.g., v1.0.0 → v1.1.0) | Manual |
+| `patch` | Version bump | Creates a patch version bump (e.g., v1.0.0 → v1.0.1) | Manual |
+| `skip-release` | Skip release | Prevents automatic release creation | Manual |
 
 ## Troubleshooting
 
