@@ -18,6 +18,20 @@ pub struct SearchResult {
     pub rank: f64,
 }
 
+/// Escape a query string for use as a literal FTS5 phrase match.
+///
+/// MED-1: FTS5 treats operators like `*`, `OR`, `AND`, `NOT`, `"`, and `^`
+/// as metacharacters inside a MATCH clause even when the value is bound
+/// via a `?` parameter.  Wrapping the input in double-quotes and escaping
+/// any internal double-quotes makes the whole string a phrase query,
+/// preventing wildcard/operator injection.
+fn sanitize_fts5_query(input: &str) -> String {
+    // Replace every " with "" (FTS5 phrase-literal escaping)
+    let escaped = input.replace('"', "\"\"");
+    // Wrap in double-quotes to force a phrase match
+    format!("\"{}\"", escaped)
+}
+
 /// Full-text search across all indexed content
 pub fn search(conn: &Connection, query: &str, limit: u32) -> Result<Vec<SearchResult>, AppError> {
     if query.trim().is_empty() {
@@ -26,6 +40,8 @@ pub fn search(conn: &Connection, query: &str, limit: u32) -> Result<Vec<SearchRe
 
     // Normalize AHV numbers in query (remove dots for searching)
     let normalized_query = normalize_ahv_for_search(query);
+    // MED-1: Escape FTS5 metacharacters to prevent operator injection / DoS
+    let normalized_query = sanitize_fts5_query(&normalized_query);
 
     // FTS5 search with ranking and snippet generation
     let mut stmt = conn.prepare(
@@ -113,6 +129,7 @@ pub fn index_patient(conn: &Connection, patient: &Patient) -> Result<(), AppErro
 }
 
 /// Index file content (called after LLM metadata extraction)
+#[allow(clippy::too_many_arguments)]
 pub fn index_file(
     conn: &Connection,
     file_id: &str,
@@ -184,6 +201,7 @@ pub fn index_session(
 }
 
 /// Index finalized report content
+#[allow(clippy::too_many_arguments)]
 pub fn index_report(
     conn: &Connection,
     report_id: &str,
@@ -370,6 +388,24 @@ mod tests {
         let key = [42u8; 32];
         let pool = database::init_db(&db_path, &key).unwrap();
         (temp_dir, pool)
+    }
+
+    #[test]
+    fn test_sanitize_fts5_query() {
+        // Normal text becomes a phrase-quoted string
+        assert_eq!(sanitize_fts5_query("John Doe"), "\"John Doe\"");
+
+        // FTS5 wildcard is neutralised
+        let escaped = sanitize_fts5_query("*");
+        assert_eq!(escaped, "\"*\"");
+
+        // Boolean operators are neutralised
+        let escaped = sanitize_fts5_query("a OR * OR b");
+        assert_eq!(escaped, "\"a OR * OR b\"");
+
+        // Internal double-quotes are escaped
+        let escaped = sanitize_fts5_query("say \"hello\"");
+        assert_eq!(escaped, "\"say \"\"hello\"\"\"");
     }
 
     #[test]

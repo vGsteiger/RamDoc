@@ -34,7 +34,11 @@ impl LlmEngine {
     pub fn load(model_path: PathBuf, model_name: String) -> Result<Self, AppError> {
         let params = LlamaParams {
             n_gpu_layers: ALL_GPU_LAYERS,
-            use_mmap: true,
+            // HIGH-3: Disable memory-mapped I/O so that a crafted GGUF file cannot
+            // trigger memory-mapped reads of out-of-bounds data before the C library
+            // has validated the tensor layout.  This trades a small startup-time cost
+            // for a meaningful reduction in attack surface area.
+            use_mmap: false,
             ..Default::default()
         };
         let model = LlamaModel::load_from_file(&model_path, params)

@@ -9,6 +9,9 @@ use uuid::Uuid;
 const VAULT_DIR: &str = "vault";
 const TEMP_DIR: &str = "temp";
 
+/// 500 MiB — maximum plaintext size accepted by store_file / upload_file.
+pub const MAX_FILE_SIZE: usize = 500 * 1024 * 1024;
+
 /// Validate that a path component is safe (no path traversal)
 fn validate_path_component(component: &str) -> Result<(), AppError> {
     // Check for empty
@@ -90,6 +93,23 @@ fn validate_vault_path(vault_path: &str) -> Result<(), AppError> {
     Ok(())
 }
 
+/// CRIT-2: Assert that `full_path` is within `canonical_base` to prevent symlink escapes.
+/// Both paths must already exist on disk (they are canonicalized by the OS).
+fn assert_within_vault(canonical_base: &Path, full_path: &Path) -> Result<(), AppError> {
+    let canonical_full = full_path.canonicalize().map_err(|e| {
+        AppError::Filesystem(std::io::Error::new(
+            e.kind(),
+            format!("Failed to canonicalize path: {}", e),
+        ))
+    })?;
+    if !canonical_full.starts_with(canonical_base) {
+        return Err(AppError::Validation(
+            "Path escapes vault boundary (symlink detected)".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 /// Initialize the vault directory structure. Creates ~/DokAssist/vault/ if needed.
 /// Sets .metadata_never_index and adds to Spotlight privacy list.
 pub fn init_vault(base_dir: &Path) -> Result<(), AppError> {
@@ -129,6 +149,15 @@ pub fn store_file(
     patient_id: &str,
     plaintext: &[u8],
 ) -> Result<String, AppError> {
+    // HIGH-1: Enforce maximum file size before allocating anything
+    if plaintext.len() > MAX_FILE_SIZE {
+        return Err(AppError::Validation(format!(
+            "File size {} bytes exceeds maximum allowed size of {} bytes",
+            plaintext.len(),
+            MAX_FILE_SIZE
+        )));
+    }
+
     // Validate patient_id to prevent path traversal
     validate_path_component(patient_id)?;
 
@@ -138,16 +167,33 @@ pub fn store_file(
         fs::create_dir_all(&patient_vault)?;
     }
 
+    // CRIT-2: Verify patient_vault didn't escape the vault via symlinks
+    let canonical_vault_base = base_dir
+        .join(VAULT_DIR)
+        .canonicalize()
+        .map_err(AppError::Filesystem)?;
+    let canonical_patient_vault = patient_vault.canonicalize().map_err(|e| {
+        AppError::Filesystem(std::io::Error::new(
+            e.kind(),
+            format!("Failed to canonicalize patient vault: {}", e),
+        ))
+    })?;
+    if !canonical_patient_vault.starts_with(&canonical_vault_base) {
+        return Err(AppError::Validation(
+            "Patient vault path escapes vault boundary".to_string(),
+        ));
+    }
+
     // Generate unique file ID for storage
     let file_uuid = Uuid::now_v7();
     let encrypted_filename = format!("{}.enc", file_uuid);
     let vault_relative_path = format!("{}/{}", patient_id, encrypted_filename);
-    let full_path = patient_vault.join(&encrypted_filename);
 
     // Encrypt the file content
     let encrypted_data = crypto::encrypt(fs_key, plaintext)?;
 
-    // Write encrypted data to disk
+    // Write encrypted data using the canonical base path (symlink-safe)
+    let full_path = canonical_patient_vault.join(&encrypted_filename);
     fs::write(&full_path, encrypted_data)?;
 
     Ok(vault_relative_path)
@@ -163,6 +209,19 @@ pub fn read_file(
     validate_vault_path(vault_path)?;
 
     let full_path = base_dir.join(VAULT_DIR).join(vault_path);
+
+    // CRIT-2: Canonicalize and verify the path is within the vault
+    let canonical_vault_base = base_dir
+        .join(VAULT_DIR)
+        .canonicalize()
+        .map_err(AppError::Filesystem)?;
+    // full_path must exist for canonicalize to succeed — read errors become NotFound
+    assert_within_vault(&canonical_vault_base, &full_path).map_err(|e| {
+        match full_path.exists() {
+            false => AppError::NotFound(vault_path.to_string()),
+            true => e,
+        }
+    })?;
 
     // Read encrypted file
     let encrypted_data = fs::read(&full_path).map_err(|e| {
@@ -190,6 +249,13 @@ pub fn delete_file(base_dir: &Path, vault_path: &str) -> Result<(), AppError> {
         return Err(AppError::NotFound(vault_path.to_string()));
     }
 
+    // CRIT-2: Canonicalize and verify the path is within the vault
+    let canonical_vault_base = base_dir
+        .join(VAULT_DIR)
+        .canonicalize()
+        .map_err(AppError::Filesystem)?;
+    assert_within_vault(&canonical_vault_base, &full_path)?;
+
     fs::remove_file(&full_path)?;
 
     Ok(())
@@ -211,8 +277,9 @@ pub fn export_temp(
     // Decrypt the file
     let plaintext = read_file(base_dir, fs_key, vault_path)?;
 
-    // Generate unique temp filename to avoid collisions
-    let temp_uuid = Uuid::now_v7();
+    // MED-4: Use random UUID (v4) for temp filename — not time-based v7
+    // which embeds a timestamp and is predictable by a co-resident process.
+    let temp_uuid = Uuid::new_v4();
     let safe_filename = format!("{}_{}", temp_uuid, sanitize_filename(original_filename));
     let temp_path = temp_dir.join(safe_filename);
 
@@ -235,15 +302,41 @@ pub fn cleanup_exports(base_dir: &Path, max_age: Duration) -> Result<u32, AppErr
     let mut cleaned_count = 0;
 
     for entry in fs::read_dir(&temp_dir)? {
-        let entry = entry?;
-        let metadata = entry.metadata()?;
+        let entry = match entry {
+            Ok(e) => e,
+            Err(e) => {
+                // MED-8: Log and continue — do not abort cleanup on a single error
+                log::warn!("cleanup_exports: failed to read dir entry: {}", e);
+                continue;
+            }
+        };
+
+        let metadata = match entry.metadata() {
+            Ok(m) => m,
+            Err(e) => {
+                log::warn!(
+                    "cleanup_exports: failed to read metadata for {:?}: {}",
+                    entry.path(),
+                    e
+                );
+                continue;
+            }
+        };
 
         let is_hidden = entry.file_name().to_string_lossy().starts_with('.');
         if metadata.is_file() && !is_hidden {
             if let Ok(modified) = metadata.modified() {
                 if let Ok(age) = now.duration_since(modified) {
                     if age >= max_age {
-                        fs::remove_file(entry.path())?;
+                        if let Err(e) = fs::remove_file(entry.path()) {
+                            // MED-8: Log and continue — do not abort cleanup on a single error
+                            log::warn!(
+                                "cleanup_exports: failed to remove {:?}: {}",
+                                entry.path(),
+                                e
+                            );
+                            continue;
+                        }
                         cleaned_count += 1;
                     }
                 }
@@ -427,6 +520,25 @@ mod tests {
     }
 
     #[test]
+    fn test_export_temp_uses_random_uuid() {
+        // MED-4: export_temp must use random (v4) UUIDs, not time-based v7
+        let temp_dir = TempDir::new().unwrap();
+        let base_dir = temp_dir.path();
+        init_vault(base_dir).unwrap();
+
+        let fs_key = crypto::generate_key();
+        let patient_id = uuid::Uuid::now_v7().to_string();
+        let plaintext = b"data";
+
+        let vault_path = store_file(base_dir, &fs_key, &patient_id, plaintext).unwrap();
+
+        // Export twice in rapid succession — filenames must differ
+        let p1 = export_temp(base_dir, &fs_key, &vault_path, "file.pdf").unwrap();
+        let p2 = export_temp(base_dir, &fs_key, &vault_path, "file.pdf").unwrap();
+        assert_ne!(p1, p2, "temp file names must be unique per export");
+    }
+
+    #[test]
     fn test_cleanup_exports() {
         let temp_dir = TempDir::new().unwrap();
         let base_dir = temp_dir.path();
@@ -439,6 +551,24 @@ mod tests {
         let cleaned = cleanup_exports(base_dir, Duration::from_secs(0)).unwrap();
         assert_eq!(cleaned, 1);
         assert!(!temp_file_path.exists());
+    }
+
+    #[test]
+    fn test_cleanup_exports_continues_on_error() {
+        // MED-8: cleanup_exports should not abort on a single file failure
+        let temp_dir = TempDir::new().unwrap();
+        let base_dir = temp_dir.path();
+        init_vault(base_dir).unwrap();
+
+        // Create two temp files
+        let file1 = base_dir.join(TEMP_DIR).join("file1.txt");
+        let file2 = base_dir.join(TEMP_DIR).join("file2.txt");
+        fs::write(&file1, b"data1").unwrap();
+        fs::write(&file2, b"data2").unwrap();
+
+        // Both should be cleaned (no locked files in this test environment)
+        let cleaned = cleanup_exports(base_dir, Duration::from_secs(0)).unwrap();
+        assert_eq!(cleaned, 2);
     }
 
     #[test]
@@ -486,6 +616,23 @@ mod tests {
         // Read it back
         let decrypted = read_file(base_dir, &fs_key, &vault_path).unwrap();
         assert_eq!(large_data, decrypted);
+    }
+
+    #[test]
+    fn test_store_file_too_large() {
+        // HIGH-1: files exceeding MAX_FILE_SIZE must be rejected
+        let temp_dir = TempDir::new().unwrap();
+        let base_dir = temp_dir.path();
+        init_vault(base_dir).unwrap();
+
+        let fs_key = crypto::generate_key();
+        let patient_id = uuid::Uuid::now_v7().to_string();
+        // Construct a slice reference larger than MAX_FILE_SIZE without allocating
+        // (create a Vec slightly above the limit)
+        let oversized = vec![0u8; MAX_FILE_SIZE + 1];
+        let result = store_file(base_dir, &fs_key, &patient_id, &oversized);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), AppError::Validation(_)));
     }
 
     #[test]

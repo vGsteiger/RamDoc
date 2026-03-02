@@ -20,13 +20,13 @@ pub async fn check_auth(state: State<'_, AppState>) -> Result<String, AppError> 
 /// First run: generate keys, store in Keychain. Returns 24 mnemonic words.
 #[tauri::command]
 pub async fn initialize_app(state: State<'_, AppState>) -> Result<Vec<String>, AppError> {
-    let mut auth = state.auth.lock().unwrap();
-
-    // Verify we're in FirstRun state
-    if !matches!(*auth, AuthState::FirstRun) {
-        return Err(AppError::Validation(
-            "App is already initialized".to_string(),
-        ));
+    {
+        let auth = state.auth.lock().unwrap();
+        if !matches!(*auth, AuthState::FirstRun) {
+            return Err(AppError::Validation(
+                "App is already initialized".to_string(),
+            ));
+        }
     }
 
     // Generate master keys
@@ -41,15 +41,15 @@ pub async fn initialize_app(state: State<'_, AppState>) -> Result<Vec<String>, A
     let vault_path = state.data_dir.join(RECOVERY_FILENAME);
     let words = recovery::create_recovery(&db_key, &fs_key, &vault_path)?;
 
-    // Transition to Unlocked state
+    // Initialize database *before* committing auth state (HIGH-5: TOCTOU fix)
+    state.init_db(&db_key)?;
+
+    // Only transition to Unlocked after DB init succeeds
+    let mut auth = state.auth.lock().unwrap();
     *auth = AuthState::Unlocked {
         db_key: zeroize::Zeroizing::new(db_key),
         fs_key: zeroize::Zeroizing::new(fs_key),
     };
-
-    // Initialize database with db_key
-    drop(auth); // Release lock before calling init_db
-    state.init_db(&db_key)?;
 
     Ok(words)
 }
@@ -57,43 +57,46 @@ pub async fn initialize_app(state: State<'_, AppState>) -> Result<Vec<String>, A
 /// Unlock: triggers Touch ID, retrieves keys from Keychain.
 #[tauri::command]
 pub async fn unlock_app(state: State<'_, AppState>) -> Result<bool, AppError> {
-    let mut auth = state.auth.lock().unwrap();
+    // --- Retrieve keys while holding the auth lock ---
+    let (db_key, fs_key) = {
+        let auth = state.auth.lock().unwrap();
 
-    // Verify we're in Locked state
-    if !matches!(*auth, AuthState::Locked) {
-        return Err(AppError::Validation("App is not locked".to_string()));
-    }
+        if !matches!(*auth, AuthState::Locked) {
+            return Err(AppError::Validation("App is not locked".to_string()));
+        }
 
-    // Retrieve keys from Keychain (triggers Touch ID)
-    let mut db_key_vec = keychain::retrieve_key(KEYCHAIN_SERVICE, DB_KEY_ACCOUNT)?;
-    let mut fs_key_vec = keychain::retrieve_key(KEYCHAIN_SERVICE, FS_KEY_ACCOUNT)?;
+        // Retrieve keys from Keychain (triggers Touch ID)
+        let mut db_key_vec = keychain::retrieve_key(KEYCHAIN_SERVICE, DB_KEY_ACCOUNT)?;
+        let mut fs_key_vec = keychain::retrieve_key(KEYCHAIN_SERVICE, FS_KEY_ACCOUNT)?;
 
-    // Convert to fixed-size arrays
-    if db_key_vec.len() != 32 || fs_key_vec.len() != 32 {
-        // Zeroize before returning error
+        if db_key_vec.len() != 32 || fs_key_vec.len() != 32 {
+            zeroize::Zeroize::zeroize(&mut db_key_vec);
+            zeroize::Zeroize::zeroize(&mut fs_key_vec);
+            return Err(AppError::Keychain("Invalid key size".to_string()));
+        }
+
+        let mut db_key = [0u8; 32];
+        let mut fs_key = [0u8; 32];
+        db_key.copy_from_slice(&db_key_vec);
+        fs_key.copy_from_slice(&fs_key_vec);
+
         zeroize::Zeroize::zeroize(&mut db_key_vec);
         zeroize::Zeroize::zeroize(&mut fs_key_vec);
-        return Err(AppError::Keychain("Invalid key size".to_string()));
-    }
 
-    let mut db_key = [0u8; 32];
-    let mut fs_key = [0u8; 32];
-    db_key.copy_from_slice(&db_key_vec);
-    fs_key.copy_from_slice(&fs_key_vec);
+        (db_key, fs_key)
+        // auth lock is released here
+    };
 
-    // Zeroize original key vectors now that we've copied their contents
-    zeroize::Zeroize::zeroize(&mut db_key_vec);
-    zeroize::Zeroize::zeroize(&mut fs_key_vec);
+    // Initialize database *before* committing auth state (HIGH-5: TOCTOU fix).
+    // If init_db fails, auth state remains Locked — no inconsistent state.
+    state.init_db(&db_key)?;
 
-    // Transition to Unlocked state
+    // Only transition to Unlocked after DB init succeeds
+    let mut auth = state.auth.lock().unwrap();
     *auth = AuthState::Unlocked {
         db_key: zeroize::Zeroizing::new(db_key),
         fs_key: zeroize::Zeroizing::new(fs_key),
     };
-
-    // Initialize database with db_key
-    drop(auth); // Release lock before calling init_db
-    state.init_db(&db_key)?;
 
     Ok(true)
 }
@@ -101,30 +104,47 @@ pub async fn unlock_app(state: State<'_, AppState>) -> Result<bool, AppError> {
 /// Recover keys from 24-word mnemonic.
 #[tauri::command]
 pub async fn recover_app(state: State<'_, AppState>, words: Vec<String>) -> Result<bool, AppError> {
-    let mut auth = state.auth.lock().unwrap();
-
-    // Verify we're in RecoveryRequired state
-    if !matches!(*auth, AuthState::RecoveryRequired) {
-        return Err(AppError::Validation("Recovery is not required".to_string()));
+    // Verify we're in RecoveryRequired state (without holding lock during I/O)
+    {
+        let auth = state.auth.lock().unwrap();
+        if !matches!(*auth, AuthState::RecoveryRequired) {
+            return Err(AppError::Validation("Recovery is not required".to_string()));
+        }
     }
+
+    // CRIT-1: Check rate limit before attempting recovery
+    recovery::check_recovery_rate_limit(&state.data_dir)?;
 
     // Recover keys from mnemonic
     let vault_path = state.data_dir.join(RECOVERY_FILENAME);
-    let (db_key, fs_key) = recovery::recover_from_mnemonic(&words, &vault_path)?;
+    let result = recovery::recover_from_mnemonic(&words, &vault_path);
+
+    let (db_key, fs_key) = match result {
+        Ok(keys) => {
+            // Clear attempt counter on success
+            recovery::clear_recovery_attempts(&state.data_dir);
+            keys
+        }
+        Err(e) => {
+            // Record failed attempt (increments counter and updates lockout)
+            recovery::record_failed_attempt(&state.data_dir);
+            return Err(e);
+        }
+    };
 
     // Store recovered keys in Keychain
     keychain::store_key(KEYCHAIN_SERVICE, DB_KEY_ACCOUNT, &db_key)?;
     keychain::store_key(KEYCHAIN_SERVICE, FS_KEY_ACCOUNT, &fs_key)?;
 
-    // Transition to Unlocked state
+    // Initialize database *before* committing auth state (HIGH-5: TOCTOU fix)
+    state.init_db(&db_key)?;
+
+    // Only transition to Unlocked after DB init succeeds
+    let mut auth = state.auth.lock().unwrap();
     *auth = AuthState::Unlocked {
         db_key: zeroize::Zeroizing::new(db_key),
         fs_key: zeroize::Zeroizing::new(fs_key),
     };
-
-    // Initialize database with db_key
-    drop(auth); // Release lock before calling init_db
-    state.init_db(&db_key)?;
 
     Ok(true)
 }

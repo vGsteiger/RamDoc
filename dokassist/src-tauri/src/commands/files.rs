@@ -1,5 +1,5 @@
 use crate::error::AppError;
-use crate::filesystem;
+use crate::filesystem::{self, MAX_FILE_SIZE};
 use crate::models::file_record::{self, FileRecord};
 use crate::state::{AppState, AuthState};
 use tauri::State;
@@ -12,6 +12,15 @@ pub async fn upload_file(
     data: Vec<u8>,
     mime_type: String,
 ) -> Result<FileRecord, AppError> {
+    // HIGH-1: Enforce maximum file size before any I/O
+    if data.len() > MAX_FILE_SIZE {
+        return Err(AppError::Validation(format!(
+            "Uploaded file size {} bytes exceeds maximum allowed size of {} bytes",
+            data.len(),
+            MAX_FILE_SIZE
+        )));
+    }
+
     // Ensure vault is initialized
     filesystem::init_vault(&state.data_dir)?;
 

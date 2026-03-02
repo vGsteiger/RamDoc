@@ -28,6 +28,9 @@ pub enum AppError {
 
     #[error("Validation error: {0}")]
     Validation(String),
+
+    #[error("Too many recovery attempts. Try again in {0} seconds.")]
+    RateLimited(u64),
 }
 
 impl serde::Serialize for AppError {

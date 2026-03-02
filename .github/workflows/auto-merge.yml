@@ -80,8 +80,17 @@ jobs:
           echo "State: $STATE"
           echo "Review Decision: $REVIEW"
 
-          # Check if PR is ready to merge
-          if [ "$STATE" = "CLEAN" ] || [ "$STATE" = "HAS_HOOKS" ]; then
+          # MED-6: Explicitly block merge if reviews are required but not approved.
+          # GitHub's mergeStateStatus = CLEAN already implies reviews are satisfied
+          # when branch protection requires them, but we enforce this independently
+          # to guard against misconfigured repository settings.
+          if [ "$REVIEW" = "CHANGES_REQUESTED" ]; then
+            echo "ready=false" >> $GITHUB_OUTPUT
+            echo "PR blocked: changes were requested by a reviewer"
+          elif [ "$REVIEW" = "REVIEW_REQUIRED" ]; then
+            echo "ready=false" >> $GITHUB_OUTPUT
+            echo "PR blocked: at least one approving review is required before merge"
+          elif [ "$STATE" = "CLEAN" ] || [ "$STATE" = "HAS_HOOKS" ]; then
             echo "ready=true" >> $GITHUB_OUTPUT
             echo "PR is ready to merge"
           else

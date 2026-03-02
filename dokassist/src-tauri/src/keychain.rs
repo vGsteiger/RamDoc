@@ -58,18 +58,39 @@ pub fn delete_key(service: &str, account: &str) -> Result<(), AppError> {
 /// Keychain APIs (e.g. `SecItemCopyMatching` with `kSecReturnData = false`).
 #[cfg(target_os = "macos")]
 pub fn keys_exist(service: &str) -> Result<bool, AppError> {
-    // Try to check if keys exist by attempting to retrieve them
-    // This is a simplified implementation; see the note above for a
-    // production-ready, metadata-only approach.
+    // NOTE (CRIT-6): The security_framework crate does not expose
+    // `SecItemCopyMatching` with `kSecReturnData = false`, so we cannot
+    // perform a metadata-only existence check without key-material retrieval.
+    // As a mitigation we zeroize the retrieved bytes immediately.
+    //
+    // Known TOCTOU limitation: between the DB-key check and the FS-key check
+    // an external process could delete the FS key.  The resulting `Ok(false)`
+    // from the FS check simply causes the state machine to enter
+    // RecoveryRequired rather than Locked, which is a safe degraded state.
+    // A full fix requires dropping to the raw SecItem C API.
 
-    let db_exists = get_generic_password(service, DB_KEY_ACCOUNT).is_ok();
+    let db_exists = match get_generic_password(service, DB_KEY_ACCOUNT) {
+        Ok(bytes) => {
+            // CRIT-6: Zeroize our copy of the retrieved key material immediately
+            let mut v = bytes.to_vec();
+            zeroize::Zeroize::zeroize(&mut v);
+            true
+        }
+        Err(_) => false,
+    };
+
     if !db_exists {
-        // If the DB key is missing, we can short-circuit without checking
-        // the FS key.
         return Ok(false);
     }
 
-    let fs_exists = get_generic_password(service, FS_KEY_ACCOUNT).is_ok();
+    let fs_exists = match get_generic_password(service, FS_KEY_ACCOUNT) {
+        Ok(bytes) => {
+            let mut v = bytes.to_vec();
+            zeroize::Zeroize::zeroize(&mut v);
+            true
+        }
+        Err(_) => false,
+    };
 
     Ok(fs_exists)
 }

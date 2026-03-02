@@ -95,8 +95,8 @@ pub async fn download_model(
     tokio::fs::create_dir_all(&dest_dir).await?;
 
     let dest_path = dest_dir.join(&model.filename);
-    let url = download::model_url(&model.filename);
-    download::download_model_with_progress(&app, &url, &dest_path).await
+    let url = download::model_url(&model.filename)?;
+    download::download_model_with_progress(&app, &url, &dest_path, &model.filename).await
 }
 
 /// Load a GGUF model from ~/DokAssist/models/ into memory (Metal-accelerated).

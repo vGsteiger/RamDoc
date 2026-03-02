@@ -2,9 +2,86 @@ use crate::crypto;
 use crate::error::AppError;
 use bip39::{Language, Mnemonic};
 use rand::RngCore;
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
 use zeroize::Zeroize;
+
+const ATTEMPTS_FILENAME: &str = "recovery.attempts";
+/// Attempt thresholds beyond which lockout begins (after the Nth failure).
+const LOCKOUT_AFTER: u32 = 3;
+/// Maximum lockout duration in seconds (1 hour).
+const MAX_LOCKOUT_SECS: u64 = 3600;
+
+#[derive(Serialize, Deserialize, Default)]
+struct RecoveryAttemptState {
+    count: u32,
+    locked_until_secs: u64,
+}
+
+fn now_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+fn lockout_duration(count: u32) -> u64 {
+    if count <= LOCKOUT_AFTER {
+        return 0;
+    }
+    // Exponential: 2^(count - LOCKOUT_AFTER) seconds, capped at MAX_LOCKOUT_SECS
+    let exp = count - LOCKOUT_AFTER;
+    let secs = 2u64.saturating_pow(exp);
+    secs.min(MAX_LOCKOUT_SECS)
+}
+
+fn read_attempt_state(data_dir: &Path) -> RecoveryAttemptState {
+    let path = data_dir.join(ATTEMPTS_FILENAME);
+    fs::read_to_string(&path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+fn write_attempt_state(data_dir: &Path, state: &RecoveryAttemptState) {
+    let path = data_dir.join(ATTEMPTS_FILENAME);
+    if let Ok(json) = serde_json::to_string(state) {
+        let _ = fs::write(&path, json);
+    }
+}
+
+/// Check whether recovery is currently rate-limited.
+/// Returns `Err(AppError::RateLimited(secs))` if locked out, `Ok(())` otherwise.
+pub fn check_recovery_rate_limit(data_dir: &Path) -> Result<(), AppError> {
+    let state = read_attempt_state(data_dir);
+    let now = now_secs();
+    if state.locked_until_secs > now {
+        return Err(AppError::RateLimited(state.locked_until_secs - now));
+    }
+    Ok(())
+}
+
+/// Record a failed recovery attempt and update the lockout state.
+pub fn record_failed_attempt(data_dir: &Path) {
+    let mut state = read_attempt_state(data_dir);
+    state.count = state.count.saturating_add(1);
+    let lockout = lockout_duration(state.count);
+    state.locked_until_secs = if lockout > 0 { now_secs() + lockout } else { 0 };
+    write_attempt_state(data_dir, &state);
+    log::warn!(
+        "Recovery attempt {} failed. Lockout: {}s",
+        state.count,
+        lockout
+    );
+}
+
+/// Clear the recovery attempt counter after a successful recovery.
+pub fn clear_recovery_attempts(data_dir: &Path) {
+    let path = data_dir.join(ATTEMPTS_FILENAME);
+    let _ = fs::remove_file(&path);
+}
 
 /// Generate a BIP-39 24-word mnemonic from the master keys.
 /// Returns the mnemonic words AND writes recovery.vault to the given path.

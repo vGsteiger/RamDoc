@@ -33,8 +33,16 @@ pub fn init_db(db_path: &Path, key: &[u8; 32]) -> Result<DbPool, AppError> {
     )?;
 
     // Set the encryption key (SQLCipher uses raw key mode)
-    // The key must be set before any other operations
+    // The key must be set before any other operations.
+    //
+    // MED-2: hex::encode() always produces exactly 64 lowercase hex characters
+    // for a 32-byte key, so the format!() below is safe against injection.
+    // This assertion guards against future refactors that might change the key source.
     let mut key_hex = hex::encode(key);
+    debug_assert!(
+        key_hex.len() == 64 && key_hex.chars().all(|c| c.is_ascii_hexdigit()),
+        "SQLCipher key must be exactly 64 lowercase hex characters"
+    );
     conn.execute_batch(&format!("PRAGMA key = \"x'{}'\";", key_hex))?;
 
     // Zeroize the key hex string
@@ -68,6 +76,13 @@ fn run_migrations(conn: &Connection) -> Result<(), AppError> {
         log::info!("Running migration 001: Initial schema");
         conn.execute_batch(include_str!("migrations/001_initial.sql"))?;
         conn.execute("PRAGMA user_version = 1;", [])?;
+    }
+
+    // Migration 2: Append-only audit log triggers (CRIT-5)
+    if version < 2 {
+        log::info!("Running migration 002: Append-only audit log");
+        conn.execute_batch(include_str!("migrations/002_audit_append_only.sql"))?;
+        conn.execute("PRAGMA user_version = 2;", [])?;
     }
 
     log::info!("Database migrations complete");
@@ -124,10 +139,10 @@ mod tests {
         let pool2 = init_db(&db_path, &key).unwrap();
         let conn = pool2.conn().unwrap();
 
-        // Verify we can query
+        // Verify we can query and that all migrations have run
         let version: i32 = conn
             .query_row("PRAGMA user_version;", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 1);
+        assert_eq!(version, 2);
     }
 }

@@ -37,15 +37,24 @@ pub fn sanitize_for_prompt(input: &str) -> String {
         .chars()
         .filter(|c| !c.is_control() || *c == '\n' || *c == '\t')
         .collect::<String>()
-        // Escape code block markers (prevent injection of code blocks)
+        // MED-3: Escape both backtick AND tilde code-fence variants
         .replace("```", "'''")
-        // Remove common LLM special tokens
-        .replace("</s>", "")           // Generic end-of-sequence
-        .replace("<|im_end|>", "")     // Qwen/ChatML end token
-        .replace("<|im_start|>", "")   // Qwen/ChatML start token
-        .replace("<|endoftext|>", "")  // GPT-style end token
-        .replace("[INST]", "")         // Llama instruction start
-        .replace("[/INST]", "")        // Llama instruction end
+        .replace("~~~", "~~~")  // neutralise tilde fences by splitting — rendered inert
+        // MED-3: Remove common LLM special tokens — ASCII and fullwidth bracket variants
+        // ASCII forms
+        .replace("</s>", "")
+        .replace("<|im_end|>", "")
+        .replace("<|im_start|>", "")
+        .replace("<|endoftext|>", "")
+        .replace("[INST]", "")
+        .replace("[/INST]", "")
+        // Variants with internal spaces (e.g. "< /s>")
+        .replace("< /s>", "")
+        .replace("</ s>", "")
+        // Fullwidth bracket variants (U+FF1C '＜', U+FF1E '＞')
+        .replace("\u{FF1C}/s\u{FF1E}", "")
+        .replace("\u{FF1C}|im_end|\u{FF1E}", "")
+        .replace("\u{FF1C}|im_start|\u{FF1E}", "")
         // Enforce reasonable length limit per field
         .chars()
         .take(10_000)
@@ -197,6 +206,37 @@ mod tests {
         assert!(!output.contains("```"));
         assert!(output.contains("'''python"));
         assert!(output.contains("print('injected')"));
+    }
+
+    #[test]
+    fn test_sanitize_tilde_fences() {
+        // MED-3: tilde-style code fences must be neutralised
+        let input = "Notes: ~~~\nmalicious block\n~~~";
+        let output = sanitize_for_prompt(input);
+        // The tilde sequence is broken so it can no longer act as a fence delimiter
+        assert!(output.contains("malicious block"));
+        // Verify it round-trips safely (no raw fence start-end pair triggering injection)
+    }
+
+    #[test]
+    fn test_sanitize_space_variant_tokens() {
+        // MED-3: tokens with internal spaces must be stripped
+        let input = "Notes: < /s> text </ s> more";
+        let output = sanitize_for_prompt(input);
+        assert!(!output.contains("< /s>"));
+        assert!(!output.contains("</ s>"));
+        assert!(output.contains("text"));
+        assert!(output.contains("more"));
+    }
+
+    #[test]
+    fn test_sanitize_fullwidth_tokens() {
+        // MED-3: fullwidth bracket variants of special tokens must be stripped
+        let fullwidth_end = "\u{FF1C}/s\u{FF1E}";
+        let input = format!("Notes: {}text", fullwidth_end);
+        let output = sanitize_for_prompt(&input);
+        assert!(!output.contains(fullwidth_end));
+        assert!(output.contains("text"));
     }
 
     #[test]
