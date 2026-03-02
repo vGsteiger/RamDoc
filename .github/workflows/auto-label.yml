@@ -1,0 +1,54 @@
+name: Auto-label PRs
+
+on:
+  pull_request:
+    types: [opened, reopened]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  auto-label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add default labels to PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+
+          # Add both automation labels by default
+          gh pr edit "$PR_NUMBER" \
+            --repo ${{ github.repository }} \
+            --add-label "autorelease" \
+            --add-label "merge when ready"
+
+          echo "✅ Added default automation labels to PR #$PR_NUMBER"
+          echo "- autorelease: Release will be created automatically on merge"
+          echo "- merge when ready: PR will auto-merge when checks pass"
+
+      - name: Add comment explaining labels
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+
+          COMMENT_BODY="🤖 **Automation labels applied**
+
+          This PR has been automatically labeled with:
+          - \`autorelease\` - A release will be created when this PR is merged to \`main\`
+          - \`merge when ready\` - This PR will automatically merge when all checks pass
+
+          **To control the release version**, add one of these labels:
+          - \`major\` - Breaking changes (v1.0.0 → v2.0.0)
+          - \`minor\` - New features (v1.0.0 → v1.1.0)
+          - \`patch\` - Bug fixes (v1.0.0 → v1.0.1)
+          - \`skip-release\` - Skip release creation
+
+          **To disable auto-merge**, remove the \`merge when ready\` label.
+
+          See [AUTOMATION.md](.github/AUTOMATION.md) for more details."
+
+          gh pr comment "$PR_NUMBER" \
+            --repo ${{ github.repository }} \
+            --body "$COMMENT_BODY"
