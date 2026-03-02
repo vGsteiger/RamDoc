@@ -2,7 +2,7 @@ use crate::crypto;
 use crate::error::AppError;
 use crate::spotlight;
 use std::fs;
-use std::path::{Path, PathBuf, Component};
+use std::path::{Component, Path, PathBuf};
 use std::time::{Duration, SystemTime};
 use uuid::Uuid;
 
@@ -13,17 +13,29 @@ const TEMP_DIR: &str = "temp";
 fn validate_path_component(component: &str) -> Result<(), AppError> {
     // Check for empty
     if component.is_empty() {
-        return Err(AppError::Validation("Path component cannot be empty".to_string()));
+        return Err(AppError::Validation(
+            "Path component cannot be empty".to_string(),
+        ));
     }
 
     // Check for absolute paths or parent directory references
-    if component.starts_with('/') || component.starts_with('\\') || component == ".." || component.contains("..") {
-        return Err(AppError::Validation(format!("Invalid path component: {}", component)));
+    if component.starts_with('/')
+        || component.starts_with('\\')
+        || component == ".."
+        || component.contains("..")
+    {
+        return Err(AppError::Validation(format!(
+            "Invalid path component: {}",
+            component
+        )));
     }
 
     // Validate UUID format for patient_id
     if uuid::Uuid::parse_str(component).is_err() && !component.ends_with(".enc") {
-        return Err(AppError::Validation(format!("Invalid path component format: {}", component)));
+        return Err(AppError::Validation(format!(
+            "Invalid path component format: {}",
+            component
+        )));
     }
 
     Ok(())
@@ -32,32 +44,46 @@ fn validate_path_component(component: &str) -> Result<(), AppError> {
 /// Validate that a vault-relative path is safe
 fn validate_vault_path(vault_path: &str) -> Result<(), AppError> {
     if vault_path.is_empty() {
-        return Err(AppError::Validation("Vault path cannot be empty".to_string()));
+        return Err(AppError::Validation(
+            "Vault path cannot be empty".to_string(),
+        ));
     }
 
     // Split into components and validate each
     let parts: Vec<&str> = vault_path.split('/').collect();
 
     if parts.len() != 2 {
-        return Err(AppError::Validation("Vault path must be in format patient-id/file.enc".to_string()));
+        return Err(AppError::Validation(
+            "Vault path must be in format patient-id/file.enc".to_string(),
+        ));
     }
 
     // Validate patient ID component
     if uuid::Uuid::parse_str(parts[0]).is_err() {
-        return Err(AppError::Validation(format!("Invalid patient ID in vault path: {}", parts[0])));
+        return Err(AppError::Validation(format!(
+            "Invalid patient ID in vault path: {}",
+            parts[0]
+        )));
     }
 
     // Validate file component (must end with .enc)
     if !parts[1].ends_with(".enc") {
-        return Err(AppError::Validation("File must have .enc extension".to_string()));
+        return Err(AppError::Validation(
+            "File must have .enc extension".to_string(),
+        ));
     }
 
     // Check that the path doesn't contain any dangerous components
     let path = Path::new(vault_path);
     for component in path.components() {
         match component {
-            Component::Normal(_) => {},
-            _ => return Err(AppError::Validation(format!("Invalid path component in vault path: {}", vault_path))),
+            Component::Normal(_) => {}
+            _ => {
+                return Err(AppError::Validation(format!(
+                    "Invalid path component in vault path: {}",
+                    vault_path
+                )))
+            }
         }
     }
 
@@ -212,10 +238,11 @@ pub fn cleanup_exports(base_dir: &Path, max_age: Duration) -> Result<u32, AppErr
         let entry = entry?;
         let metadata = entry.metadata()?;
 
-        if metadata.is_file() {
+        let is_hidden = entry.file_name().to_string_lossy().starts_with('.');
+        if metadata.is_file() && !is_hidden {
             if let Ok(modified) = metadata.modified() {
                 if let Ok(age) = now.duration_since(modified) {
-                    if age > max_age {
+                    if age >= max_age {
                         fs::remove_file(entry.path())?;
                         cleaned_count += 1;
                     }
@@ -274,7 +301,10 @@ mod tests {
 
         assert!(base_dir.join(VAULT_DIR).exists());
         assert!(base_dir.join(TEMP_DIR).exists());
-        assert!(base_dir.join(VAULT_DIR).join(".metadata_never_index").exists());
+        assert!(base_dir
+            .join(VAULT_DIR)
+            .join(".metadata_never_index")
+            .exists());
     }
 
     #[test]
@@ -363,7 +393,11 @@ mod tests {
         init_vault(base_dir).unwrap();
 
         let fs_key = crypto::generate_key();
-        let result = read_file(base_dir, &fs_key, &format!("{}/nonexistent.enc", uuid::Uuid::now_v7()));
+        let result = read_file(
+            base_dir,
+            &fs_key,
+            &format!("{}/nonexistent.enc", uuid::Uuid::now_v7()),
+        );
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), AppError::NotFound(_)));
     }
@@ -432,7 +466,7 @@ mod tests {
         store_file(base_dir, &fs_key, &patient_id, plaintext).unwrap();
 
         // Size should increase
-        let size_after_second = patient_vault_size(base_dir, patient_id).unwrap();
+        let size_after_second = patient_vault_size(base_dir, &patient_id).unwrap();
         assert!(size_after_second > size_after_first);
     }
 
@@ -457,9 +491,18 @@ mod tests {
     #[test]
     fn test_sanitize_filename() {
         assert_eq!(sanitize_filename("normal.txt"), "normal.txt");
-        assert_eq!(sanitize_filename("file/with/slashes.txt"), "file_with_slashes.txt");
-        assert_eq!(sanitize_filename("file:with:colons.txt"), "file_with_colons.txt");
-        assert_eq!(sanitize_filename("file*with?special<chars>.txt"), "file_with_special_chars_.txt");
+        assert_eq!(
+            sanitize_filename("file/with/slashes.txt"),
+            "file_with_slashes.txt"
+        );
+        assert_eq!(
+            sanitize_filename("file:with:colons.txt"),
+            "file_with_colons.txt"
+        );
+        assert_eq!(
+            sanitize_filename("file*with?special<chars>.txt"),
+            "file_with_special_chars_.txt"
+        );
     }
 
     #[test]

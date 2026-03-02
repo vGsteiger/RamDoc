@@ -1,3 +1,4 @@
+#[cfg(target_os = "macos")]
 use crate::constants::{DB_KEY_ACCOUNT, FS_KEY_ACCOUNT};
 use crate::error::AppError;
 
@@ -107,43 +108,44 @@ mod tests {
     use super::*;
 
     const TEST_SERVICE: &str = "ch.dokassist.app.test";
-    const TEST_ACCOUNT: &str = "test-key";
 
     #[test]
     fn test_store_retrieve_delete() {
+        let account = "test-key-srd";
         let key = b"test_secret_key_12345678901234567890";
 
         // Store
-        store_key(TEST_SERVICE, TEST_ACCOUNT, key).unwrap();
+        store_key(TEST_SERVICE, account, key).unwrap();
 
         // Retrieve
-        let retrieved = retrieve_key(TEST_SERVICE, TEST_ACCOUNT).unwrap();
+        let retrieved = retrieve_key(TEST_SERVICE, account).unwrap();
         assert_eq!(key.to_vec(), retrieved);
 
         // Delete
-        delete_key(TEST_SERVICE, TEST_ACCOUNT).unwrap();
+        delete_key(TEST_SERVICE, account).unwrap();
 
         // Verify deleted
-        let result = retrieve_key(TEST_SERVICE, TEST_ACCOUNT);
+        let result = retrieve_key(TEST_SERVICE, account);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_overwrite_key() {
+        let account = "test-key-ow";
         let key1 = b"first_key_12345678901234567890123";
         let key2 = b"second_key_0987654321098765432109";
 
         // Store first key
-        store_key(TEST_SERVICE, TEST_ACCOUNT, key1).unwrap();
+        store_key(TEST_SERVICE, account, key1).unwrap();
 
         // Overwrite with second key
-        store_key(TEST_SERVICE, TEST_ACCOUNT, key2).unwrap();
+        store_key(TEST_SERVICE, account, key2).unwrap();
 
         // Retrieve should get second key
-        let retrieved = retrieve_key(TEST_SERVICE, TEST_ACCOUNT).unwrap();
+        let retrieved = retrieve_key(TEST_SERVICE, account).unwrap();
         assert_eq!(key2.to_vec(), retrieved);
 
         // Cleanup
-        let _ = delete_key(TEST_SERVICE, TEST_ACCOUNT);
+        let _ = delete_key(TEST_SERVICE, account);
     }
 }

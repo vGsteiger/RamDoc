@@ -194,9 +194,10 @@ pub async fn generate_report(
     let prompt: String = system_prompt.unwrap_or_else(|| SYSTEM_PROMPT_DE.to_string());
 
     // Run the potentially long-running report generation on a blocking thread.
+    let app_clone = app.clone();
     let report = tokio::task::spawn_blocking(move || {
         llm::generate_report_streaming_with_prompt(
-            &app,
+            &app_clone,
             &engine,
             rt,
             &patient_context,

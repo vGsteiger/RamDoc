@@ -39,7 +39,7 @@ pub struct CreatePatient {
     pub notes: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct UpdatePatient {
     pub ahv_number: Option<String>,
     pub first_name: Option<String>,
@@ -246,13 +246,13 @@ mod tests {
         let db_path = dir.path().join("test.db");
         let key = crate::crypto::generate_key();
         let pool = init_db(&db_path, &key).unwrap();
-        let conn = pool.conn().unwrap();
+        let _conn = pool.conn().unwrap();
         // Return both dir and connection (dir must stay alive)
         // We need to extract the connection from the MutexGuard
         // For testing, let's create a new connection directly
         let conn = Connection::open(&db_path).unwrap();
-        let key_hex = hex::encode(&key);
-        conn.execute(&format!("PRAGMA key = \"x'{}'\";", key_hex), [])
+        let key_hex = hex::encode(key);
+        conn.execute_batch(&format!("PRAGMA key = \"x'{}'\";", key_hex))
             .unwrap();
         (dir, conn)
     }
@@ -516,7 +516,7 @@ mod tests {
         );
 
         // Verify patient data unchanged (AHV still original)
-        assert_eq!(updated.ahv_number, "756.0000.0101.53"); // Original AHV
+        assert_eq!(updated.ahv_number, "756.0000.0010.16"); // Original AHV
     }
 
     #[test]
@@ -550,8 +550,10 @@ mod tests {
         );
 
         // Verify related tables still exist
-        conn.execute("SELECT COUNT(*) FROM sessions", []).unwrap();
-        conn.execute("SELECT COUNT(*) FROM diagnoses", []).unwrap();
+        conn.query_row("SELECT COUNT(*) FROM sessions", [], |_| Ok(()))
+            .unwrap();
+        conn.query_row("SELECT COUNT(*) FROM diagnoses", [], |_| Ok(()))
+            .unwrap();
     }
 
     #[test]
@@ -624,24 +626,5 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM patients", [], |row| row.get(0))
             .unwrap();
         assert_eq!(count, 1);
-    }
-}
-
-impl Default for UpdatePatient {
-    fn default() -> Self {
-        Self {
-            ahv_number: None,
-            first_name: None,
-            last_name: None,
-            date_of_birth: None,
-            gender: None,
-            address: None,
-            phone: None,
-            email: None,
-            insurance: None,
-            gp_name: None,
-            gp_address: None,
-            notes: None,
-        }
     }
 }

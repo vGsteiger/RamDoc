@@ -2,7 +2,7 @@
 name = "dokassist"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.82"
+rust-version = "1.88"
 
 [lib]
 name = "dokassist_lib"
@@ -40,7 +40,7 @@ hex = "0.4"
 rusqlite = { version = "0.32", features = ["bundled-sqlcipher", "vtab"] }
 
 # LLM (PKG-4)
-llama_cpp = { version = "0.3", features = ["metal"] }
+llama_cpp = { version = "0.3" }
 reqwest = { version = "0.12", features = ["stream"] }
 futures-util = "0.3"
 libc = "0.2"
@@ -48,6 +48,13 @@ dirs = "5"
 
 # PDF (PKG-3)
 pdf-extract = "0.7"
+
+[features]
+# Enable Metal GPU acceleration for llama.cpp on Apple Silicon.
+# Pass --features metal to cargo / tauri build when targeting aarch64-apple-darwin.
+# Omit when cross-compiling to x86_64-apple-darwin: the Metal shader library is
+# embedded as a host-arch object file, which breaks the x86_64 link step.
+metal = ["llama_cpp/metal"]
 
 [dev-dependencies]
 tempfile = "3"

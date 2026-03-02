@@ -1,0 +1,86 @@
+name: Lint & Format
+
+on:
+  push:
+    branches: [ "main", "develop", "claude/**" ]
+  pull_request:
+    branches: [ "main", "develop" ]
+
+jobs:
+  prettier:
+    name: Frontend Formatting
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: 8
+
+    - name: Install dependencies
+      working-directory: ./dokassist
+      run: pnpm install --frozen-lockfile
+
+    - name: Check formatting (Prettier)
+      working-directory: ./dokassist
+      run: |
+        if pnpm list prettier 2>/dev/null; then
+          pnpm exec prettier --check "src/**/*.{js,ts,svelte,json,css}"
+        else
+          echo "Prettier not found, skipping format check"
+        fi
+      continue-on-error: true
+
+  eslint:
+    name: Frontend Linting
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: 8
+
+    - name: Install dependencies
+      working-directory: ./dokassist
+      run: pnpm install --frozen-lockfile
+
+    - name: Run ESLint
+      working-directory: ./dokassist
+      run: |
+        if pnpm list eslint 2>/dev/null; then
+          pnpm exec eslint "src/**/*.{js,ts,svelte}"
+        else
+          echo "ESLint not found, skipping lint check"
+        fi
+      continue-on-error: true
+
+  typos:
+    name: Typo Check
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Check for typos
+      uses: crate-ci/typos@master
+      with:
+        files: |
+          ./dokassist/src-tauri/src
+          ./dokassist/src
+          README.md
+      continue-on-error: true

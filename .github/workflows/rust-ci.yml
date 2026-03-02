@@ -1,0 +1,95 @@
+name: Rust CI
+
+on:
+  push:
+    branches: [ "main", "develop", "claude/**" ]
+  pull_request:
+    branches: [ "main", "develop" ]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  test:
+    name: Test Suite
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        rust: [stable, 1.88.0]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ matrix.rust }}
+        components: rustfmt, clippy
+
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: ~/.cargo/registry
+        key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-registry-
+
+    - name: Cache cargo index
+      uses: actions/cache@v4
+      with:
+        path: ~/.cargo/git
+        key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-index-
+
+    - name: Cache cargo build
+      uses: actions/cache@v4
+      with:
+        path: dokassist/src-tauri/target
+        key: ${{ runner.os }}-${{ matrix.rust }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-${{ matrix.rust }}-cargo-build-
+
+    - name: Install Linux dependencies
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libgtk-3-dev \
+          libglib2.0-dev \
+          libsoup-3.0-dev \
+          libjavascriptcoregtk-4.1-dev \
+          libwebkit2gtk-4.1-dev \
+          libayatana-appindicator3-dev \
+          librsvg2-dev \
+          patchelf
+
+    - name: Run cargo check
+      working-directory: ./dokassist/src-tauri
+      run: cargo check --all-targets
+
+    - name: Run cargo test (lib)
+      working-directory: ./dokassist/src-tauri
+      run: cargo test --lib
+
+    - name: Run examples
+      working-directory: ./dokassist/src-tauri
+      run: cargo run --example test_audit
+      continue-on-error: true
+
+    # Lint checks run once, reusing the compilation artifacts from above
+    - name: Run clippy
+      if: matrix.os == 'ubuntu-latest' && matrix.rust == 'stable'
+      working-directory: ./dokassist/src-tauri
+      run: |
+        cargo clippy --all-targets --all-features -- \
+          -D warnings \
+          -A clippy::too_many_arguments \
+          -A clippy::type_complexity
+
+    - name: Check formatting
+      if: matrix.os == 'ubuntu-latest' && matrix.rust == 'stable'
+      working-directory: ./dokassist/src-tauri
+      run: cargo fmt -- --check

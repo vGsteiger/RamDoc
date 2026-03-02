@@ -47,7 +47,7 @@ pub fn create_recovery(
     })?;
 
     // Return mnemonic words
-    let words: Vec<String> = mnemonic.word_iter().map(|w: &str| w.to_string()).collect();
+    let words: Vec<String> = mnemonic.words().map(|w: &str| w.to_string()).collect();
 
     Ok(words)
 }
@@ -164,7 +164,7 @@ mod tests {
         rand::thread_rng().fill_bytes(&mut wrong_entropy);
         let wrong_mnemonic = Mnemonic::from_entropy(&wrong_entropy).unwrap();
         let wrong_words: Vec<String> = wrong_mnemonic
-            .word_iter()
+            .words()
             .map(|w: &str| w.to_string())
             .collect();
 
@@ -200,7 +200,7 @@ mod tests {
         let mut entropy = [0u8; 32];
         rand::thread_rng().fill_bytes(&mut entropy);
         let mnemonic = Mnemonic::from_entropy(&entropy).unwrap();
-        let words: Vec<String> = mnemonic.word_iter().map(|w: &str| w.to_string()).collect();
+        let words: Vec<String> = mnemonic.words().map(|w: &str| w.to_string()).collect();
 
         let result = recover_from_mnemonic(&words, &vault_path);
 

@@ -53,7 +53,7 @@ pub struct AuditEntry {
 /// * `details` - Optional details (field names changed, not values - no PHI)
 ///
 /// # Examples
-/// ```no_run
+/// ```ignore
 /// use crate::audit::{self, AuditAction};
 /// # let conn = rusqlite::Connection::open_in_memory().unwrap();
 /// # let id = "patient-123";

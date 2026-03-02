@@ -1,7 +1,7 @@
 // Standalone test for audit module
 // This can be run independently to verify audit logic
 
-use dokassist::audit::{self, AuditAction};
+use dokassist_lib::audit::{self, AuditAction};
 use rusqlite::Connection;
 
 fn main() {

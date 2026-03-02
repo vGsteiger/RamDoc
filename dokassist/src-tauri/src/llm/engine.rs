@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 /// Sentinel value for n_gpu_layers that offloads all layers to Metal GPU.
-const ALL_GPU_LAYERS: i32 = 999;
+const ALL_GPU_LAYERS: u32 = 999;
 
 pub struct LlmEngine {
     model: Option<LlamaModel>,

@@ -11,7 +11,7 @@ pub struct DbPool {
 
 impl DbPool {
     /// Get a connection from the pool
-    pub fn conn(&self) -> Result<std::sync::MutexGuard<Connection>, AppError> {
+    pub fn conn(&self) -> Result<std::sync::MutexGuard<'_, Connection>, AppError> {
         self.conn.lock().map_err(|_| {
             AppError::Database(rusqlite::Error::SqliteFailure(
                 rusqlite::ffi::Error::new(1),
@@ -35,7 +35,7 @@ pub fn init_db(db_path: &Path, key: &[u8; 32]) -> Result<DbPool, AppError> {
     // Set the encryption key (SQLCipher uses raw key mode)
     // The key must be set before any other operations
     let mut key_hex = hex::encode(key);
-    conn.execute(&format!("PRAGMA key = \"x'{}'\";", key_hex), [])?;
+    conn.execute_batch(&format!("PRAGMA key = \"x'{}'\";", key_hex))?;
 
     // Zeroize the key hex string
     use zeroize::Zeroize;

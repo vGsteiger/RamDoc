@@ -15,7 +15,10 @@ pub fn exclude_from_spotlight(dir: &Path) -> Result<(), AppError> {
     }
 
     if !dir.is_dir() {
-        return Err(AppError::Validation(format!("Path is not a directory: {}", dir.display())));
+        return Err(AppError::Validation(format!(
+            "Path is not a directory: {}",
+            dir.display()
+        )));
     }
 
     // Create .metadata_never_index file (works on all macOS versions)

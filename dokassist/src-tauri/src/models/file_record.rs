@@ -1,6 +1,6 @@
-use serde::{Deserialize, Serialize};
-use rusqlite::Connection;
 use crate::error::AppError;
+use rusqlite::Connection;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileRecord {
@@ -37,7 +37,7 @@ pub fn create_file_record(
 pub fn get_file_record(conn: &Connection, id: &str) -> Result<FileRecord, AppError> {
     let mut stmt = conn.prepare(
         "SELECT id, patient_id, filename, vault_path, mime_type, size_bytes, created_at
-         FROM files WHERE id = ?1"
+         FROM files WHERE id = ?1",
     )?;
 
     let record = stmt
@@ -63,10 +63,13 @@ pub fn get_file_record(conn: &Connection, id: &str) -> Result<FileRecord, AppErr
 }
 
 /// Get a file record by vault path
-pub fn get_file_record_by_vault_path(conn: &Connection, vault_path: &str) -> Result<FileRecord, AppError> {
+pub fn get_file_record_by_vault_path(
+    conn: &Connection,
+    vault_path: &str,
+) -> Result<FileRecord, AppError> {
     let mut stmt = conn.prepare(
         "SELECT id, patient_id, filename, vault_path, mime_type, size_bytes, created_at
-         FROM files WHERE vault_path = ?1"
+         FROM files WHERE vault_path = ?1",
     )?;
 
     let record = stmt
@@ -82,9 +85,10 @@ pub fn get_file_record_by_vault_path(conn: &Connection, vault_path: &str) -> Res
             })
         })
         .map_err(|e| match e {
-            rusqlite::Error::QueryReturnedNoRows => {
-                AppError::NotFound(format!("File record with vault path {} not found", vault_path))
-            }
+            rusqlite::Error::QueryReturnedNoRows => AppError::NotFound(format!(
+                "File record with vault path {} not found",
+                vault_path
+            )),
             _ => e.into(),
         })?;
 
@@ -92,24 +96,28 @@ pub fn get_file_record_by_vault_path(conn: &Connection, vault_path: &str) -> Res
 }
 
 /// List all files for a patient
-pub fn list_files_for_patient(conn: &Connection, patient_id: &str) -> Result<Vec<FileRecord>, AppError> {
+pub fn list_files_for_patient(
+    conn: &Connection,
+    patient_id: &str,
+) -> Result<Vec<FileRecord>, AppError> {
     let mut stmt = conn.prepare(
         "SELECT id, patient_id, filename, vault_path, mime_type, size_bytes, created_at
-         FROM files WHERE patient_id = ?1 ORDER BY created_at DESC"
+         FROM files WHERE patient_id = ?1 ORDER BY created_at DESC",
     )?;
 
-    let records = stmt.query_map([patient_id], |row| {
-        Ok(FileRecord {
-            id: row.get(0)?,
-            patient_id: row.get(1)?,
-            filename: row.get(2)?,
-            vault_path: row.get(3)?,
-            mime_type: row.get(4)?,
-            size_bytes: row.get(5)?,
-            created_at: row.get(6)?,
-        })
-    })?
-    .collect::<Result<Vec<_>, _>>()?;
+    let records = stmt
+        .query_map([patient_id], |row| {
+            Ok(FileRecord {
+                id: row.get(0)?,
+                patient_id: row.get(1)?,
+                filename: row.get(2)?,
+                vault_path: row.get(3)?,
+                mime_type: row.get(4)?,
+                size_bytes: row.get(5)?,
+                created_at: row.get(6)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
 
     Ok(records)
 }
@@ -119,7 +127,10 @@ pub fn delete_file_record(conn: &Connection, id: &str) -> Result<(), AppError> {
     let rows_affected = conn.execute("DELETE FROM files WHERE id = ?1", [id])?;
 
     if rows_affected == 0 {
-        return Err(AppError::NotFound(format!("File record with id {} not found", id)));
+        return Err(AppError::NotFound(format!(
+            "File record with id {} not found",
+            id
+        )));
     }
 
     Ok(())

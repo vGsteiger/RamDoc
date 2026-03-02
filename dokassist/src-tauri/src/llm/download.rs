@@ -60,7 +60,7 @@ pub async fn download_model_with_progress(
             .headers()
             .get(CONTENT_RANGE)
             .and_then(|v| v.to_str().ok())
-            .and_then(|s| s.split('/').last())
+            .and_then(|s| s.split('/').next_back())
             .and_then(|s| s.parse::<u64>().ok())
             .unwrap_or(0)
     } else {
