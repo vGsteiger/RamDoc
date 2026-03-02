@@ -32,7 +32,7 @@ fn lockout_duration(count: u32) -> u64 {
         return 0;
     }
     // Exponential: 2^(count - LOCKOUT_AFTER) seconds, capped at MAX_LOCKOUT_SECS
-    let exp = (count - LOCKOUT_AFTER) as u32;
+    let exp = count - LOCKOUT_AFTER;
     let secs = 2u64.saturating_pow(exp);
     secs.min(MAX_LOCKOUT_SECS)
 }
