@@ -49,6 +49,9 @@ dirs = "6"
 # PDF (PKG-3)
 pdf-extract = "0.10"
 
+# ZIP (Emergency export)
+zip = "2"
+
 [features]
 # Enable Metal GPU acceleration for llama.cpp on Apple Silicon.
 # Pass --features metal to cargo / tauri build when targeting aarch64-apple-darwin.

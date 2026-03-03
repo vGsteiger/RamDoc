@@ -8,10 +8,13 @@
     downloadModel,
     loadModel,
     resetApp,
+    exportAllPatientData,
     parseError,
     type LlmEngineStatus,
     type ModelChoice,
   } from '$lib/api';
+  import { save } from '@tauri-apps/plugin-dialog';
+  import { writeFile } from '@tauri-apps/plugin-fs';
 
   let status = $state<LlmEngineStatus | null>(null);
   let recommended = $state<ModelChoice | null>(null);
@@ -79,6 +82,42 @@
   let resetInput = $state('');
   let resetting = $state(false);
   let resetError = $state('');
+
+  let showExportConfirm = $state(false);
+  let exporting = $state(false);
+  let exportError = $state('');
+  let exportSuccess = $state(false);
+
+  async function handleExport() {
+    exporting = true;
+    exportError = '';
+    exportSuccess = false;
+    try {
+      const zipData = await exportAllPatientData();
+
+      // Prompt user to save the file
+      const timestamp = new Date().toISOString().split('T')[0];
+      const filePath = await save({
+        filters: [{
+          name: 'ZIP Archive',
+          extensions: ['zip']
+        }],
+        defaultPath: `dokassist_export_${timestamp}.zip`
+      });
+
+      if (filePath) {
+        // Convert number[] to Uint8Array
+        const uint8Array = new Uint8Array(zipData);
+        await writeFile(filePath, uint8Array);
+        exportSuccess = true;
+        showExportConfirm = false;
+      }
+    } catch (e) {
+      exportError = parseError(e).message;
+    } finally {
+      exporting = false;
+    }
+  }
 
   async function handleReset() {
     resetting = true;
@@ -168,6 +207,56 @@
     {#if phase === 'done' && status?.is_loaded}
       <p class="text-sm text-green-400">Model ready. Reports and metadata extraction are available.</p>
     {/if}
+  </section>
+
+  <section class="mt-10">
+    <h2 class="text-lg font-semibold text-gray-200 mb-4">Export & Backup</h2>
+    <div class="bg-gray-800 border border-gray-700 rounded-lg p-4">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <p class="text-sm font-medium text-gray-100">Emergency Export</p>
+          <p class="text-xs text-gray-400 mt-1">Export all patient data to a structured ZIP file. All data will be decrypted and saved in JSON format with original files.</p>
+        </div>
+        {#if !showExportConfirm}
+          <button
+            onclick={() => { showExportConfirm = true; exportError = ''; exportSuccess = false; }}
+            class="px-4 py-2 text-sm rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition-colors shrink-0"
+          >
+            Export All Data
+          </button>
+        {/if}
+      </div>
+
+      {#if showExportConfirm}
+        <div class="mt-4 border-t border-gray-700 pt-4">
+          <p class="text-sm text-yellow-300 mb-3">This will export ALL patient data including files to a ZIP archive. The data will be decrypted. Continue?</p>
+          <div class="flex gap-2">
+            <button
+              onclick={handleExport}
+              disabled={exporting}
+              class="px-4 py-2 text-sm rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors"
+            >
+              {exporting ? 'Exporting…' : 'Confirm Export'}
+            </button>
+            <button
+              onclick={() => { showExportConfirm = false; exportError = ''; exportSuccess = false; }}
+              class="px-4 py-2 text-sm rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-100 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+          {#if exportError}
+            <p class="text-xs text-red-400 mt-2">{exportError}</p>
+          {/if}
+        </div>
+      {/if}
+
+      {#if exportSuccess}
+        <div class="mt-4 border-t border-gray-700 pt-4">
+          <p class="text-sm text-green-400">Export completed successfully!</p>
+        </div>
+      {/if}
+    </div>
   </section>
 
   <section class="mt-10">

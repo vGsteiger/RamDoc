@@ -89,6 +89,7 @@ pub fn run() {
             commands::reports::list_reports,
             commands::reports::update_report,
             commands::reports::delete_report,
+            commands::export::export_all_patient_data,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

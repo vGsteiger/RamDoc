@@ -1,6 +1,7 @@
 pub mod audit;
 pub mod auth;
 pub mod diagnoses;
+pub mod export;
 pub mod files;
 pub mod llm;
 pub mod medications;

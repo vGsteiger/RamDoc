@@ -507,3 +507,11 @@ export async function generateReport(
     systemPrompt,
   });
 }
+
+/**
+ * Export all patient data to a ZIP file.
+ * Returns the ZIP file as a byte array (number[]).
+ */
+export async function exportAllPatientData(): Promise<number[]> {
+  return await invoke<number[]>("export_all_patient_data");
+}
