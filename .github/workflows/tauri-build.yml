@@ -90,7 +90,7 @@ jobs:
 
     - name: Upload macOS DMG
       if: runner.os == 'macOS'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: dokassist-${{ matrix.platform }}
         path: |
@@ -101,7 +101,7 @@ jobs:
 
     - name: Upload Linux AppImage
       if: runner.os == 'Linux'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: dokassist-linux
         path: |
