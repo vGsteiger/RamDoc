@@ -9,7 +9,7 @@ pub struct FileRecord {
     pub filename: String,
     pub vault_path: String,
     pub mime_type: String,
-    pub size_bytes: u64,
+    pub size_bytes: i64,
     pub document_type: Option<String>,
     pub extracted_text: Option<String>,
     pub metadata_json: Option<String>,
@@ -24,7 +24,7 @@ pub fn create_file_record(
     filename: &str,
     vault_path: &str,
     mime_type: &str,
-    size_bytes: u64,
+    size_bytes: i64,
 ) -> Result<FileRecord, AppError> {
     let id = uuid::Uuid::now_v7().to_string();
 

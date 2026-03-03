@@ -44,7 +44,7 @@ pub async fn upload_file(
     // Create database record
     let db = state.get_db()?;
     let conn = db.conn()?;
-    let size_bytes = data.len() as u64;
+    let size_bytes = data.len() as i64;
 
     // If DB insert fails, clean up the vault file
     let file_record = match file_record::create_file_record(
