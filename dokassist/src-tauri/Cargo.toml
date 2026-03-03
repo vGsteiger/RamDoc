@@ -47,7 +47,7 @@ libc = "0.2"
 dirs = "6"
 
 # PDF (PKG-3)
-pdf-extract = "0.7"
+pdf-extract = "0.10"
 
 [features]
 # Enable Metal GPU acceleration for llama.cpp on Apple Silicon.
