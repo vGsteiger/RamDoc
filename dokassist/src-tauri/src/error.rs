@@ -31,6 +31,9 @@ pub enum AppError {
 
     #[error("Too many recovery attempts. Try again in {0} seconds.")]
     RateLimited(u64),
+
+    #[error("Export error: {0}")]
+    Export(String),
 }
 
 impl AppError {
@@ -47,7 +50,20 @@ impl AppError {
             AppError::NotFound(_) => "NOT_FOUND",
             AppError::Validation(_) => "VALIDATION_ERROR",
             AppError::RateLimited(_) => "RATE_LIMITED",
+            AppError::Export(_) => "EXPORT_ERROR",
         }
+    }
+}
+
+impl From<zip::result::ZipError> for AppError {
+    fn from(err: zip::result::ZipError) -> Self {
+        AppError::Export(err.to_string())
+    }
+}
+
+impl From<serde_json::Error> for AppError {
+    fn from(err: serde_json::Error) -> Self {
+        AppError::Export(err.to_string())
     }
 }
 
