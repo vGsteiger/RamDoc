@@ -149,6 +149,42 @@ pub async fn recover_app(state: State<'_, AppState>, words: Vec<String>) -> Resu
     Ok(true)
 }
 
+/// Factory reset: wipe all keychain keys, the entire data directory, and
+/// return the app to `FirstRun` state.
+///
+/// ⚠ Irreversible — all patient data, the encrypted vault, and model files
+/// stored in the data directory are permanently deleted.
+#[tauri::command]
+pub async fn reset_app(state: State<'_, AppState>) -> Result<(), AppError> {
+    log::warn!("Factory reset requested — wiping all app data");
+
+    // 1. Transition to FirstRun and release any in-memory keys / DB handles.
+    {
+        let mut auth = state.auth.lock().unwrap();
+        *auth = AuthState::FirstRun;
+    }
+    state.clear_db()?;
+    {
+        let mut llm_lock = state.llm.lock().unwrap();
+        *llm_lock = None;
+    }
+
+    // 2. Delete keychain entries (ignore "not found" errors).
+    let _ = keychain::delete_key(KEYCHAIN_SERVICE, DB_KEY_ACCOUNT);
+    let _ = keychain::delete_key(KEYCHAIN_SERVICE, FS_KEY_ACCOUNT);
+
+    // 3. Wipe the entire data directory (database, vault, model files, …).
+    if state.data_dir.exists() {
+        std::fs::remove_dir_all(&state.data_dir)?;
+    }
+
+    // 4. Re-create an empty data directory ready for `initialize_app`.
+    std::fs::create_dir_all(&state.data_dir)?;
+
+    log::warn!("Factory reset complete — app is in FirstRun state");
+    Ok(())
+}
+
 /// Lock: zero keys from memory.
 #[tauri::command]
 pub async fn lock_app(state: State<'_, AppState>) -> Result<(), AppError> {

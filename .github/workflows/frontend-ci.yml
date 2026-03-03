@@ -46,6 +46,10 @@ jobs:
       working-directory: ./dokassist
       run: pnpm build
 
+    - name: Run frontend tests
+      working-directory: ./dokassist
+      run: pnpm test
+
     - name: Check build artifacts
       working-directory: ./dokassist
       run: |

@@ -1,6 +1,6 @@
 use crate::audit::{self, AuditAction};
 use crate::error::AppError;
-use crate::models::session::{self, CreateSession, Session, UpdateSession};
+use crate::models::session::{self, CreateSession, Session, SessionWithPatient, UpdateSession};
 use crate::search;
 use crate::state::AppState;
 use tauri::State;
@@ -35,6 +35,29 @@ pub async fn get_session(state: State<'_, AppState>, id: String) -> Result<Sessi
     audit::log(&conn, AuditAction::View, "session", Some(&id), None)?;
 
     Ok(session)
+}
+
+#[tauri::command]
+pub async fn list_all_sessions(
+    state: State<'_, AppState>,
+    limit: Option<u32>,
+    offset: Option<u32>,
+) -> Result<Vec<SessionWithPatient>, AppError> {
+    let pool = state.get_db()?;
+    let conn = pool.conn()?;
+    let limit = limit.unwrap_or(500);
+    let offset = offset.unwrap_or(0);
+    let sessions = session::list_all_sessions(&conn, limit, offset)?;
+
+    audit::log(
+        &conn,
+        AuditAction::View,
+        "session",
+        None,
+        Some(&format!("list_all_sessions: {} sessions", sessions.len())),
+    )?;
+
+    Ok(sessions)
 }
 
 #[tauri::command]

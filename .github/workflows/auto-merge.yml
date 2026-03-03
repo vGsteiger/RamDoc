@@ -3,109 +3,65 @@ name: Auto-merge
 on:
   pull_request:
     types: [labeled, synchronize]
-  check_suite:
-    types: [completed]
-  status: {}
 
 permissions:
   contents: write
   pull-requests: write
-  checks: read
 
 jobs:
   auto-merge:
     runs-on: ubuntu-latest
-    if: |
-      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'merge when ready')) ||
-      (github.event_name == 'check_suite' && github.event.check_suite.conclusion == 'success') ||
-      github.event_name == 'status'
+    # Only act when the label is present on the PR (catches both 'labeled' and
+    # 'synchronize' events — the label check handles PRs that don't have it).
+    if: contains(github.event.pull_request.labels.*.name, 'merge when ready')
     steps:
-      - name: Get PR number
-        id: pr
+      - name: Check for hard blockers
+        id: check
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            PR_NUMBER="${{ github.event.pull_request.number }}"
-          else
-            # For check_suite or status events, find PRs associated with this commit
-            PR_DATA=$(gh pr list --repo ${{ github.repository }} --state open --json number,labels --search "${{ github.event.check_suite.head_sha || github.sha }}")
+          PR_NUMBER="${{ github.event.pull_request.number }}"
 
-            # Filter for PRs with 'merge when ready' label
-            PR_NUMBER=$(echo "$PR_DATA" | jq -r '.[] | select(.labels[].name == "merge when ready") | .number' | head -n 1)
-
-            if [ -z "$PR_NUMBER" ]; then
-              echo "No open PR with 'merge when ready' label found for this commit"
-              exit 0
-            fi
-          fi
-
-          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
-          echo "Found PR #$PR_NUMBER"
-
-      - name: Check if PR has label
-        id: check_label
-        if: steps.pr.outputs.pr_number != ''
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          PR_NUMBER="${{ steps.pr.outputs.pr_number }}"
-          LABELS=$(gh pr view "$PR_NUMBER" --repo ${{ github.repository }} --json labels --jq '.labels[].name')
-
-          if echo "$LABELS" | grep -q "merge when ready"; then
-            echo "has_label=true" >> $GITHUB_OUTPUT
-            echo "PR has 'merge when ready' label"
-          else
-            echo "has_label=false" >> $GITHUB_OUTPUT
-            echo "PR does not have 'merge when ready' label"
-            exit 0
-          fi
-
-      - name: Check PR status
-        id: check_status
-        if: steps.check_label.outputs.has_label == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          PR_NUMBER="${{ steps.pr.outputs.pr_number }}"
-
-          # Get PR details
-          PR_INFO=$(gh pr view "$PR_NUMBER" --repo ${{ github.repository }} --json mergeable,mergeStateStatus,reviewDecision)
+          PR_INFO=$(gh pr view "$PR_NUMBER" \
+            --repo ${{ github.repository }} \
+            --json mergeable,reviewDecision)
 
           MERGEABLE=$(echo "$PR_INFO" | jq -r '.mergeable')
-          STATE=$(echo "$PR_INFO" | jq -r '.mergeStateStatus')
-          REVIEW=$(echo "$PR_INFO" | jq -r '.reviewDecision')
+          REVIEW=$(echo "$PR_INFO"   | jq -r '.reviewDecision')
 
-          echo "Mergeable: $MERGEABLE"
-          echo "State: $STATE"
-          echo "Review Decision: $REVIEW"
+          echo "Mergeable:       $MERGEABLE"
+          echo "Review decision: $REVIEW"
 
-          # MED-6: Explicitly block merge if reviews are required but not approved.
-          # GitHub's mergeStateStatus = CLEAN already implies reviews are satisfied
-          # when branch protection requires them, but we enforce this independently
-          # to guard against misconfigured repository settings.
+          # MED-6: block on review rejections regardless of branch protection config.
           if [ "$REVIEW" = "CHANGES_REQUESTED" ]; then
-            echo "ready=false" >> $GITHUB_OUTPUT
-            echo "PR blocked: changes were requested by a reviewer"
+            echo "blocked=true"  >> $GITHUB_OUTPUT
+            echo "reason=Changes were requested by a reviewer" >> $GITHUB_OUTPUT
           elif [ "$REVIEW" = "REVIEW_REQUIRED" ]; then
-            echo "ready=false" >> $GITHUB_OUTPUT
-            echo "PR blocked: at least one approving review is required before merge"
-          elif [ "$STATE" = "CLEAN" ] || [ "$STATE" = "HAS_HOOKS" ]; then
-            echo "ready=true" >> $GITHUB_OUTPUT
-            echo "PR is ready to merge"
+            echo "blocked=true"  >> $GITHUB_OUTPUT
+            echo "reason=An approving review is required before merge" >> $GITHUB_OUTPUT
+          elif [ "$MERGEABLE" = "CONFLICTING" ]; then
+            echo "blocked=true"  >> $GITHUB_OUTPUT
+            echo "reason=Branch has merge conflicts" >> $GITHUB_OUTPUT
           else
-            echo "ready=false" >> $GITHUB_OUTPUT
-            echo "PR is not ready to merge (state: $STATE)"
+            echo "blocked=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Merge PR
-        if: steps.check_status.outputs.ready == 'true'
+      - name: Enable auto-merge
+        if: steps.check.outputs.blocked == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          PR_NUMBER="${{ steps.pr.outputs.pr_number }}"
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          echo "Enabling auto-merge for PR #$PR_NUMBER"
+          # --auto tells GitHub to merge once all required status checks pass.
+          # This replaces the old check_suite/status re-trigger approach.
+          gh pr merge "$PR_NUMBER" \
+            --repo ${{ github.repository }} \
+            --squash \
+            --auto
 
-          echo "Auto-merging PR #$PR_NUMBER"
-          gh pr merge "$PR_NUMBER" --repo ${{ github.repository }} --squash --auto
-
-          echo "✅ PR #$PR_NUMBER has been queued for auto-merge"
+      - name: Report blocked reason
+        if: steps.check.outputs.blocked == 'true'
+        run: |
+          echo "Auto-merge blocked: ${{ steps.check.outputs.reason }}"
+          exit 1
