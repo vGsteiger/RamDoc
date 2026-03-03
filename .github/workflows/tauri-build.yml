@@ -62,7 +62,7 @@ jobs:
           patchelf
 
     - name: Cache pnpm store
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: ~/.pnpm-store
         key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
@@ -70,7 +70,7 @@ jobs:
           ${{ runner.os }}-pnpm-
 
     - name: Cache cargo build
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: dokassist/src-tauri/target
         key: ${{ runner.os }}-tauri-${{ hashFiles('**/Cargo.lock') }}
