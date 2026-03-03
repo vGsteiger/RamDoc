@@ -20,8 +20,8 @@ describe('ReportStream — idle (not streaming)', () => {
 });
 
 describe('ReportStream — streaming', () => {
-  it('shows the Generating indicator when isStreaming is true', () => {
-    render(ReportStream, { content: '', isStreaming: true });
+  it('shows the Generating indicator when isStreaming is true with partial content', () => {
+    render(ReportStream, { content: 'Partial report...', isStreaming: true });
     expect(screen.getByText('Generating...')).toBeInTheDocument();
   });
 

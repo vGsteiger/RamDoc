@@ -56,11 +56,11 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('Settings — before onMount resolves', () => {
-  it('shows "No model loaded" immediately', () => {
+  it('shows "No model downloaded" immediately', () => {
     // Never resolves — keeps the component in its pre-onMount state.
     mockInvoke.mockReturnValue(new Promise(() => {}));
     render(Settings);
-    expect(screen.getByText('No model loaded')).toBeInTheDocument();
+    expect(screen.getByText('No model downloaded')).toBeInTheDocument();
   });
 });
 
@@ -69,11 +69,11 @@ describe('Settings — before onMount resolves', () => {
 // ---------------------------------------------------------------------------
 
 describe('Settings — model not loaded', () => {
-  it('shows "No model loaded" and available RAM after mount', async () => {
+  it('shows "No model downloaded" and available RAM after mount', async () => {
     setupNotLoaded();
     render(Settings);
     await waitFor(() => {
-      expect(screen.getByText('No model loaded')).toBeInTheDocument();
+      expect(screen.getByText('No model downloaded')).toBeInTheDocument();
       expect(screen.getByText(/8\.0 GB system RAM available/)).toBeInTheDocument();
     });
   });
