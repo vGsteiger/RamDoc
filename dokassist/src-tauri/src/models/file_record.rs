@@ -10,6 +10,10 @@ pub struct FileRecord {
     pub vault_path: String,
     pub mime_type: String,
     pub size_bytes: u64,
+    pub document_type: Option<String>,
+    pub extracted_text: Option<String>,
+    pub metadata_json: Option<String>,
+    pub is_compendium: bool,
     pub created_at: String,
 }
 
@@ -36,7 +40,8 @@ pub fn create_file_record(
 /// Get a file record by ID
 pub fn get_file_record(conn: &Connection, id: &str) -> Result<FileRecord, AppError> {
     let mut stmt = conn.prepare(
-        "SELECT id, patient_id, filename, vault_path, mime_type, size_bytes, created_at
+        "SELECT id, patient_id, filename, vault_path, mime_type, size_bytes,
+                document_type, extracted_text, metadata_json, is_compendium, created_at
          FROM files WHERE id = ?1",
     )?;
 
@@ -49,7 +54,11 @@ pub fn get_file_record(conn: &Connection, id: &str) -> Result<FileRecord, AppErr
                 vault_path: row.get(3)?,
                 mime_type: row.get(4)?,
                 size_bytes: row.get(5)?,
-                created_at: row.get(6)?,
+                document_type: row.get(6)?,
+                extracted_text: row.get(7)?,
+                metadata_json: row.get(8)?,
+                is_compendium: row.get::<_, i32>(9)? != 0,
+                created_at: row.get(10)?,
             })
         })
         .map_err(|e| match e {
@@ -68,7 +77,8 @@ pub fn get_file_record_by_vault_path(
     vault_path: &str,
 ) -> Result<FileRecord, AppError> {
     let mut stmt = conn.prepare(
-        "SELECT id, patient_id, filename, vault_path, mime_type, size_bytes, created_at
+        "SELECT id, patient_id, filename, vault_path, mime_type, size_bytes,
+                document_type, extracted_text, metadata_json, is_compendium, created_at
          FROM files WHERE vault_path = ?1",
     )?;
 
@@ -81,7 +91,11 @@ pub fn get_file_record_by_vault_path(
                 vault_path: row.get(3)?,
                 mime_type: row.get(4)?,
                 size_bytes: row.get(5)?,
-                created_at: row.get(6)?,
+                document_type: row.get(6)?,
+                extracted_text: row.get(7)?,
+                metadata_json: row.get(8)?,
+                is_compendium: row.get::<_, i32>(9)? != 0,
+                created_at: row.get(10)?,
             })
         })
         .map_err(|e| match e {
@@ -101,7 +115,8 @@ pub fn list_files_for_patient(
     patient_id: &str,
 ) -> Result<Vec<FileRecord>, AppError> {
     let mut stmt = conn.prepare(
-        "SELECT id, patient_id, filename, vault_path, mime_type, size_bytes, created_at
+        "SELECT id, patient_id, filename, vault_path, mime_type, size_bytes,
+                document_type, extracted_text, metadata_json, is_compendium, created_at
          FROM files WHERE patient_id = ?1 ORDER BY created_at DESC",
     )?;
 
@@ -114,7 +129,11 @@ pub fn list_files_for_patient(
                 vault_path: row.get(3)?,
                 mime_type: row.get(4)?,
                 size_bytes: row.get(5)?,
-                created_at: row.get(6)?,
+                document_type: row.get(6)?,
+                extracted_text: row.get(7)?,
+                metadata_json: row.get(8)?,
+                is_compendium: row.get::<_, i32>(9)? != 0,
+                created_at: row.get(10)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;

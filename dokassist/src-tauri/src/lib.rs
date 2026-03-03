@@ -89,6 +89,12 @@ pub fn run() {
             commands::reports::list_reports,
             commands::reports::update_report,
             commands::reports::delete_report,
+            commands::compendium::list_compendium,
+            commands::compendium::add_to_compendium,
+            commands::compendium::remove_from_compendium,
+            commands::compendium::process_compendium_document,
+            commands::compendium::search_compendium,
+            commands::compendium::get_compendium_chunks,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

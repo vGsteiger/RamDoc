@@ -157,6 +157,7 @@ pub async fn extract_file_metadata(
 /// Generate a psychiatric report with streaming output.
 /// Emits `"report-chunk"` events for each token and `"report-done"` on completion.
 /// `system_prompt`: optional override; falls back to the built-in German prompt.
+/// `compendium_query`: optional query to search compendium for relevant context.
 #[tauri::command]
 pub async fn generate_report(
     app: AppHandle,
@@ -165,6 +166,7 @@ pub async fn generate_report(
     report_type: String,
     session_notes: String,
     system_prompt: Option<String>,
+    compendium_query: Option<String>,
 ) -> Result<String, AppError> {
     // Check authentication before processing patient data
     check_auth(&state)?;
@@ -193,17 +195,66 @@ pub async fn generate_report(
     // Resolve the system prompt into an owned String we can move into the blocking task.
     let prompt: String = system_prompt.unwrap_or_else(|| SYSTEM_PROMPT_DE.to_string());
 
+    // Optionally retrieve compendium context for RAG
+    let compendium_context = if let Some(query) = compendium_query {
+        let db = state.db.as_ref().ok_or(AppError::Database(
+            rusqlite::Error::InvalidQuery,
+        ))?;
+        let conn = db.conn()?;
+
+        // Search compendium for relevant chunks
+        let results = crate::models::compendium::search_compendium(&conn, &query, 3)?;
+
+        // Format the chunks into context
+        if !results.is_empty() {
+            let contexts: Vec<String> = results
+                .iter()
+                .map(|(chunk, entry)| {
+                    format!(
+                        "Quelle: {} ({})\n{}",
+                        entry.title,
+                        entry.category.as_deref().unwrap_or("Allgemein"),
+                        chunk.content
+                    )
+                })
+                .collect();
+            Some(contexts.join("\n\n---\n\n"))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     // Run the potentially long-running report generation on a blocking thread.
     let app_clone = app.clone();
     let report = tokio::task::spawn_blocking(move || {
-        llm::generate_report_streaming_with_prompt(
-            &app_clone,
-            &engine,
-            rt,
-            &patient_context,
-            &session_notes,
-            &prompt,
-        )
+        if let Some(compendium_ctx) = compendium_context {
+            // Use RAG-augmented generation
+            let user_message = llm::prompts::report_generation_prompt_with_compendium(
+                rt,
+                &patient_context,
+                &session_notes,
+                &compendium_ctx,
+            );
+            let mut full_report = String::new();
+            engine.generate_streaming(&prompt, &user_message, 2048, 0.7, |token| {
+                full_report.push_str(token);
+                let _ = app_clone.emit("report-chunk", token);
+                true
+            })?;
+            Ok(full_report)
+        } else {
+            // Standard report generation without RAG
+            llm::generate_report_streaming_with_prompt(
+                &app_clone,
+                &engine,
+                rt,
+                &patient_context,
+                &session_notes,
+                &prompt,
+            )
+        }
     })
     .await
     .map_err(|e| AppError::Llm(format!("spawn_blocking error: {e}")))??;

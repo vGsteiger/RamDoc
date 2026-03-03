@@ -80,3 +80,50 @@ pub fn report_generation_prompt(
         type_instructions, patient_context, session_notes,
     )
 }
+
+/// Prompt for generating a report with RAG-augmented compendium context
+pub fn report_generation_prompt_with_compendium(
+    report_type: ReportType,
+    patient_context: &str,
+    session_notes: &str,
+    compendium_context: &str,
+) -> String {
+    let type_instructions = match report_type {
+        ReportType::Befundbericht => {
+            "Erstellen Sie einen vollständigen psychiatrischen Befundbericht mit folgenden \
+            Abschnitten:\n\
+            1. Personalien und Anlass der Vorstellung\n\
+            2. Anamnese (Eigenanamnese, Fremdanamnese)\n\
+            3. Psychischer Befund\n\
+            4. Körperlicher Befund (falls relevant)\n\
+            5. Diagnosen (nach ICD-10)\n\
+            6. Beurteilung und Empfehlungen\n\
+            7. Therapieplan"
+        }
+        ReportType::Verlaufsbericht => {
+            "Erstellen Sie einen psychiatrischen Verlaufsbericht mit folgenden Abschnitten:\n\
+            1. Therapieverlauf seit letzter Konsultation\n\
+            2. Aktueller psychischer Befund\n\
+            3. Medikation und Verträglichkeit\n\
+            4. Zielerreichung und Fortschritt\n\
+            5. Weiteres Vorgehen und Therapieziele"
+        }
+        ReportType::Ueberweisungsschreiben => {
+            "Erstellen Sie ein formelles Überweisungsschreiben mit folgenden Abschnitten:\n\
+            1. Anrede (An den zuweisenden bzw. aufnehmenden Arzt)\n\
+            2. Vorstellung des Patienten\n\
+            3. Bisherige Diagnosen und Behandlung\n\
+            4. Aktueller psychischer Befund\n\
+            5. Überweisungsgrund und Fragestellung\n\
+            6. Freundliche Schlussformel"
+        }
+    };
+
+    format!(
+        "{}\n\nReferenzmaterial aus medizinischem Kompendium:\n{}\n\n\
+        Patientenkontext:\n{}\n\nSitzungsnotizen:\n{}\n\n\
+        Nutzen Sie das Referenzmaterial aus dem Kompendium als zusätzliche Informationsquelle, \
+        um fachlich fundierte und präzise Berichte zu erstellen.\n\nBericht:",
+        type_instructions, compendium_context, patient_context, session_notes,
+    )
+}
