@@ -35,9 +35,7 @@ pub struct SearchResult {
 pub async fn list_compendium(state: State<'_, AppState>) -> Result<Vec<CompendiumEntry>, AppError> {
     check_auth(&state)?;
 
-    let db = state.db.as_ref().ok_or(AppError::Database(
-        rusqlite::Error::InvalidQuery,
-    ))?;
+    let db = state.get_db()?;
     let conn = db.conn()?;
 
     list_compendium_entries(&conn)
@@ -55,9 +53,7 @@ pub async fn add_to_compendium(
 ) -> Result<CompendiumEntry, AppError> {
     check_auth(&state)?;
 
-    let db = state.db.as_ref().ok_or(AppError::Database(
-        rusqlite::Error::InvalidQuery,
-    ))?;
+    let db = state.get_db()?;
     let conn = db.conn()?;
 
     // Verify the file exists
@@ -88,9 +84,7 @@ pub async fn remove_from_compendium(
 ) -> Result<(), AppError> {
     check_auth(&state)?;
 
-    let db = state.db.as_ref().ok_or(AppError::Database(
-        rusqlite::Error::InvalidQuery,
-    ))?;
+    let db = state.get_db()?;
     let conn = db.conn()?;
 
     // Get the entry to find the file_id
@@ -119,9 +113,7 @@ pub async fn process_compendium_document(
 ) -> Result<Vec<DocumentChunk>, AppError> {
     check_auth(&state)?;
 
-    let db = state.db.as_ref().ok_or(AppError::Database(
-        rusqlite::Error::InvalidQuery,
-    ))?;
+    let db = state.get_db()?;
     let conn = db.conn()?;
 
     // Get the file record
@@ -166,9 +158,7 @@ pub async fn search_compendium(
 ) -> Result<Vec<SearchResult>, AppError> {
     check_auth(&state)?;
 
-    let db = state.db.as_ref().ok_or(AppError::Database(
-        rusqlite::Error::InvalidQuery,
-    ))?;
+    let db = state.get_db()?;
     let conn = db.conn()?;
 
     let limit = limit.unwrap_or(5);
@@ -188,9 +178,7 @@ pub async fn get_compendium_chunks(
 ) -> Result<Vec<DocumentChunk>, AppError> {
     check_auth(&state)?;
 
-    let db = state.db.as_ref().ok_or(AppError::Database(
-        rusqlite::Error::InvalidQuery,
-    ))?;
+    let db = state.get_db()?;
     let conn = db.conn()?;
 
     list_chunks_for_file(&conn, &file_id)

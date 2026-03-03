@@ -197,9 +197,7 @@ pub async fn generate_report(
 
     // Optionally retrieve compendium context for RAG
     let compendium_context = if let Some(query) = compendium_query {
-        let db = state.db.as_ref().ok_or(AppError::Database(
-            rusqlite::Error::InvalidQuery,
-        ))?;
+        let db = state.get_db()?;
         let conn = db.conn()?;
 
         // Search compendium for relevant chunks
