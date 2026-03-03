@@ -170,7 +170,7 @@ jobs:
 
       - name: Setup Node.js
         # CRIT-7: Pinned to commit SHA for supply-chain security (tag: v4)
-        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f
         with:
           node-version: '20'
 
