@@ -1,8 +1,9 @@
 use crate::error::AppError;
 use crate::filesystem::{self, MAX_FILE_SIZE};
+use crate::llm::embed::EmbedEngine;
 use crate::models::file_record::{self, FileRecord};
 use crate::state::{AppState, AuthState};
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 
 #[tauri::command]
 pub async fn upload_file(
@@ -111,6 +112,129 @@ pub async fn list_files(
     let files = file_record::list_files_for_patient(&conn, &patient_id)?;
 
     Ok(files)
+}
+
+/// Extract text from an uploaded file, update the FTS5 index, embed the text,
+/// and persist the embedding vector.  Call this after `upload_file` returns.
+///
+/// Flow:
+///   1. Auth guard (Unlocked)
+///   2. Decrypt file from vault
+///   3. Extract text (PDF → pdf-extract, text/* → UTF-8, others → skip)
+///   4. Sanitize extracted text
+///   5. Persist extracted_text + document_type to `files` table
+///   6. Update FTS5 search_index
+///   7. Embed text via fastembed NomicEmbedTextV15 (downloads model on first call)
+///   8. Persist embedding BLOB to `document_embeddings`
+///   9. Cache embed engine in AppState for `global_search`
+///  10. Emit `"file-processed"` event with the file_id
+#[tauri::command]
+pub async fn process_file(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    file_id: String,
+) -> Result<(), AppError> {
+    // ── 1. Auth guard ──────────────────────────────────────────────────────
+    let fs_key: [u8; 32] = {
+        let auth = state.auth.lock().map_err(|_| {
+            AppError::Database(rusqlite::Error::SqliteFailure(
+                rusqlite::ffi::Error::new(1),
+                Some("Auth state mutex poisoned".to_string()),
+            ))
+        })?;
+        match &*auth {
+            AuthState::Unlocked { fs_key, .. } => **fs_key,
+            _ => return Err(AppError::AuthRequired),
+        }
+    };
+
+    // ── 2. Load file record ────────────────────────────────────────────────
+    let file = {
+        let db = state.get_db()?;
+        let conn = db.conn()?;
+        file_record::get_file_record(&conn, &file_id)?
+    };
+
+    let mime_type = file.mime_type.clone();
+    let vault_path = file.vault_path.clone();
+    let data_dir = state.data_dir.clone();
+
+    // ── 3 & 4. Decrypt + extract text (blocking I/O / CPU) ─────────────────
+    let text: String = tokio::task::spawn_blocking(move || -> Result<String, AppError> {
+        let bytes = filesystem::read_file(&data_dir, &fs_key, &vault_path)?;
+
+        let raw = match mime_type.as_str() {
+            "application/pdf" => pdf_extract::extract_text_from_mem(&bytes)
+                .map_err(|e| AppError::Llm(format!("PDF text extraction failed: {e}")))?,
+            t if t.starts_with("text/") => String::from_utf8_lossy(&bytes).into_owned(),
+            _ => return Ok(String::new()), // unsupported type — skip
+        };
+
+        Ok(crate::llm::sanitize::sanitize_for_prompt(&raw))
+    })
+    .await
+    .map_err(|e| AppError::Llm(format!("spawn_blocking error: {e}")))??;
+
+    // Nothing to embed for unsupported file types
+    if text.is_empty() {
+        return Ok(());
+    }
+
+    // ── 5 & 6. Persist text + update FTS5 ─────────────────────────────────
+    {
+        let db = state.get_db()?;
+        let conn = db.conn()?;
+
+        let patient_name: String = conn
+            .query_row(
+                "SELECT first_name || ' ' || last_name FROM patients WHERE id = ?1",
+                [&file.patient_id],
+                |row| row.get(0),
+            )
+            .unwrap_or_else(|_| "Unknown Patient".to_string());
+
+        file_record::update_file_text(&conn, &file_id, &text, None)?;
+
+        crate::search::index_file(
+            &conn,
+            &file_id,
+            &file.patient_id,
+            &patient_name,
+            &file.filename,
+            &text,
+            None,
+            None,
+        )?;
+    }
+
+    // ── 7. Embed text (blocking — may download ~130 MB model on first run) ─
+    let embed_cache_dir = state.data_dir.join("models").join("embed");
+    let text_for_embed = text.clone();
+
+    let (vector, engine) =
+        tokio::task::spawn_blocking(move || -> Result<(Vec<f32>, EmbedEngine), AppError> {
+            std::fs::create_dir_all(&embed_cache_dir)?;
+            let engine = EmbedEngine::new(&embed_cache_dir)?;
+            let vector = engine.embed_one(&text_for_embed)?;
+            Ok((vector, engine))
+        })
+        .await
+        .map_err(|e| AppError::Llm(format!("spawn_blocking error: {e}")))??;
+
+    // ── 8. Persist embedding ───────────────────────────────────────────────
+    {
+        let db = state.get_db()?;
+        let conn = db.conn()?;
+        crate::search::save_embedding(&conn, &file_id, &vector)?;
+    }
+
+    // ── 9. Cache engine in state so global_search can use it ──────────────
+    state.set_embed(engine)?;
+
+    // ── 10. Notify frontend ────────────────────────────────────────────────
+    let _ = app.emit("file-processed", &file_id);
+
+    Ok(())
 }
 
 #[tauri::command]

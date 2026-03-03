@@ -1,10 +1,12 @@
 use crate::error::AppError;
+use crate::llm::embed::{blob_to_vec, cosine_similarity, vec_to_blob};
 use crate::models::diagnosis::Diagnosis;
 use crate::models::medication::Medication;
 use crate::models::patient::Patient;
 use crate::models::session::Session;
 use rusqlite::Connection;
 use serde::Serialize;
+use std::collections::HashMap;
 
 #[derive(Debug, Serialize)]
 pub struct SearchResult {
@@ -18,18 +20,40 @@ pub struct SearchResult {
     pub rank: f64,
 }
 
-/// Escape a query string for use as a literal FTS5 phrase match.
+/// Sanitize a query string into one or more FTS5 phrase-query terms.
 ///
 /// MED-1: FTS5 treats operators like `*`, `OR`, `AND`, `NOT`, `"`, and `^`
-/// as metacharacters inside a MATCH clause even when the value is bound
-/// via a `?` parameter.  Wrapping the input in double-quotes and escaping
-/// any internal double-quotes makes the whole string a phrase query,
-/// preventing wildcard/operator injection.
+/// as metacharacters even when the value is bound via a `?` parameter.
+///
+/// Each whitespace-separated token is wrapped in double-quotes (phrase
+/// mode) which neutralises all metacharacters.  The *last* token also
+/// gets a trailing `*` so that partially-typed words match their
+/// completions (e.g. `"Vi"*` matches the token "Viktor").  Completed
+/// tokens use exact phrase matching.
+///
+/// Internal double-quotes are escaped as `""` per the FTS5 spec.
 fn sanitize_fts5_query(input: &str) -> String {
-    // Replace every " with "" (FTS5 phrase-literal escaping)
-    let escaped = input.replace('"', "\"\"");
-    // Wrap in double-quotes to force a phrase match
-    format!("\"{}\"", escaped)
+    let tokens: Vec<&str> = input.split_whitespace().collect();
+    if tokens.is_empty() {
+        return String::new();
+    }
+    let last_idx = tokens.len() - 1;
+    tokens
+        .iter()
+        .enumerate()
+        .map(|(i, token)| {
+            // Escape internal double-quotes (FTS5 phrase-literal escaping)
+            let escaped = token.replace('"', "\"\"");
+            if i == last_idx {
+                // Last token: prefix match so partial input finds completions
+                format!("\"{}\"*", escaped)
+            } else {
+                // Completed tokens: exact token match
+                format!("\"{}\"", escaped)
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// Full-text search across all indexed content
@@ -360,6 +384,182 @@ pub fn index_medication_from_model(
     Ok(())
 }
 
+// ── Embedding persistence ────────────────────────────────────────────────────
+
+/// Persist a document embedding as a little-endian f32 BLOB.
+/// Replaces any existing embedding for the same file_id (UPSERT).
+pub fn save_embedding(conn: &Connection, file_id: &str, vector: &[f32]) -> Result<(), AppError> {
+    let blob = vec_to_blob(vector);
+    conn.execute(
+        r#"
+        INSERT INTO document_embeddings (file_id, vector)
+        VALUES (?1, ?2)
+        ON CONFLICT(file_id) DO UPDATE SET vector = excluded.vector,
+                                           created_at = datetime('now')
+        "#,
+        rusqlite::params![file_id, blob],
+    )?;
+    Ok(())
+}
+
+/// Load all stored embeddings.  Returns `(file_id, vector)` pairs.
+pub fn load_embeddings(conn: &Connection) -> Result<Vec<(String, Vec<f32>)>, AppError> {
+    let mut stmt = conn.prepare("SELECT file_id, vector FROM document_embeddings")?;
+    let rows = stmt
+        .query_map([], |row| {
+            let file_id: String = row.get(0)?;
+            let blob: Vec<u8> = row.get(1)?;
+            Ok((file_id, blob))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(rows
+        .into_iter()
+        .map(|(id, blob)| (id, blob_to_vec(&blob)))
+        .collect())
+}
+
+// ── Semantic search ──────────────────────────────────────────────────────────
+
+/// In-memory cosine similarity search over document embeddings.
+///
+/// Loads all stored embeddings, ranks them against `query_vec`, then joins
+/// the top results with the `files` and `patients` tables to build
+/// `SearchResult` values.  Suitable for < 10 000 documents.
+pub fn semantic_search(
+    conn: &Connection,
+    query_vec: &[f32],
+    limit: usize,
+) -> Result<Vec<SearchResult>, AppError> {
+    let embeddings = load_embeddings(conn)?;
+    if embeddings.is_empty() {
+        return Ok(vec![]);
+    }
+
+    // Score and rank
+    let mut scored: Vec<(f32, String)> = embeddings
+        .into_iter()
+        .map(|(file_id, vec)| (cosine_similarity(query_vec, &vec), file_id))
+        .collect();
+    scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+    scored.truncate(limit);
+
+    // Fetch metadata for each top result
+    let mut results = Vec::with_capacity(scored.len());
+    for (sim, file_id) in scored {
+        let result = conn.query_row(
+            r#"
+            SELECT f.id, f.patient_id, f.filename, f.mime_type, f.created_at,
+                   p.first_name || ' ' || p.last_name AS patient_name
+            FROM files f
+            JOIN patients p ON f.patient_id = p.id
+            WHERE f.id = ?1
+            "#,
+            [&file_id],
+            |row| {
+                let filename: String = row.get(2)?;
+                let mime_type: String = row.get(3)?;
+                let created_at: String = row.get(4)?;
+                Ok(SearchResult {
+                    result_type: "file".to_string(),
+                    entity_id: row.get(0)?,
+                    patient_id: row.get(1)?,
+                    patient_name: row.get(5)?,
+                    title: filename,
+                    snippet: format!("[semantic match — {}]", mime_type),
+                    date: Some(created_at),
+                    rank: sim as f64,
+                })
+            },
+        );
+
+        match result {
+            Ok(r) => results.push(r),
+            Err(rusqlite::Error::QueryReturnedNoRows) => {
+                // File deleted after embedding was stored — skip silently
+            }
+            Err(e) => return Err(AppError::Database(e)),
+        }
+    }
+
+    Ok(results)
+}
+
+// ── Hybrid search (FTS5 + semantic, merged via RRF) ──────────────────────────
+
+/// Merge FTS5 keyword results with optional semantic results using
+/// Reciprocal Rank Fusion (k = 60).
+///
+/// If `query_vec` is `None` (embed engine not yet loaded) the function falls
+/// back to pure FTS5 results.
+pub fn hybrid_search(
+    conn: &Connection,
+    query: &str,
+    query_vec: Option<&[f32]>,
+    limit: u32,
+) -> Result<Vec<SearchResult>, AppError> {
+    if query.trim().is_empty() {
+        return Ok(vec![]);
+    }
+
+    let fetch_limit = (limit * 2).max(50);
+
+    // FTS5 results
+    let fts_results = search(conn, query, fetch_limit)?;
+
+    // Semantic results (empty when engine not loaded or no embeddings exist)
+    let sem_results = match query_vec {
+        Some(qv) => semantic_search(conn, qv, fetch_limit as usize)?,
+        None => vec![],
+    };
+
+    // Pure FTS5 fallback if semantic is unavailable
+    if sem_results.is_empty() {
+        return Ok(fts_results.into_iter().take(limit as usize).collect());
+    }
+
+    // Build RRF score map  key = (result_type, entity_id)
+    let mut rrf: HashMap<(String, String), f64> = HashMap::new();
+    for (rank, r) in fts_results.iter().enumerate() {
+        *rrf.entry((r.result_type.clone(), r.entity_id.clone())).or_insert(0.0) +=
+            1.0 / (60.0 + (rank + 1) as f64);
+    }
+    for (rank, r) in sem_results.iter().enumerate() {
+        *rrf.entry((r.result_type.clone(), r.entity_id.clone())).or_insert(0.0) +=
+            1.0 / (60.0 + (rank + 1) as f64);
+    }
+
+    // Merge unique results, FTS5 preferred (has snippets)
+    let mut result_map: HashMap<(String, String), SearchResult> = HashMap::new();
+    for r in fts_results.into_iter().chain(sem_results.into_iter()) {
+        let key = (r.result_type.clone(), r.entity_id.clone());
+        result_map.entry(key).or_insert(r);
+    }
+
+    // Sort by RRF score and apply RRF score to rank field
+    let mut merged: Vec<SearchResult> = result_map.into_values().collect();
+    merged.sort_by(|a, b| {
+        let sa = rrf
+            .get(&(a.result_type.clone(), a.entity_id.clone()))
+            .copied()
+            .unwrap_or(0.0);
+        let sb = rrf
+            .get(&(b.result_type.clone(), b.entity_id.clone()))
+            .copied()
+            .unwrap_or(0.0);
+        sb.partial_cmp(&sa).unwrap_or(std::cmp::Ordering::Equal)
+    });
+    for r in merged.iter_mut() {
+        r.rank = rrf
+            .get(&(r.result_type.clone(), r.entity_id.clone()))
+            .copied()
+            .unwrap_or(0.0);
+    }
+
+    merged.truncate(limit as usize);
+    Ok(merged)
+}
+
 /// Normalize AHV queries: "7561234567897" and "756.1234.5678.97" both match
 fn normalize_ahv_for_search(query: &str) -> String {
     // Check if query looks like an AHV number
@@ -392,20 +592,26 @@ mod tests {
 
     #[test]
     fn test_sanitize_fts5_query() {
-        // Normal text becomes a phrase-quoted string
-        assert_eq!(sanitize_fts5_query("John Doe"), "\"John Doe\"");
+        // Single word becomes a prefix query (last token always gets `*`)
+        assert_eq!(sanitize_fts5_query("Viktor"), "\"Viktor\"*");
 
-        // FTS5 wildcard is neutralised
-        let escaped = sanitize_fts5_query("*");
-        assert_eq!(escaped, "\"*\"");
+        // Multi-word: all but the last are exact; the last is a prefix
+        assert_eq!(sanitize_fts5_query("John Doe"), "\"John\" \"Doe\"*");
 
-        // Boolean operators are neutralised
-        let escaped = sanitize_fts5_query("a OR * OR b");
-        assert_eq!(escaped, "\"a OR * OR b\"");
+        // FTS5 wildcard inside a word is neutralised (quoted, not a real wildcard)
+        assert_eq!(sanitize_fts5_query("*"), "\"*\"*");
+
+        // Boolean operators are neutralised — each word is individually quoted
+        assert_eq!(
+            sanitize_fts5_query("a OR * OR b"),
+            "\"a\" \"OR\" \"*\" \"OR\" \"b\"*"
+        );
 
         // Internal double-quotes are escaped
-        let escaped = sanitize_fts5_query("say \"hello\"");
-        assert_eq!(escaped, "\"say \"\"hello\"\"\"");
+        assert_eq!(
+            sanitize_fts5_query("say \"hello\""),
+            "\"say\" \"\"\"hello\"\"\"*"
+        );
     }
 
     #[test]
@@ -463,11 +669,128 @@ mod tests {
     }
 
     #[test]
+    fn test_prefix_search() {
+        let (_temp_dir, pool) = setup_test_db();
+        let conn = pool.conn().unwrap();
+
+        let patient = Patient {
+            id: "patient-prefix".to_string(),
+            first_name: "Viktor".to_string(),
+            last_name: "Steiger".to_string(),
+            date_of_birth: "1990-06-15".to_string(),
+            gender: None,
+            ahv_number: "756.9999.0000.12".to_string(),
+            email: None,
+            phone: None,
+            address: None,
+            insurance: None,
+            gp_name: None,
+            gp_address: None,
+            notes: None,
+            created_at: "2024-01-01T00:00:00Z".to_string(),
+            updated_at: "2024-01-01T00:00:00Z".to_string(),
+        };
+        index_patient(&conn, &patient).unwrap();
+
+        // Two-letter prefix should find "Viktor"
+        let results = search(&conn, "Vi", 10).unwrap();
+        assert_eq!(results.len(), 1, "prefix 'Vi' should match 'Viktor'");
+
+        // Partial last name
+        let results = search(&conn, "Stei", 10).unwrap();
+        assert_eq!(results.len(), 1, "prefix 'Stei' should match 'Steiger'");
+
+        // Multi-word prefix: first word exact, last word prefix
+        let results = search(&conn, "Viktor Stei", 10).unwrap();
+        assert_eq!(results.len(), 1, "multi-word prefix should match");
+    }
+
+    #[test]
     fn test_search_empty_query() {
         let (_temp_dir, pool) = setup_test_db();
         let conn = pool.conn().unwrap();
         let results = search(&conn, "", 10).unwrap();
         assert_eq!(results.len(), 0);
+    }
+
+    #[test]
+    fn test_save_and_load_embeddings() {
+        let (_temp_dir, pool) = setup_test_db();
+        let conn = pool.conn().unwrap();
+
+        // Insert a patient + file so the FK is satisfied
+        let patient_id = uuid::Uuid::now_v7().to_string();
+        conn.execute(
+            "INSERT INTO patients (id, first_name, last_name, date_of_birth, ahv_number)
+             VALUES (?1, 'Test', 'User', '1990-01-01', '7560000000000')",
+            [&patient_id],
+        )
+        .unwrap();
+        let file_id = uuid::Uuid::now_v7().to_string();
+        conn.execute(
+            "INSERT INTO files (id, patient_id, filename, vault_path, mime_type, size_bytes)
+             VALUES (?1, ?2, 'test.pdf', 'p/f.enc', 'application/pdf', 1000)",
+            rusqlite::params![file_id, patient_id],
+        )
+        .unwrap();
+
+        let original: Vec<f32> = (0..768).map(|i| i as f32 / 768.0).collect();
+        save_embedding(&conn, &file_id, &original).unwrap();
+
+        let loaded = load_embeddings(&conn).unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].0, file_id);
+        assert_eq!(loaded[0].1.len(), 768);
+
+        for (a, b) in original.iter().zip(loaded[0].1.iter()) {
+            assert!((a - b).abs() < 1e-6, "Round-trip mismatch: {a} vs {b}");
+        }
+    }
+
+    #[test]
+    fn test_cosine_similarity_via_search_module() {
+        // Sanity-check that the cosine_similarity re-exported from embed works
+        // when accessed through the search module's dependency.
+        use crate::llm::embed::cosine_similarity;
+        let v = vec![1.0f32, 0.0, 0.0];
+        assert!((cosine_similarity(&v, &v) - 1.0).abs() < 1e-6);
+        let w = vec![0.0f32, 1.0, 0.0];
+        assert!(cosine_similarity(&v, &w).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_hybrid_search_fallback_no_embeddings() {
+        let (_temp_dir, pool) = setup_test_db();
+        let conn = pool.conn().unwrap();
+
+        let patient = Patient {
+            id: "patient-hybrid".to_string(),
+            first_name: "Hybrid".to_string(),
+            last_name: "Patient".to_string(),
+            date_of_birth: "1985-03-20".to_string(),
+            gender: None,
+            ahv_number: "756.0000.0001.23".to_string(),
+            email: None,
+            phone: None,
+            address: None,
+            insurance: None,
+            gp_name: None,
+            gp_address: None,
+            notes: None,
+            created_at: "2024-01-01T00:00:00Z".to_string(),
+            updated_at: "2024-01-01T00:00:00Z".to_string(),
+        };
+        index_patient(&conn, &patient).unwrap();
+
+        // No embeddings in DB; should still return FTS5 results
+        let results = hybrid_search(&conn, "Hybrid", None, 10).unwrap();
+        assert_eq!(results.len(), 1, "FTS5 fallback should return 1 result");
+        assert_eq!(results[0].result_type, "patient");
+
+        // With an empty query vec the code path is identical (no semantic results)
+        let dummy_qvec: Vec<f32> = vec![0.0; 768];
+        let results2 = hybrid_search(&conn, "Hybrid", Some(&dummy_qvec), 10).unwrap();
+        assert_eq!(results2.len(), 1, "FTS5 + empty semantic should still find the patient");
     }
 
     #[test]

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { uploadFile, type FileRecord } from '$lib/api';
+  import { uploadFile, processFile, type FileRecord } from '$lib/api';
 
   interface Props {
     patientId: string;
@@ -68,6 +68,12 @@
         if (onUpload) {
           onUpload(record);
         }
+
+        // Fire-and-forget: extract text + embed in the background.
+        // The backend emits "file-processed" when done; do not block the upload UI.
+        processFile(record.id).catch((err) => {
+          console.warn('process_file failed (non-fatal):', err);
+        });
 
         isUploading = false;
         uploadProgress = 0;

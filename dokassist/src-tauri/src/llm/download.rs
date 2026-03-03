@@ -11,22 +11,82 @@ use crate::error::AppError;
 /// Aborts the stream if the server sends more bytes than this.
 const MAX_DOWNLOAD_BYTES: u64 = 60 * 1024 * 1024 * 1024;
 
-/// CRIT-3: Expected SHA-256 digests (hex) for each known model file.
-/// Hashes sourced from HuggingFace LFS object IDs on the model card pages.
-/// Update this table when releasing a new model version.
-fn expected_sha256(filename: &str) -> Option<&'static str> {
+/// Maximum size we'll accept for an LFS pointer body (they're ~130 bytes).
+const MAX_POINTER_BYTES: usize = 4096;
+
+/// CRIT-3: Map each whitelisted GGUF filename to its HuggingFace raw-git LFS pointer URL.
+/// The pointer file is a tiny text file (~130 bytes) containing the true SHA-256 of the blob,
+/// served over TLS from HuggingFace's git metadata endpoint.
+fn lfs_pointer_url(filename: &str) -> Option<&'static str> {
     match filename {
-        "Qwen3-30B-A3B-Q4_K_M.gguf" => {
-            Some("9f1a24700a339b09c06009b729b5c809e0b64c213b8af5b711b3dbdfd0c5ba48")
-        }
-        "Qwen3-8B-Q4_K_M.gguf" => {
-            Some("120307ba529eb2439d6c430d94104dabd578497bc7bfe7e322b5d9933b449bd4")
-        }
-        "Phi-4-mini-instruct-Q4_K_M.gguf" => {
-            Some("88c00229914083cd112853aab84ed51b87bdf6b9ce42f532d8c85c7c63b1730a")
-        }
+        "Qwen3-30B-A3B-Q4_K_M.gguf" => Some(
+            "https://huggingface.co/unsloth/Qwen3-30B-A3B-GGUF/raw/main/Qwen3-30B-A3B-Q4_K_M.gguf",
+        ),
+        "Qwen3-8B-Q4_K_M.gguf" => Some(
+            "https://huggingface.co/unsloth/Qwen3-8B-GGUF/raw/main/Qwen3-8B-Q4_K_M.gguf",
+        ),
+        "Phi-4-mini-instruct-Q4_K_M.gguf" => Some(
+            "https://huggingface.co/unsloth/Phi-4-mini-instruct-GGUF/raw/main/Phi-4-mini-instruct-Q4_K_M.gguf",
+        ),
         _ => None,
     }
+}
+
+/// CRIT-3: Fetch the expected SHA-256 digest from a HuggingFace LFS pointer file.
+///
+/// Git LFS pointer format:
+/// ```
+/// version https://git-lfs.github.com/spec/v1
+/// oid sha256:<64-char-hex>
+/// size <bytes>
+/// ```
+async fn fetch_lfs_sha256(
+    client: &reqwest::Client,
+    pointer_url: &str,
+) -> Result<String, AppError> {
+    let response = client
+        .get(pointer_url)
+        .send()
+        .await
+        .map_err(|e| AppError::Llm(format!("Failed to fetch LFS pointer: {e}")))?;
+
+    // Reject unexpectedly large responses before reading the body.
+    if let Some(len) = response.content_length() {
+        if len > MAX_POINTER_BYTES as u64 {
+            return Err(AppError::Validation(format!(
+                "LFS pointer response too large ({len} bytes); expected ~130 bytes"
+            )));
+        }
+    }
+
+    let text = response
+        .text()
+        .await
+        .map_err(|e| AppError::Llm(format!("Failed to read LFS pointer body: {e}")))?;
+
+    // Guard against no Content-Length but still oversized body.
+    if text.len() > MAX_POINTER_BYTES {
+        return Err(AppError::Validation(
+            "LFS pointer body too large".to_string(),
+        ));
+    }
+
+    // Parse the "oid sha256:<hex>" line.
+    for line in text.lines() {
+        if let Some(hex) = line.strip_prefix("oid sha256:") {
+            let hex = hex.trim();
+            if hex.len() == 64 && hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+                return Ok(hex.to_lowercase());
+            }
+            return Err(AppError::Validation(format!(
+                "LFS pointer contained malformed sha256 oid: '{hex}'"
+            )));
+        }
+    }
+
+    Err(AppError::Validation(
+        "LFS pointer did not contain an 'oid sha256:' line".to_string(),
+    ))
 }
 
 /// CRIT-4: Map a GGUF filename to its HuggingFace (Unsloth mirror) download URL.
@@ -56,7 +116,8 @@ pub fn model_url(filename: &str) -> Result<String, AppError> {
 /// Download a model file, resuming from where it left off if a partial file exists.
 /// Emits `"model-download-progress"` (f64 0.0–1.0) and `"model-download-done"` Tauri events.
 ///
-/// CRIT-3: Computes SHA-256 of downloaded bytes and verifies against the known digest.
+/// CRIT-3: Fetches the expected SHA-256 from HuggingFace's LFS pointer before downloading,
+///         then verifies the completed file against it.
 /// HIGH-2: Aborts download if total bytes exceed MAX_DOWNLOAD_BYTES.
 pub async fn download_model_with_progress(
     app: &AppHandle,
@@ -65,6 +126,22 @@ pub async fn download_model_with_progress(
     filename: &str,
 ) -> Result<(), AppError> {
     let client = reqwest::Client::new();
+
+    // CRIT-3: Fetch expected SHA-256 from HuggingFace LFS pointer before the download begins.
+    // This fails fast (before any large transfer) if the pointer is unavailable or malformed.
+    let expected_hex = match lfs_pointer_url(filename) {
+        Some(ptr_url) => {
+            log::info!("Fetching LFS pointer for '{}'…", filename);
+            Some(fetch_lfs_sha256(&client, ptr_url).await?)
+        }
+        None => {
+            log::warn!(
+                "No LFS pointer URL for '{}' — integrity check will be skipped",
+                filename
+            );
+            None
+        }
+    };
 
     // Check for an existing partial download.
     let existing_size = if dest_path.exists() {
@@ -121,7 +198,6 @@ pub async fn download_model_with_progress(
         let existing_bytes = tokio::fs::read(dest_path).await.map_err(|e| {
             AppError::Llm(format!("Failed to read partial download for hashing: {e}"))
         })?;
-        // existing_bytes includes existing_size bytes
         sha256.update(&existing_bytes);
     }
 
@@ -131,7 +207,6 @@ pub async fn download_model_with_progress(
         // HIGH-2: Hard cap — abort if we're receiving more data than expected
         downloaded += chunk.len() as u64;
         if downloaded > MAX_DOWNLOAD_BYTES {
-            // Remove the partial file so it isn't loaded
             let _ = tokio::fs::remove_file(dest_path).await;
             return Err(AppError::Validation(format!(
                 "Download exceeded maximum size cap of {} bytes — aborting",
@@ -154,14 +229,13 @@ pub async fn download_model_with_progress(
     file.flush().await?;
     drop(file);
 
-    // CRIT-3: Verify SHA-256 digest
+    // CRIT-3: Verify SHA-256 digest against the value fetched from the LFS pointer
     let digest = sha256.finish();
     let computed_hex = hex::encode(digest.as_ref());
 
-    match expected_sha256(filename) {
-        Some(expected) => {
-            if computed_hex != expected {
-                // Remove the corrupted/tampered file
+    match expected_hex {
+        Some(ref expected) => {
+            if computed_hex != *expected {
                 let _ = tokio::fs::remove_file(dest_path).await;
                 return Err(AppError::Validation(format!(
                     "SHA-256 mismatch for '{}': expected {}, got {}. \
@@ -172,11 +246,8 @@ pub async fn download_model_with_progress(
             log::info!("SHA-256 verified for '{}': {}", filename, computed_hex);
         }
         None => {
-            // Should not happen after CRIT-4 (model_url rejects unknown filenames),
-            // but log a warning in case download_model_with_progress is called directly.
             log::warn!(
-                "No expected SHA-256 for '{}' — skipping integrity check. \
-                 Computed hash: {}",
+                "No expected SHA-256 for '{}' — skipping integrity check. Computed: {}",
                 filename,
                 computed_hex
             );

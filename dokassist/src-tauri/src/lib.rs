@@ -57,6 +57,7 @@ pub fn run() {
             commands::files::download_file,
             commands::files::list_files,
             commands::files::delete_file,
+            commands::files::process_file,
             commands::sessions::create_session,
             commands::sessions::get_session,
             commands::sessions::list_all_sessions,

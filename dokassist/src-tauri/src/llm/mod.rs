@@ -1,8 +1,10 @@
 pub mod download;
+pub mod embed;
 mod engine;
 mod extract;
 mod prompts;
 mod report;
+pub mod sanitize;
 
 pub use engine::{EngineStatus, LlmEngine, ModelChoice};
 pub use extract::{extract_metadata_with_prompt, FileMetadata};

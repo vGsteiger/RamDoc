@@ -36,29 +36,26 @@ fn test_pkg1_full_crypto_flow() {
     let temp_dir = TempDir::new().unwrap();
     let vault_path = temp_dir.path().join("recovery.vault");
 
-    // Step 1: Generate master keys
-    let db_key = crypto::generate_key();
-    let fs_key = crypto::generate_key();
-
-    // Step 2: Create recovery vault
-    let mnemonic_words = recovery::create_recovery(&db_key, &fs_key, &vault_path).unwrap();
+    // Step 1: Create recovery — mnemonic entropy is the sole master secret;
+    // db_key and fs_key are derived deterministically via Argon2id.
+    let (mnemonic_words, db_key, fs_key) = recovery::create_recovery(&vault_path).unwrap();
     assert_eq!(mnemonic_words.len(), 24);
     assert!(vault_path.exists());
 
-    // Step 3: Test encryption/decryption with db_key
+    // Step 2: Test encryption/decryption with db_key
     let plaintext = b"Sensitive patient data";
     let ciphertext = crypto::encrypt(&db_key, plaintext).unwrap();
     let decrypted = crypto::decrypt(&db_key, &ciphertext).unwrap();
     assert_eq!(plaintext.as_slice(), decrypted.as_slice());
 
-    // Step 4: Simulate losing keys and recovering from mnemonic
+    // Step 3: Simulate losing keys and recovering from mnemonic
     let (recovered_db_key, recovered_fs_key) =
         recovery::recover_from_mnemonic(&mnemonic_words, &vault_path).unwrap();
 
     assert_eq!(db_key, recovered_db_key);
     assert_eq!(fs_key, recovered_fs_key);
 
-    // Step 5: Verify recovered key can decrypt data
+    // Step 4: Verify recovered key can decrypt data
     let decrypted_with_recovered = crypto::decrypt(&recovered_db_key, &ciphertext).unwrap();
     assert_eq!(plaintext.as_slice(), decrypted_with_recovered.as_slice());
 }
@@ -116,6 +113,7 @@ fn test_pkg1_key_uniqueness() {
 
 #[cfg(target_os = "macos")]
 #[test]
+#[ignore = "requires Touch ID hardware and code-signing entitlements"]
 fn test_pkg1_keychain_operations() {
     use crate::keychain;
 

@@ -2,7 +2,7 @@
 use crate::constants::KEYCHAIN_SERVICE;
 use crate::constants::RECOVERY_FILENAME;
 use crate::database::DbPool;
-use crate::llm::LlmEngine;
+use crate::llm::{embed::EmbedEngine, LlmEngine};
 use std::sync::{Arc, Mutex};
 
 /// Application state shared across all Tauri commands.
@@ -11,6 +11,8 @@ pub struct AppState {
     pub data_dir: std::path::PathBuf,
     pub db: Mutex<Option<DbPool>>,
     pub llm: Mutex<Option<Arc<LlmEngine>>>,
+    /// Embedding engine for semantic search.  Populated lazily by `process_file`.
+    pub embed: Mutex<Option<Arc<EmbedEngine>>>,
 }
 
 pub enum AuthState {
@@ -33,6 +35,7 @@ impl AppState {
             data_dir,
             db: Mutex::new(None),
             llm: Mutex::new(None),
+            embed: Mutex::new(None),
         }
     }
 
@@ -90,6 +93,34 @@ impl AppState {
         })?;
         *db_lock = None;
         Ok(())
+    }
+
+    /// Return a cloned Arc to the embed engine if it has been initialised.
+    /// Returns `None` if `process_file` has not yet populated the engine.
+    pub fn try_get_embed(&self) -> Option<Arc<EmbedEngine>> {
+        self.embed
+            .lock()
+            .ok()
+            .and_then(|g| g.as_ref().map(Arc::clone))
+    }
+
+    /// Store an embed engine in state (no-op if one is already present).
+    pub fn set_embed(&self, engine: EmbedEngine) -> Result<(), crate::error::AppError> {
+        let mut guard = self
+            .embed
+            .lock()
+            .map_err(|_| crate::error::AppError::Llm("Embed mutex poisoned".to_string()))?;
+        if guard.is_none() {
+            *guard = Some(Arc::new(engine));
+        }
+        Ok(())
+    }
+
+    /// Drop the embed engine on lock / reset.
+    pub fn clear_embed(&self) {
+        if let Ok(mut g) = self.embed.lock() {
+            *g = None;
+        }
     }
 }
 

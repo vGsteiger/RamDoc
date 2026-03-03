@@ -123,6 +123,15 @@ export async function deleteFile(fileId: string): Promise<void> {
   return await invoke<void>("delete_file", { fileId });
 }
 
+/**
+ * Trigger background text extraction and semantic embedding for a file.
+ * Call this after `uploadFile` returns.  The backend emits a `"file-processed"`
+ * event when done.  Fire-and-forget: the upload UI should not await this.
+ */
+export async function processFile(fileId: string): Promise<void> {
+  return await invoke<void>("process_file", { fileId });
+}
+
 export interface Patient {
   id: string;
   first_name: string;
