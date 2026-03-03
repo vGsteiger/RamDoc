@@ -62,6 +62,8 @@ export interface LlmEngineStatus {
   model_name: string | null;
   model_path: string | null;
   total_ram_bytes: number;
+  is_downloaded: boolean;
+  downloaded_filename: string | null;
 }
 
 export interface ModelChoice {

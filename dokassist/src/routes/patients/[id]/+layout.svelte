@@ -13,6 +13,7 @@
   let tabs = $derived([
     { path: `/patients/${patientId}`, label: 'Overview' },
     { path: `/patients/${patientId}/files`, label: 'Files' },
+    { path: `/patients/${patientId}/reports`, label: 'Reports' },
   ]);
 
   onMount(async () => {

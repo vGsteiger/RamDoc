@@ -20,14 +20,15 @@
       isLoading = true;
       errorMessage = '';
 
-      // Revoke previous blob URL if it exists
-      if (blobUrl) {
-        URL.revokeObjectURL(blobUrl);
-        blobUrl = null;
-      }
-
       const data = await downloadFile(file.id);
       const blob = new Blob([new Uint8Array(data)], { type: file.mime_type });
+
+      // Revoke previous blob URL after the await so blobUrl is not read
+      // synchronously inside $effect (which would make it a tracked dependency
+      // and cause an infinite reload loop in Svelte 5).
+      if (blobUrl) {
+        URL.revokeObjectURL(blobUrl);
+      }
       blobUrl = URL.createObjectURL(blob);
     } catch (error) {
       console.error('Failed to load file:', error);

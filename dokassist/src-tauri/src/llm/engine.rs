@@ -34,6 +34,10 @@ pub struct EngineStatus {
     pub model_name: Option<String>,
     pub model_path: Option<String>,
     pub total_ram_bytes: u64,
+    /// Whether the model file exists on disk (may not yet be loaded into memory).
+    pub is_downloaded: bool,
+    /// Filename of the downloaded model, if present on disk.
+    pub downloaded_filename: Option<String>,
 }
 
 impl LlmEngine {
@@ -168,6 +172,9 @@ impl LlmEngine {
                 .as_ref()
                 .map(|_| self.model_path.to_string_lossy().into_owned()),
             total_ram_bytes: Self::total_ram(),
+            // A loaded model is always on disk.
+            is_downloaded: self.model.is_some(),
+            downloaded_filename: self.model.as_ref().map(|_| self.model_name.clone()),
         }
     }
 

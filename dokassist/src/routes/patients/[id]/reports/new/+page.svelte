@@ -3,7 +3,7 @@
   import { goto } from '$app/navigation';
   import { onMount, onDestroy } from 'svelte';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-  import { getEngineStatus, createReport, type LlmEngineStatus, type CreateReport } from '$lib/api';
+  import { getEngineStatus, getPatient, createReport, type LlmEngineStatus, type CreateReport, type Patient } from '$lib/api';
   import { invoke } from '@tauri-apps/api/core';
   import ReportTypeSelector from '$lib/components/ReportTypeSelector.svelte';
   import ReportStream from '$lib/components/ReportStream.svelte';
@@ -78,12 +78,11 @@
         }
       });
 
-      // Start generation with snake_case keys
       await invoke('generate_report', {
-        patient_context: patientContext,
-        report_type: selectedType,
-        session_notes: sessionNotes,
-        system_prompt: null
+        patientContext,
+        reportType: selectedType,
+        sessionNotes,
+        systemPrompt: null
       });
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
@@ -128,8 +127,31 @@
     error = '';
   }
 
-  onMount(() => {
-    checkLlmStatus();
+  function formatPatientContext(p: Patient): string {
+    const lines: string[] = [];
+    lines.push(`Name: ${p.first_name} ${p.last_name}`);
+    if (p.date_of_birth) lines.push(`Geburtsdatum: ${p.date_of_birth}`);
+    if (p.gender) lines.push(`Geschlecht: ${p.gender}`);
+    if (p.ahv_number) lines.push(`AHV-Nummer: ${p.ahv_number}`);
+    if (p.address) lines.push(`Adresse: ${p.address}`);
+    if (p.phone) lines.push(`Telefon: ${p.phone}`);
+    if (p.email) lines.push(`E-Mail: ${p.email}`);
+    if (p.insurance) lines.push(`Versicherung: ${p.insurance}`);
+    if (p.gp_name) lines.push(`Hausarzt: ${p.gp_name}`);
+    if (p.gp_address) lines.push(`Hausarzt-Adresse: ${p.gp_address}`);
+    if (p.notes) lines.push(`Notizen: ${p.notes}`);
+    return lines.join('\n');
+  }
+
+  onMount(async () => {
+    await checkLlmStatus();
+    try {
+      const patient = await getPatient(patientId);
+      patientContext = formatPatientContext(patient);
+    } catch (e) {
+      // Non-fatal: user can still fill in patient context manually
+      console.error('Failed to load patient data:', e);
+    }
   });
 
   onDestroy(() => {
@@ -175,13 +197,13 @@
 
         <div>
           <label class="block text-sm font-medium text-gray-300 mb-2">
-            Patient Context
-            <span class="text-gray-500">(optional)</span>
+            Patientenkontext
+            <span class="text-gray-500">(automatisch befüllt, bearbeitbar)</span>
           </label>
           <textarea
             bind:value={patientContext}
             class="w-full h-32 px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 focus:outline-none focus:border-blue-500"
-            placeholder="Enter relevant patient information, diagnoses, medications..."
+            placeholder="Patientendaten werden geladen..."
           />
         </div>
 

@@ -59,12 +59,23 @@ pub async fn get_engine_status(state: State<'_, AppState>) -> Result<EngineStatu
     let llm = state.llm.lock().unwrap();
     match &*llm {
         Some(engine) => Ok(engine.status()),
-        None => Ok(EngineStatus {
-            is_loaded: false,
-            model_name: None,
-            model_path: None,
-            total_ram_bytes: LlmEngine::total_ram(),
-        }),
+        None => {
+            let recommended = LlmEngine::recommended_model();
+            let model_path = state.data_dir.join("models").join(&recommended.filename);
+            let is_downloaded = model_path.exists();
+            Ok(EngineStatus {
+                is_loaded: false,
+                model_name: None,
+                model_path: None,
+                total_ram_bytes: LlmEngine::total_ram(),
+                is_downloaded,
+                downloaded_filename: if is_downloaded {
+                    Some(recommended.filename)
+                } else {
+                    None
+                },
+            })
+        }
     }
 }
 
