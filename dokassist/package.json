@@ -7,7 +7,11 @@
     "dev": "vite dev",
     "build": "vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "build:dmg": "pnpm tauri build --target universal-apple-darwin",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.0",
@@ -15,9 +19,14 @@
     "@sveltejs/vite-plugin-svelte": "^6.2.4",
     "@tailwindcss/vite": "^4.0.0",
     "@tauri-apps/cli": "^2.0.0",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/svelte": "^5.3.1",
+    "@vitest/coverage-v8": "^4.0.18",
+    "jsdom": "^28.1.0",
     "svelte": "^5.0.0",
     "tailwindcss": "^4.0.0",
-    "vite": "^6.0.0"
+    "vite": "^6.0.0",
+    "vitest": "^4.0.18"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",

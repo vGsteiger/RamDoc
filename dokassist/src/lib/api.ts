@@ -1,6 +1,33 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { AuthStatus } from "./stores/auth";
 
+// ---------------------------------------------------------------------------
+// Error handling
+// ---------------------------------------------------------------------------
+
+/** Structured error returned by every Tauri command on failure. */
+export interface AppError {
+  code: string;
+  message: string;
+}
+
+/**
+ * Parse an unknown catch-block value into an {@link AppError}.
+ * Tauri rejects with `{ code, message }` objects; any other shape is wrapped
+ * into an `UNKNOWN_ERROR`.
+ */
+export function parseError(err: unknown): AppError {
+  if (
+    err !== null &&
+    typeof err === "object" &&
+    "code" in err &&
+    "message" in err
+  ) {
+    return err as AppError;
+  }
+  return { code: "UNKNOWN_ERROR", message: String(err) };
+}
+
 export async function checkAuth(): Promise<AuthStatus> {
   return await invoke<AuthStatus>("check_auth");
 }
@@ -21,6 +48,15 @@ export async function lockApp(): Promise<void> {
   return await invoke<void>("lock_app");
 }
 
+/**
+ * Factory reset — permanently deletes all keychain keys, the encrypted vault,
+ * the database, and any model files in the data directory.  The app returns to
+ * `first_run` state.  **Irreversible.**
+ */
+export async function resetApp(): Promise<void> {
+  return await invoke<void>("reset_app");
+}
+
 export interface LlmEngineStatus {
   is_loaded: boolean;
   model_name: string | null;
@@ -28,8 +64,27 @@ export interface LlmEngineStatus {
   total_ram_bytes: number;
 }
 
+export interface ModelChoice {
+  name: string;
+  filename: string;
+  size_bytes: number;
+  reason: string;
+}
+
 export async function getEngineStatus(): Promise<LlmEngineStatus> {
   return await invoke<LlmEngineStatus>("get_engine_status");
+}
+
+export async function getRecommendedModel(): Promise<ModelChoice> {
+  return await invoke<ModelChoice>("get_recommended_model");
+}
+
+export async function downloadModel(model: ModelChoice): Promise<void> {
+  return await invoke<void>("download_model", { model });
+}
+
+export async function loadModel(modelFilename: string): Promise<void> {
+  return await invoke<void>("load_model", { modelFilename });
 }
 
 export interface FileRecord {
@@ -49,23 +104,23 @@ export async function uploadFile(
   mimeType: string,
 ): Promise<FileRecord> {
   return await invoke<FileRecord>("upload_file", {
-    patient_id: patientId,
+    patientId,
     filename,
     data,
-    mime_type: mimeType,
+    mimeType,
   });
 }
 
 export async function downloadFile(fileId: string): Promise<number[]> {
-  return await invoke<number[]>("download_file", { file_id: fileId });
+  return await invoke<number[]>("download_file", { fileId });
 }
 
 export async function listFiles(patientId: string): Promise<FileRecord[]> {
-  return await invoke<FileRecord[]>("list_files", { patient_id: patientId });
+  return await invoke<FileRecord[]>("list_files", { patientId });
 }
 
 export async function deleteFile(fileId: string): Promise<void> {
-  return await invoke<void>("delete_file", { file_id: fileId });
+  return await invoke<void>("delete_file", { fileId });
 }
 
 export interface Patient {
@@ -201,6 +256,21 @@ export async function createSession(input: CreateSession): Promise<Session> {
 
 export async function getSession(id: string): Promise<Session> {
   return await invoke<Session>("get_session", { id });
+}
+
+export interface SessionWithPatient {
+  session: Session;
+  patient_name: string;
+}
+
+export async function listAllSessions(
+  limit?: number,
+  offset?: number,
+): Promise<SessionWithPatient[]> {
+  return await invoke<SessionWithPatient[]>("list_all_sessions", {
+    limit,
+    offset,
+  });
 }
 
 export async function listSessionsForPatient(
@@ -407,7 +477,7 @@ export async function listReports(
   offset?: number,
 ): Promise<Report[]> {
   return await invoke<Report[]>("list_reports", {
-    patient_id: patientId,
+    patientId,
     limit,
     offset,
   });
@@ -431,9 +501,9 @@ export async function generateReport(
   systemPrompt?: string,
 ): Promise<string> {
   return await invoke<string>("generate_report", {
-    patient_context: patientContext,
-    report_type: reportType,
-    session_notes: sessionNotes,
-    system_prompt: systemPrompt,
+    patientContext,
+    reportType,
+    sessionNotes,
+    systemPrompt,
   });
 }

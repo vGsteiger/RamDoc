@@ -142,6 +142,39 @@ pub fn delete_session(conn: &Connection, id: &str) -> Result<(), AppError> {
     Ok(())
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionWithPatient {
+    pub session: Session,
+    pub patient_name: String,
+}
+
+pub fn list_all_sessions(
+    conn: &Connection,
+    limit: u32,
+    offset: u32,
+) -> Result<Vec<SessionWithPatient>, AppError> {
+    let mut stmt = conn.prepare(
+        "SELECT s.id, s.patient_id, s.session_date, s.session_type, s.duration_minutes,
+                s.notes, s.amdp_data, s.created_at, s.updated_at,
+                p.first_name || ' ' || p.last_name AS patient_name
+         FROM sessions s
+         JOIN patients p ON s.patient_id = p.id
+         ORDER BY s.session_date DESC
+         LIMIT ? OFFSET ?",
+    )?;
+
+    let items = stmt
+        .query_map(params![limit, offset], |row| {
+            Ok(SessionWithPatient {
+                session: row_to_session(row)?,
+                patient_name: row.get(9)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(items)
+}
+
 pub fn list_sessions_for_patient(
     conn: &Connection,
     patient_id: &str,

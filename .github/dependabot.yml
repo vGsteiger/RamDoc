@@ -1,0 +1,34 @@
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /dokassist/src-tauri
+    schedule:
+      interval: weekly
+      day: monday
+    labels:
+      - dependencies
+    assignees:
+      - vGsteiger
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: npm
+    directory: /dokassist
+    schedule:
+      interval: weekly
+      day: monday
+    labels:
+      - dependencies
+    assignees:
+      - vGsteiger
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    labels:
+      - dependencies
+    assignees:
+      - vGsteiger
+    open-pull-requests-limit: 5

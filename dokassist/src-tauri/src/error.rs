@@ -33,11 +33,35 @@ pub enum AppError {
     RateLimited(u64),
 }
 
+impl AppError {
+    /// Machine-readable error code sent to the frontend.
+    pub fn code(&self) -> &'static str {
+        match self {
+            AppError::Keychain(_) => "KEYCHAIN_ERROR",
+            AppError::Crypto(_) => "CRYPTO_ERROR",
+            AppError::Database(_) => "DATABASE_ERROR",
+            AppError::Filesystem(_) => "FILESYSTEM_ERROR",
+            AppError::Llm(_) => "LLM_ERROR",
+            AppError::AuthRequired => "AUTH_REQUIRED",
+            AppError::InvalidRecoveryPhrase => "INVALID_RECOVERY_PHRASE",
+            AppError::NotFound(_) => "NOT_FOUND",
+            AppError::Validation(_) => "VALIDATION_ERROR",
+            AppError::RateLimited(_) => "RATE_LIMITED",
+        }
+    }
+}
+
+/// Serialises as `{ "code": "KEYCHAIN_ERROR", "message": "Keychain error: ..." }`
+/// so the frontend can branch on the machine-readable `code` field.
 impl serde::Serialize for AppError {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
-        serializer.serialize_str(&self.to_string())
+        use serde::ser::SerializeStruct;
+        let mut s = serializer.serialize_struct("AppError", 2)?;
+        s.serialize_field("code", self.code())?;
+        s.serialize_field("message", &self.to_string())?;
+        s.end()
     }
 }

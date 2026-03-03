@@ -27,6 +27,16 @@ pub fn run() {
 
     let data_dir = dirs::home_dir().unwrap_or_default().join("DokAssist");
 
+    // Ensure the data directory exists before state is initialised.
+    // SQLite's OPEN_CREATE flag only creates the *file*, not parent directories.
+    if let Err(e) = std::fs::create_dir_all(&data_dir) {
+        log::error!(
+            "Failed to create data directory {}: {}",
+            data_dir.display(),
+            e
+        );
+    }
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .manage(AppState::new(data_dir))
@@ -37,6 +47,7 @@ pub fn run() {
             commands::auth::unlock_app,
             commands::auth::recover_app,
             commands::auth::lock_app,
+            commands::auth::reset_app,
             commands::patients::create_patient,
             commands::patients::get_patient,
             commands::patients::list_patients,
@@ -48,6 +59,7 @@ pub fn run() {
             commands::files::delete_file,
             commands::sessions::create_session,
             commands::sessions::get_session,
+            commands::sessions::list_all_sessions,
             commands::sessions::list_sessions_for_patient,
             commands::sessions::update_session,
             commands::sessions::delete_session,
