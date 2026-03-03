@@ -37,7 +37,7 @@ rand = "0.10"
 hex = "0.4"
 
 # Database (PKG-2)
-rusqlite = { version = "0.32", features = ["bundled-sqlcipher", "vtab"] }
+rusqlite = { version = "0.38", features = ["bundled-sqlcipher", "vtab"] }
 
 # LLM (PKG-4)
 llama_cpp = { version = "0.3" }
