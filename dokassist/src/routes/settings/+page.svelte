@@ -101,13 +101,16 @@
 
     <!-- Current status -->
     <div class="bg-gray-800 rounded-lg p-4 mb-6 flex items-center gap-3">
-      <div class="w-3 h-3 rounded-full shrink-0 {status?.is_loaded ? 'bg-green-500' : 'bg-red-500'}"></div>
+      <div class="w-3 h-3 rounded-full shrink-0 {status?.is_loaded ? 'bg-green-500' : status?.is_downloaded ? 'bg-amber-400' : 'bg-red-500'}"></div>
       <div>
         {#if status?.is_loaded}
           <p class="text-sm text-gray-100 font-medium">{status.model_name}</p>
           <p class="text-xs text-gray-400">Loaded · {formatBytes(status.total_ram_bytes)} system RAM</p>
+        {:else if status?.is_downloaded}
+          <p class="text-sm text-gray-100 font-medium">Model downloaded, not loaded</p>
+          <p class="text-xs text-gray-400">{status.downloaded_filename} · {formatBytes(status.total_ram_bytes)} RAM available</p>
         {:else}
-          <p class="text-sm text-gray-100 font-medium">No model loaded</p>
+          <p class="text-sm text-gray-100 font-medium">No model downloaded</p>
           {#if status}
             <p class="text-xs text-gray-400">{formatBytes(status.total_ram_bytes)} system RAM available</p>
           {/if}
@@ -145,23 +148,42 @@
           <p class="text-xs text-red-400 mb-3">{errorMsg}</p>
         {/if}
 
-        <div class="flex gap-2">
-          <button
-            onclick={handleDownload}
-            disabled={phase === 'downloading' || phase === 'loading'}
-            class="px-4 py-2 text-sm rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors"
-          >
-            {phase === 'downloading' ? 'Downloading…' : 'Download & Load'}
-          </button>
-          <button
-            onclick={handleLoad}
-            disabled={phase === 'downloading' || phase === 'loading'}
-            class="px-4 py-2 text-sm rounded-lg bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-gray-100 transition-colors"
-          >
-            {phase === 'loading' ? 'Loading…' : 'Load existing'}
-          </button>
-        </div>
-        <p class="text-xs text-gray-500 mt-2">"Load existing" if the model file is already downloaded.</p>
+        {#if status?.is_downloaded}
+          <div class="flex gap-2">
+            <button
+              onclick={handleLoad}
+              disabled={phase === 'downloading' || phase === 'loading'}
+              class="px-4 py-2 text-sm rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors"
+            >
+              {phase === 'loading' ? 'Loading…' : 'Load model'}
+            </button>
+            <button
+              onclick={handleDownload}
+              disabled={phase === 'downloading' || phase === 'loading'}
+              class="px-4 py-2 text-sm rounded-lg bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-gray-100 transition-colors"
+            >
+              {phase === 'downloading' ? 'Downloading…' : 'Re-download'}
+            </button>
+          </div>
+        {:else}
+          <div class="flex gap-2">
+            <button
+              onclick={handleDownload}
+              disabled={phase === 'downloading' || phase === 'loading'}
+              class="px-4 py-2 text-sm rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors"
+            >
+              {phase === 'downloading' ? 'Downloading…' : 'Download & Load'}
+            </button>
+            <button
+              onclick={handleLoad}
+              disabled={phase === 'downloading' || phase === 'loading'}
+              class="px-4 py-2 text-sm rounded-lg bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-gray-100 transition-colors"
+            >
+              {phase === 'loading' ? 'Loading…' : 'Load existing'}
+            </button>
+          </div>
+          <p class="text-xs text-gray-500 mt-2">"Load existing" if the model file is already downloaded.</p>
+        {/if}
       </div>
     {/if}
 

@@ -37,6 +37,7 @@
     "targets": ["dmg", "app"],
     "macOS": {
       "minimumSystemVersion": "13.0",
+      "entitlements": "./entitlements.plist",
       "dmg": {
         "windowSize": { "width": 660, "height": 400 },
         "appPosition": { "x": 210, "y": 200 },

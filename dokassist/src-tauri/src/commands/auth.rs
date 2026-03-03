@@ -1,7 +1,7 @@
 use crate::constants::{DB_KEY_ACCOUNT, FS_KEY_ACCOUNT, KEYCHAIN_SERVICE, RECOVERY_FILENAME};
 use crate::error::AppError;
 use crate::state::{AppState, AuthState};
-use crate::{crypto, keychain, recovery};
+use crate::{keychain, recovery};
 use tauri::State;
 
 /// Returns "first_run" | "locked" | "unlocked" | "recovery_required"
@@ -29,26 +29,26 @@ pub async fn initialize_app(state: State<'_, AppState>) -> Result<Vec<String>, A
         }
     }
 
-    // Generate master keys
-    let db_key = crypto::generate_key();
-    let fs_key = crypto::generate_key();
+    // Derive master keys from a freshly generated mnemonic (Argon2id KDF).
+    // The vault marker is written to vault_path; keys are wrapped in Zeroizing
+    // immediately so they are wiped on any early-return path.
+    let vault_path = state.data_dir.join(RECOVERY_FILENAME);
+    let (words, db_key_raw, fs_key_raw) = recovery::create_recovery(&vault_path)?;
+    let db_key = zeroize::Zeroizing::new(db_key_raw);
+    let fs_key = zeroize::Zeroizing::new(fs_key_raw);
 
     // Store keys in Keychain
-    keychain::store_key(KEYCHAIN_SERVICE, DB_KEY_ACCOUNT, &db_key)?;
-    keychain::store_key(KEYCHAIN_SERVICE, FS_KEY_ACCOUNT, &fs_key)?;
-
-    // Create recovery vault
-    let vault_path = state.data_dir.join(RECOVERY_FILENAME);
-    let words = recovery::create_recovery(&db_key, &fs_key, &vault_path)?;
+    keychain::store_key(KEYCHAIN_SERVICE, DB_KEY_ACCOUNT, &*db_key)?;
+    keychain::store_key(KEYCHAIN_SERVICE, FS_KEY_ACCOUNT, &*fs_key)?;
 
     // Initialize database *before* committing auth state (HIGH-5: TOCTOU fix)
-    state.init_db(&db_key)?;
+    state.init_db(&*db_key)?;
 
     // Only transition to Unlocked after DB init succeeds
     let mut auth = state.auth.lock().unwrap();
     *auth = AuthState::Unlocked {
-        db_key: zeroize::Zeroizing::new(db_key),
-        fs_key: zeroize::Zeroizing::new(fs_key),
+        db_key,
+        fs_key,
     };
 
     Ok(words)
@@ -90,6 +90,12 @@ pub async fn unlock_app(state: State<'_, AppState>) -> Result<bool, AppError> {
     // Initialize database *before* committing auth state (HIGH-5: TOCTOU fix).
     // If init_db fails, auth state remains Locked — no inconsistent state.
     state.init_db(&db_key)?;
+
+    // Silently upgrade existing keychain items to biometric protection.
+    // This is idempotent: items already protected are replaced with fresh ones.
+    // Errors are ignored — the app is already unlocked; migration is best-effort.
+    let _ = keychain::store_key(KEYCHAIN_SERVICE, DB_KEY_ACCOUNT, &db_key);
+    let _ = keychain::store_key(KEYCHAIN_SERVICE, FS_KEY_ACCOUNT, &fs_key);
 
     // Only transition to Unlocked after DB init succeeds
     let mut auth = state.auth.lock().unwrap();

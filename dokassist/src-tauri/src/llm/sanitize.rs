@@ -39,7 +39,7 @@ pub fn sanitize_for_prompt(input: &str) -> String {
         .collect::<String>()
         // MED-3: Escape both backtick AND tilde code-fence variants
         .replace("```", "'''")
-        .replace("~~~", "~~~")  // neutralise tilde fences by splitting — rendered inert
+        .replace("~~~", "~~ ~")  // neutralise tilde fences by splitting — rendered inert
         // MED-3: Remove common LLM special tokens — ASCII and fullwidth bracket variants
         // ASCII forms
         .replace("</s>", "")
@@ -215,7 +215,9 @@ mod tests {
         let output = sanitize_for_prompt(input);
         // The tilde sequence is broken so it can no longer act as a fence delimiter
         assert!(output.contains("malicious block"));
-        // Verify it round-trips safely (no raw fence start-end pair triggering injection)
+        // Verify the raw fence sequence is actually transformed
+        assert!(!output.contains("~~~"), "tilde fences must be broken, got: {output}");
+        assert!(output.contains("~~ ~"), "expected broken tilde fence in output");
     }
 
     #[test]

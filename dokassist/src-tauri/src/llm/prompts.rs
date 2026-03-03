@@ -19,9 +19,16 @@ pub enum ReportType {
 }
 
 /// Prompt asking the model to extract structured metadata from a document as JSON.
+///
+/// # Security
+/// `document_text` is sanitized with `sanitize_for_prompt()` and enclosed in
+/// `===== CLINICAL DATA START/END =====` delimiter markers before insertion.
 pub fn metadata_extraction_prompt(document_text: &str) -> String {
-    format!(
-        "Analysieren Sie das folgende medizinische Dokument und extrahieren Sie die Metadaten.\n\
+    use super::sanitize::{build_delimited_prompt, sanitize_for_prompt};
+
+    let safe_text = sanitize_for_prompt(document_text);
+
+    let instruction = "Analysieren Sie das folgende medizinische Dokument und extrahieren Sie die Metadaten.\n\
         Antworten Sie ausschließlich mit einem validen JSON-Objekt ohne Erklärungen oder \
         Markdown-Formatierung.\n\n\
         Extrahieren Sie diese Felder:\n\
@@ -30,20 +37,27 @@ pub fn metadata_extraction_prompt(document_text: &str) -> String {
         - author: Name des Verfassers (null wenn nicht vorhanden)\n\
         - diagnoses: Array von Diagnosen (leer wenn keine vorhanden)\n\
         - medications: Array von Medikamenten (leer wenn keine vorhanden)\n\
-        - summary: Kurze Zusammenfassung des Inhalts (2-3 Sätze)\n\n\
-        Dokument:\n\
-        {}\n\n\
-        JSON:",
-        document_text
-    )
+        - summary: Kurze Zusammenfassung des Inhalts (2-3 Sätze)";
+
+    let delimited = build_delimited_prompt(instruction, &safe_text);
+    format!("{delimited}\nJSON:")
 }
 
 /// Prompt for generating a formal German psychiatric report of the given type.
+///
+/// # Security
+/// Both `patient_context` and `session_notes` are sanitized with `sanitize_for_prompt()`
+/// and enclosed in `===== CLINICAL DATA START/END =====` delimiter markers before insertion.
 pub fn report_generation_prompt(
     report_type: ReportType,
     patient_context: &str,
     session_notes: &str,
 ) -> String {
+    use super::sanitize::{build_delimited_prompt, sanitize_for_prompt};
+
+    let safe_context = sanitize_for_prompt(patient_context);
+    let safe_notes = sanitize_for_prompt(session_notes);
+
     let type_instructions = match report_type {
         ReportType::Befundbericht => {
             "Erstellen Sie einen vollständigen psychiatrischen Befundbericht mit folgenden \
@@ -75,8 +89,9 @@ pub fn report_generation_prompt(
         }
     };
 
-    format!(
-        "{}\n\nPatientenkontext:\n{}\n\nSitzungsnotizen:\n{}\n\nBericht:",
-        type_instructions, patient_context, session_notes,
-    )
+    let combined_data = format!(
+        "Patientenkontext:\n{safe_context}\n\nSitzungsnotizen:\n{safe_notes}"
+    );
+    let delimited = build_delimited_prompt(type_instructions, &combined_data);
+    format!("{delimited}\nBericht:")
 }

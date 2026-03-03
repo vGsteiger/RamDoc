@@ -27,7 +27,7 @@ pub fn create_file_record(
     conn.execute(
         "INSERT INTO files (id, patient_id, filename, vault_path, mime_type, size_bytes)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        rusqlite::params![id, patient_id, filename, vault_path, mime_type, size_bytes],
+        rusqlite::params![id, patient_id, filename, vault_path, mime_type, size_bytes as i64],
     )?;
 
     get_file_record(conn, &id)
@@ -48,7 +48,7 @@ pub fn get_file_record(conn: &Connection, id: &str) -> Result<FileRecord, AppErr
                 filename: row.get(2)?,
                 vault_path: row.get(3)?,
                 mime_type: row.get(4)?,
-                size_bytes: row.get(5)?,
+                size_bytes: row.get::<_, i64>(5)? as u64,
                 created_at: row.get(6)?,
             })
         })
@@ -80,7 +80,7 @@ pub fn get_file_record_by_vault_path(
                 filename: row.get(2)?,
                 vault_path: row.get(3)?,
                 mime_type: row.get(4)?,
-                size_bytes: row.get(5)?,
+                size_bytes: row.get::<_, i64>(5)? as u64,
                 created_at: row.get(6)?,
             })
         })
@@ -113,13 +113,36 @@ pub fn list_files_for_patient(
                 filename: row.get(2)?,
                 vault_path: row.get(3)?,
                 mime_type: row.get(4)?,
-                size_bytes: row.get(5)?,
+                size_bytes: row.get::<_, i64>(5)? as u64,
                 created_at: row.get(6)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
 
     Ok(records)
+}
+
+/// Persist extracted text and optional document type for an existing file record.
+/// Called by `process_file` after LLM/PDF extraction completes.
+pub fn update_file_text(
+    conn: &Connection,
+    file_id: &str,
+    extracted_text: &str,
+    document_type: Option<&str>,
+) -> Result<(), AppError> {
+    let rows = conn.execute(
+        "UPDATE files SET extracted_text = ?1, document_type = ?2 WHERE id = ?3",
+        rusqlite::params![extracted_text, document_type, file_id],
+    )?;
+
+    if rows == 0 {
+        return Err(AppError::NotFound(format!(
+            "File record with id {} not found",
+            file_id
+        )));
+    }
+
+    Ok(())
 }
 
 /// Delete a file record from the database

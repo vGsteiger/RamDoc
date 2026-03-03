@@ -28,6 +28,9 @@ chrono = { version = "0.4", features = ["serde"] }
 
 # Crypto (PKG-1)
 security-framework = "3"
+security-framework-sys = "2"
+core-foundation = "0.10"
+core-foundation-sys = "0.8"
 aes-gcm = "0.10"
 ring = "0.17"
 argon2 = "0.5"
@@ -40,7 +43,8 @@ hex = "0.4"
 rusqlite = { version = "0.38", features = ["bundled-sqlcipher", "vtab"] }
 
 # LLM (PKG-4)
-llama_cpp = { version = "0.3" }
+llama-cpp-2 = { version = "0.1" }
+encoding_rs = "0.8"
 reqwest = { version = "0.12", features = ["stream"] }
 futures-util = "0.3"
 libc = "0.2"
@@ -49,12 +53,15 @@ dirs = "6"
 # PDF (PKG-3)
 pdf-extract = "0.10"
 
+# Embeddings (PKG-semantic-search)
+fastembed = { version = "4", default-features = false, features = ["ort-download-binaries", "hf-hub"] }
+
 [features]
 # Enable Metal GPU acceleration for llama.cpp on Apple Silicon.
 # Pass --features metal to cargo / tauri build when targeting aarch64-apple-darwin.
 # Omit when cross-compiling to x86_64-apple-darwin: the Metal shader library is
 # embedded as a host-arch object file, which breaks the x86_64 link step.
-metal = ["llama_cpp/metal"]
+metal = ["llama-cpp-2/metal"]
 
 [dev-dependencies]
 tempfile = "3"

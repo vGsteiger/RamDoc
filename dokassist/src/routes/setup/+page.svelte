@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { initializeApp } from '$lib/api';
+  import { initializeApp, parseError } from '$lib/api';
   import { authStatus } from '$lib/stores/auth';
   import MnemonicDisplay from '$lib/components/MnemonicDisplay.svelte';
 
@@ -19,7 +19,7 @@
       words = mnemonic;
       isLoading = false;
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to initialize app';
+      error = parseError(err).message;
       isLoading = false;
     }
   });

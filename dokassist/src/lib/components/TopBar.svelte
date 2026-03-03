@@ -1,15 +1,19 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { getEngineStatus, globalSearch, type SearchResult } from '$lib/api';
+  import { getEngineStatus, loadModel, globalSearch, parseError, type LlmEngineStatus, type SearchResult } from '$lib/api';
 
   let searchInput = $state<HTMLInputElement | null>(null);
-  let llmStatus = $state<'loaded' | 'not_loaded'>('not_loaded');
+  let engineStatus = $state<LlmEngineStatus | null>(null);
+  let isLoadingModel = $state(false);
   let searchQuery = $state('');
   let searchResults = $state<SearchResult[]>([]);
   let showDropdown = $state(false);
   let isSearching = $state(false);
   let searchTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  let isLoaded = $derived(engineStatus?.is_loaded ?? false);
+  let isDownloaded = $derived(engineStatus?.is_downloaded ?? false);
 
   onMount(() => {
     const handleKeydown = (e: KeyboardEvent) => {
@@ -34,11 +38,26 @@
 
   async function updateLlmStatus() {
     try {
-      const status = await getEngineStatus();
-      llmStatus = status.is_loaded ? 'loaded' : 'not_loaded';
+      engineStatus = await getEngineStatus();
     } catch (error) {
       console.error('Failed to get LLM status:', error);
-      llmStatus = 'not_loaded';
+    }
+  }
+
+  async function handleDotClick() {
+    if (isLoaded || isLoadingModel) return;
+    if (isDownloaded && engineStatus?.downloaded_filename) {
+      isLoadingModel = true;
+      try {
+        await loadModel(engineStatus.downloaded_filename);
+        engineStatus = await getEngineStatus();
+      } catch (e) {
+        console.error('Failed to load model:', parseError(e).message);
+      } finally {
+        isLoadingModel = false;
+      }
+    } else {
+      goto('/settings');
     }
   }
 
@@ -161,9 +180,23 @@
 
   <div class="flex items-center gap-2">
     <span class="text-sm text-gray-400">LLM:</span>
-    <div
-      class="w-3 h-3 rounded-full {llmStatus === 'loaded' ? 'bg-green-500' : 'bg-red-500'}"
-      title={llmStatus === 'loaded' ? 'Model loaded' : 'No model'}
-    ></div>
+    <button
+      onclick={handleDotClick}
+      disabled={isLoaded || isLoadingModel}
+      class="w-3 h-3 rounded-full transition-colors focus:outline-none {isLoadingModel
+        ? 'bg-amber-400 animate-pulse cursor-wait'
+        : isLoaded
+          ? 'bg-green-500 cursor-default'
+          : isDownloaded
+            ? 'bg-amber-400 cursor-pointer hover:bg-amber-300'
+            : 'bg-red-500 cursor-pointer hover:bg-red-400'}"
+      title={isLoadingModel
+        ? 'Loading model…'
+        : isLoaded
+          ? 'Model loaded'
+          : isDownloaded
+            ? 'Model downloaded — click to load into memory'
+            : 'No model downloaded — click to go to Settings'}
+    ></button>
   </div>
 </header>
