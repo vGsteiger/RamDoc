@@ -1,10 +1,9 @@
 use crate::audit::{self, AuditAction};
 use crate::error::AppError;
 use crate::filesystem;
-use crate::models::{
-    diagnosis, file_record, medication, patient, report, session, Patient,
-};
-use crate::state::AppState;
+use crate::models::patient::Patient;
+use crate::models::{diagnosis, file_record, medication, patient, report, session};
+use crate::state::{AppState, AuthState};
 use rusqlite::Connection;
 use serde::Serialize;
 use std::io::Write;
@@ -27,13 +26,21 @@ struct PatientExport {
 /// - patient.json with all patient metadata
 /// - Decrypted files in their original format
 #[tauri::command]
-pub async fn export_all_patient_data(
-    state: State<'_, AppState>,
-) -> Result<Vec<u8>, AppError> {
+pub async fn export_all_patient_data(state: State<'_, AppState>) -> Result<Vec<u8>, AppError> {
     let pool = state.get_db()?;
     let conn = pool.conn()?;
-    let base_dir = state.data_dir();
-    let fs_key = state.get_fs_key()?;
+    let base_dir = state.data_dir.clone();
+
+    let fs_key: [u8; 32] = {
+        let auth = state
+            .auth
+            .lock()
+            .map_err(|_| AppError::Validation("Auth state mutex poisoned".to_string()))?;
+        match &*auth {
+            AuthState::Unlocked { fs_key, .. } => **fs_key,
+            _ => return Err(AppError::AuthRequired),
+        }
+    };
 
     // Create a ZIP file in memory
     let mut zip_buffer = Vec::new();
@@ -59,19 +66,21 @@ pub async fn export_all_patient_data(
 
             // Write patient metadata JSON
             let json_path = format!("{}/patient.json", patient_dir);
-            zip.start_file(&json_path, options)?;
+            zip.start_file(&json_path, options)
+                .map_err(|e| AppError::Validation(format!("ZIP error: {}", e)))?;
             let json_data = serde_json::to_string_pretty(&export_data)
-                .map_err(|e| AppError::Internal(format!("JSON serialization failed: {}", e)))?;
+                .map_err(|e| AppError::Validation(format!("JSON serialization failed: {}", e)))?;
             zip.write_all(json_data.as_bytes())?;
 
             // Export all files for this patient
-            let files = file_record::list_files_for_patient(&conn, &patient.id, u32::MAX, 0)?;
+            let files = file_record::list_files_for_patient(&conn, &patient.id)?;
             for file in files {
                 // Read and decrypt the file
-                match filesystem::read_file(base_dir, fs_key, &file.vault_path) {
+                match filesystem::read_file(&base_dir, &fs_key, &file.vault_path) {
                     Ok(plaintext) => {
                         let file_path = format!("{}/files/{}", patient_dir, file.filename);
-                        zip.start_file(&file_path, options)?;
+                        zip.start_file(&file_path, options)
+                            .map_err(|e| AppError::Validation(format!("ZIP error: {}", e)))?;
                         zip.write_all(&plaintext)?;
                     }
                     Err(e) => {
@@ -87,7 +96,8 @@ pub async fn export_all_patient_data(
             }
         }
 
-        zip.finish()?;
+        zip.finish()
+            .map_err(|e| AppError::Validation(format!("ZIP finalize error: {}", e)))?;
     }
 
     // Log the export action
@@ -102,10 +112,7 @@ pub async fn export_all_patient_data(
     Ok(zip_buffer)
 }
 
-fn collect_patient_data(
-    conn: &Connection,
-    patient_id: &str,
-) -> Result<PatientExport, AppError> {
+fn collect_patient_data(conn: &Connection, patient_id: &str) -> Result<PatientExport, AppError> {
     let patient = patient::get_patient(conn, patient_id)?;
 
     // Get all related data
@@ -129,7 +136,7 @@ fn collect_patient_data(
         .map(|r| serde_json::to_value(r).unwrap())
         .collect();
 
-    let files = file_record::list_files_for_patient(conn, patient_id, u32::MAX, 0)?
+    let files = file_record::list_files_for_patient(conn, patient_id)?
         .into_iter()
         .map(|f| serde_json::to_value(f).unwrap())
         .collect();
