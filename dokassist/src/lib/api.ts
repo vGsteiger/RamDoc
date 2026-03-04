@@ -593,6 +593,13 @@ export async function getAppVersion(): Promise<string> {
 }
 
 // ---------------------------------------------------------------------------
+// Export
+// ---------------------------------------------------------------------------
+
+export async function exportAllPatientData(): Promise<number[]> {
+  return await invoke<number[]>("export_all_patient_data");
+}
+
 // Chat / Agent API
 // ---------------------------------------------------------------------------
 

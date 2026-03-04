@@ -57,6 +57,9 @@ pdf-extract = "0.10"
 # Embeddings (PKG-semantic-search)
 fastembed = { version = "4", default-features = false, features = ["ort-download-binaries", "hf-hub"] }
 
+# Export
+zip = "2"
+
 [features]
 # Enable Metal GPU acceleration for llama.cpp on Apple Silicon.
 # Pass --features metal to cargo / tauri build when targeting aarch64-apple-darwin.
