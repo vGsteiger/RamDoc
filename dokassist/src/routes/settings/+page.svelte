@@ -9,8 +9,12 @@
     loadModel,
     resetApp,
     parseError,
+    checkForUpdates,
+    installUpdate,
+    getAppVersion,
     type LlmEngineStatus,
     type ModelChoice,
+    type UpdateInfo,
   } from '$lib/api';
 
   let status = $state<LlmEngineStatus | null>(null);
@@ -20,14 +24,68 @@
   let errorMsg = $state('');
   let unlisten: UnlistenFn | null = null;
 
+  // Update state
+  let appVersion = $state<string>('');
+  let updateInfo = $state<UpdateInfo | null>(null);
+  let checkingUpdate = $state(false);
+  let installingUpdate = $state(false);
+  let updateProgress = $state<number>(0);
+  let updateError = $state('');
+  let updateUnlisten: UnlistenFn | null = null;
+
   onMount(async () => {
-    [status, recommended] = await Promise.all([getEngineStatus(), getRecommendedModel()]);
+    [status, recommended, appVersion] = await Promise.all([
+      getEngineStatus(),
+      getRecommendedModel(),
+      getAppVersion(),
+    ]);
     if (status.is_loaded) phase = 'done';
   });
 
   onDestroy(() => {
     unlisten?.();
+    updateUnlisten?.();
   });
+
+  async function handleCheckForUpdates() {
+    checkingUpdate = true;
+    updateError = '';
+    try {
+      updateInfo = await checkForUpdates();
+    } catch (e) {
+      updateError = parseError(e).message;
+    } finally {
+      checkingUpdate = false;
+    }
+  }
+
+  async function handleInstallUpdate() {
+    if (!updateInfo?.update_available) return;
+
+    installingUpdate = true;
+    updateError = '';
+    updateProgress = 0;
+
+    // Listen for download progress events
+    updateUnlisten = await listen<number>('updater-download-progress', (e) => {
+      updateProgress = Math.round(e.payload * 100);
+    });
+
+    const completeUnsub = await listen('updater-download-complete', () => {
+      completeUnsub();
+    });
+
+    try {
+      await installUpdate();
+      // After successful install, the app will restart automatically
+    } catch (e) {
+      updateUnlisten?.();
+      updateUnlisten = null;
+      installingUpdate = false;
+      updateError = parseError(e).message;
+    }
+  }
+
 
   function formatBytes(bytes: number): string {
     const gb = bytes / (1024 ** 3);
@@ -95,6 +153,87 @@
 
 <div class="p-8 max-w-xl">
   <h1 class="text-2xl font-bold text-gray-100 mb-6">Settings</h1>
+
+  <section class="mb-10">
+    <h2 class="text-lg font-semibold text-gray-200 mb-4">Application Updates</h2>
+
+    <div class="bg-gray-800 rounded-lg p-4 mb-4">
+      <div class="flex items-center justify-between mb-3">
+        <div>
+          <p class="text-sm font-medium text-gray-100">Current Version</p>
+          <p class="text-xs text-gray-400 mt-1">{appVersion || 'Loading...'}</p>
+        </div>
+        <button
+          onclick={handleCheckForUpdates}
+          disabled={checkingUpdate || installingUpdate}
+          class="px-4 py-2 text-sm rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors"
+        >
+          {checkingUpdate ? 'Checking...' : 'Check for Updates'}
+        </button>
+      </div>
+
+      {#if updateInfo}
+        {#if updateInfo.update_available}
+          <div class="border-t border-gray-700 pt-3 mt-3">
+            <div class="flex items-start justify-between gap-4 mb-2">
+              <div>
+                <p class="text-sm font-medium text-green-400">Update Available</p>
+                <p class="text-xs text-gray-400 mt-1">
+                  Version {updateInfo.latest_version} is now available
+                </p>
+              </div>
+            </div>
+
+            {#if updateInfo.body}
+              <div class="text-xs text-gray-400 mb-3 max-h-32 overflow-y-auto bg-gray-900 rounded p-2">
+                <p class="font-medium mb-1">Release Notes:</p>
+                <div class="whitespace-pre-wrap">{updateInfo.body}</div>
+              </div>
+            {/if}
+
+            {#if installingUpdate}
+              <div class="mb-3">
+                <div class="flex justify-between text-xs text-gray-400 mb-1">
+                  <span>Downloading and installing update...</span>
+                  <span>{updateProgress}%</span>
+                </div>
+                <div class="w-full bg-gray-700 rounded-full h-2">
+                  <div
+                    class="bg-blue-500 h-2 rounded-full transition-all"
+                    style="width: {updateProgress}%"
+                  ></div>
+                </div>
+                <p class="text-xs text-gray-400 mt-2">The app will restart automatically after installation.</p>
+              </div>
+            {/if}
+
+            {#if updateError}
+              <p class="text-xs text-red-400 mb-3">{updateError}</p>
+            {/if}
+
+            {#if !installingUpdate}
+              <button
+                onclick={handleInstallUpdate}
+                class="px-4 py-2 text-sm rounded-lg bg-green-600 hover:bg-green-500 text-white transition-colors"
+              >
+                Install Update
+              </button>
+            {/if}
+          </div>
+        {:else}
+          <div class="border-t border-gray-700 pt-3 mt-3">
+            <p class="text-sm text-green-400">You're up to date!</p>
+          </div>
+        {/if}
+      {/if}
+
+      {#if updateError && !updateInfo}
+        <div class="border-t border-gray-700 pt-3 mt-3">
+          <p class="text-xs text-red-400">{updateError}</p>
+        </div>
+      {/if}
+    </div>
+  </section>
 
   <section>
     <h2 class="text-lg font-semibold text-gray-200 mb-4">LLM Model</h2>

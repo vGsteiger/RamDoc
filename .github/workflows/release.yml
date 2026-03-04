@@ -245,3 +245,49 @@ jobs:
           else
             echo "Warning: No .app bundle found"
           fi
+
+      - name: Generate updater manifest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NEW_VERSION="${{ needs.semantic-release.outputs.new_version }}"
+
+          # Get release notes
+          RELEASE_NOTES=$(gh release view "v$NEW_VERSION" --json body -q .body)
+          RELEASE_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          # Find the DMG file
+          DMG_PATH=$(find dokassist/src-tauri/target/universal-apple-darwin/release/bundle/dmg -name "*.dmg" 2>/dev/null | head -n 1)
+
+          if [ -n "$DMG_PATH" ] && [ -f "$DMG_PATH" ]; then
+            DMG_FILENAME=$(basename "$DMG_PATH")
+            DMG_URL="https://github.com/${{ github.repository }}/releases/download/v${NEW_VERSION}/${DMG_FILENAME}"
+
+            # Create updater manifest JSON
+            cat > latest.json << EOF
+          {
+            "version": "v${NEW_VERSION}",
+            "notes": $(echo "$RELEASE_NOTES" | jq -Rs .),
+            "pub_date": "${RELEASE_DATE}",
+            "platforms": {
+              "darwin-x86_64": {
+                "signature": "",
+                "url": "${DMG_URL}"
+              },
+              "darwin-aarch64": {
+                "signature": "",
+                "url": "${DMG_URL}"
+              }
+            }
+          }
+          EOF
+
+            echo "Generated updater manifest:"
+            cat latest.json
+
+            # Upload the manifest to the release
+            gh release upload "v$NEW_VERSION" latest.json --clobber
+          else
+            echo "Error: No DMG file found, cannot generate updater manifest"
+            exit 1
+          fi

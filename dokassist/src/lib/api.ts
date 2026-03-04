@@ -518,3 +518,27 @@ export async function generateReport(
     systemPrompt,
   });
 }
+
+// ---------------------------------------------------------------------------
+// Updater
+// ---------------------------------------------------------------------------
+
+export interface UpdateInfo {
+  current_version: string;
+  latest_version: string | null;
+  update_available: boolean;
+  body: string | null;
+  date: string | null;
+}
+
+export async function checkForUpdates(): Promise<UpdateInfo> {
+  return await invoke<UpdateInfo>("check_for_updates");
+}
+
+export async function installUpdate(): Promise<void> {
+  return await invoke<void>("install_update");
+}
+
+export async function getAppVersion(): Promise<string> {
+  return await invoke<string>("get_app_version");
+}

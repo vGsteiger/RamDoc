@@ -24,7 +24,16 @@
       "csp": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; frame-src 'self' blob:"
     }
   },
-  "plugins": {},
+  "plugins": {
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://github.com/vGsteiger/IbexDoc/releases/latest/download/latest.json"
+      ],
+      "dialog": false,
+      "pubkey": ""
+    }
+  },
   "bundle": {
     "active": true,
     "icon": [

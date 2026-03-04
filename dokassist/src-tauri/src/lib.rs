@@ -39,6 +39,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(AppState::new(data_dir))
         .invoke_handler(tauri::generate_handler![
             commands::audit::query_audit_log,
@@ -90,6 +91,9 @@ pub fn run() {
             commands::reports::list_reports,
             commands::reports::update_report,
             commands::reports::delete_report,
+            commands::updater::check_for_updates,
+            commands::updater::install_update,
+            commands::updater::get_app_version,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
