@@ -37,10 +37,12 @@ pub fn run() {
         );
     }
 
+    let app_state = AppState::new(data_dir);
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .manage(AppState::new(data_dir))
+        .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             commands::audit::query_audit_log,
             commands::auth::check_auth,
@@ -95,6 +97,15 @@ pub fn run() {
             commands::updater::install_update,
             commands::updater::get_app_version,
         ])
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                // Gracefully unload LLM model before closing
+                if let Some(state) = window.try_state::<AppState>() {
+                    log::info!("Window close requested - cleaning up LLM resources");
+                    state.clear_llm();
+                }
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

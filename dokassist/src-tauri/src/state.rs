@@ -122,6 +122,13 @@ impl AppState {
             *g = None;
         }
     }
+
+    /// Drop the LLM engine on app close / reset.
+    pub fn clear_llm(&self) {
+        if let Ok(mut g) = self.llm.lock() {
+            *g = None;
+        }
+    }
 }
 
 fn determine_initial_auth_state(data_dir: &std::path::Path) -> AuthState {
