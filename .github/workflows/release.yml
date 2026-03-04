@@ -125,6 +125,26 @@ jobs:
           echo "should_release=true" >> $GITHUB_OUTPUT
           echo "New version: v$NEW_VERSION (bump: $BUMP_TYPE)"
 
+      - name: Update version in source files
+        if: steps.pr_info.outputs.should_release == 'true' && steps.version.outputs.should_release == 'true'
+        run: |
+          NEW_VERSION="${{ steps.version.outputs.new_version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Update Cargo.toml version (only in [package] section)
+          sed -i '/^\[package\]/,/^\[/ s/^version = ".*"/version = "'"$NEW_VERSION"'"/' dokassist/src-tauri/Cargo.toml
+
+          # Update package.json version using jq to safely target only the top-level version field
+          jq --arg v "$NEW_VERSION" '.version = $v' dokassist/package.json > /tmp/package.json.tmp && mv /tmp/package.json.tmp dokassist/package.json
+
+          # Update Cargo.lock version for the dokassist package (root package, no checksum required)
+          sed -i "/name = \"dokassist\"/{n;s/version = \"[^\"]*\"/version = \"$NEW_VERSION\"/}" dokassist/src-tauri/Cargo.lock
+
+          git add dokassist/src-tauri/Cargo.toml dokassist/package.json dokassist/src-tauri/Cargo.lock
+          git diff --staged --quiet || git commit -m "chore: bump version to $NEW_VERSION [skip ci]"
+          git push origin HEAD:main
+
       - name: Create and push tag
         if: steps.pr_info.outputs.should_release == 'true' && steps.version.outputs.should_release == 'true'
         run: |
