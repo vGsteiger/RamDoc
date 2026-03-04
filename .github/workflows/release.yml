@@ -43,8 +43,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Get the most recent merged PR for this commit
-          PR_DATA=$(gh pr list --repo ${{ github.repository }} --state merged --limit 1 --json number,title,labels --search "${{ github.sha }}")
+          # Use GitHub commits API to find PRs associated with this exact commit
+          PR_DATA=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" \
+            --header "Accept: application/vnd.github.groot-preview+json")
 
           if [ "$(echo "$PR_DATA" | jq length)" -eq 0 ]; then
             echo "No merged PR found for this commit, skipping release"
@@ -54,8 +55,22 @@ jobs:
 
           PR_NUMBER=$(echo "$PR_DATA" | jq -r '.[0].number')
           PR_TITLE=$(echo "$PR_DATA" | jq -r '.[0].title')
+          PR_MERGED=$(echo "$PR_DATA" | jq -r '.[0].merged_at')
           # Extract label names as a JSON array
           PR_LABELS=$(echo "$PR_DATA" | jq -c '[.[0].labels[].name]')
+
+          if [ "$PR_MERGED" = "null" ] || [ -z "$PR_MERGED" ]; then
+            echo "PR #$PR_NUMBER is not merged, skipping release"
+            echo "should_release=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Only release PRs that explicitly opt in with the autorelease label
+          if ! echo "$PR_LABELS" | jq -e '. | contains(["autorelease"])' > /dev/null 2>&1; then
+            echo "PR #$PR_NUMBER does not have 'autorelease' label, skipping release"
+            echo "should_release=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
 
           echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
           echo "pr_title=$PR_TITLE" >> $GITHUB_OUTPUT
