@@ -60,7 +60,11 @@ pub fn blob_to_vec(b: &[u8]) -> Vec<f32> {
 /// Cosine similarity between two equal-length vectors.
 /// Returns `0.0` if either vector has zero magnitude.
 pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
-    debug_assert_eq!(a.len(), b.len(), "Vector lengths must match for cosine similarity");
+    debug_assert_eq!(
+        a.len(),
+        b.len(),
+        "Vector lengths must match for cosine similarity"
+    );
     let dot: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
     let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
     let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
@@ -99,7 +103,10 @@ mod tests {
     fn test_cosine_identical_vectors() {
         let v = vec![1.0f32, 2.0, 3.0];
         let sim = cosine_similarity(&v, &v);
-        assert!((sim - 1.0).abs() < 1e-6, "Identical vectors → similarity 1.0, got {sim}");
+        assert!(
+            (sim - 1.0).abs() < 1e-6,
+            "Identical vectors → similarity 1.0, got {sim}"
+        );
     }
 
     #[test]
@@ -107,7 +114,10 @@ mod tests {
         let a = vec![1.0f32, 0.0, 0.0];
         let b = vec![0.0f32, 1.0, 0.0];
         let sim = cosine_similarity(&a, &b);
-        assert!(sim.abs() < 1e-6, "Orthogonal vectors → similarity 0.0, got {sim}");
+        assert!(
+            sim.abs() < 1e-6,
+            "Orthogonal vectors → similarity 0.0, got {sim}"
+        );
     }
 
     #[test]
@@ -115,7 +125,10 @@ mod tests {
         let a = vec![1.0f32, 0.0];
         let b = vec![-1.0f32, 0.0];
         let sim = cosine_similarity(&a, &b);
-        assert!((sim + 1.0).abs() < 1e-6, "Opposite vectors → similarity -1.0, got {sim}");
+        assert!(
+            (sim + 1.0).abs() < 1e-6,
+            "Opposite vectors → similarity -1.0, got {sim}"
+        );
     }
 
     #[test]

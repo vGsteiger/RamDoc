@@ -89,9 +89,8 @@ pub fn report_generation_prompt(
         }
     };
 
-    let combined_data = format!(
-        "Patientenkontext:\n{safe_context}\n\nSitzungsnotizen:\n{safe_notes}"
-    );
+    let combined_data =
+        format!("Patientenkontext:\n{safe_context}\n\nSitzungsnotizen:\n{safe_notes}");
     let delimited = build_delimited_prompt(type_instructions, &combined_data);
     format!("{delimited}\nBericht:")
 }

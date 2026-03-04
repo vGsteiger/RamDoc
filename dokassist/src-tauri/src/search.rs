@@ -521,12 +521,12 @@ pub fn hybrid_search(
     // Build RRF score map  key = (result_type, entity_id)
     let mut rrf: HashMap<(String, String), f64> = HashMap::new();
     for (rank, r) in fts_results.iter().enumerate() {
-        *rrf.entry((r.result_type.clone(), r.entity_id.clone())).or_insert(0.0) +=
-            1.0 / (60.0 + (rank + 1) as f64);
+        *rrf.entry((r.result_type.clone(), r.entity_id.clone()))
+            .or_insert(0.0) += 1.0 / (60.0 + (rank + 1) as f64);
     }
     for (rank, r) in sem_results.iter().enumerate() {
-        *rrf.entry((r.result_type.clone(), r.entity_id.clone())).or_insert(0.0) +=
-            1.0 / (60.0 + (rank + 1) as f64);
+        *rrf.entry((r.result_type.clone(), r.entity_id.clone()))
+            .or_insert(0.0) += 1.0 / (60.0 + (rank + 1) as f64);
     }
 
     // Merge unique results, FTS5 preferred (has snippets)
@@ -790,7 +790,11 @@ mod tests {
         // With an empty query vec the code path is identical (no semantic results)
         let dummy_qvec: Vec<f32> = vec![0.0; 768];
         let results2 = hybrid_search(&conn, "Hybrid", Some(&dummy_qvec), 10).unwrap();
-        assert_eq!(results2.len(), 1, "FTS5 + empty semantic should still find the patient");
+        assert_eq!(
+            results2.len(),
+            1,
+            "FTS5 + empty semantic should still find the patient"
+        );
     }
 
     #[test]

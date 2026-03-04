@@ -42,14 +42,11 @@ pub async fn initialize_app(state: State<'_, AppState>) -> Result<Vec<String>, A
     keychain::store_key(KEYCHAIN_SERVICE, FS_KEY_ACCOUNT, &*fs_key)?;
 
     // Initialize database *before* committing auth state (HIGH-5: TOCTOU fix)
-    state.init_db(&*db_key)?;
+    state.init_db(&db_key)?;
 
     // Only transition to Unlocked after DB init succeeds
     let mut auth = state.auth.lock().unwrap();
-    *auth = AuthState::Unlocked {
-        db_key,
-        fs_key,
-    };
+    *auth = AuthState::Unlocked { db_key, fs_key };
 
     Ok(words)
 }

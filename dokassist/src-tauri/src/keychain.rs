@@ -3,15 +3,17 @@ use crate::constants::{DB_KEY_ACCOUNT, FS_KEY_ACCOUNT};
 use crate::error::AppError;
 
 #[cfg(target_os = "macos")]
-use security_framework::passwords::{delete_generic_password, get_generic_password, set_generic_password};
-#[cfg(target_os = "macos")]
-use security_framework_sys::base::errSecItemNotFound;
+use security_framework::passwords::{
+    delete_generic_password, get_generic_password, set_generic_password,
+};
 #[cfg(target_os = "macos")]
 use security_framework_sys::access_control::kSecAttrAccessibleWhenUnlockedThisDeviceOnly;
 #[cfg(target_os = "macos")]
+use security_framework_sys::base::errSecItemNotFound;
+#[cfg(target_os = "macos")]
 use security_framework_sys::item::{
-    kSecAttrAccount, kSecAttrService, kSecClass, kSecClassGenericPassword,
-    kSecReturnAttributes, kSecValueData,
+    kSecAttrAccount, kSecAttrService, kSecClass, kSecClassGenericPassword, kSecReturnAttributes,
+    kSecValueData,
 };
 // kSecAttrAccessible (the dict key for accessibility level) is not exported by
 // security_framework_sys, so we declare it directly from Security.framework.
@@ -19,8 +21,6 @@ use security_framework_sys::item::{
 extern "C" {
     static kSecAttrAccessible: core_foundation_sys::string::CFStringRef;
 }
-#[cfg(target_os = "macos")]
-use security_framework_sys::keychain_item::{SecItemAdd, SecItemCopyMatching, SecItemDelete};
 #[cfg(target_os = "macos")]
 use core_foundation::base::{CFRelease, CFTypeRef, TCFType};
 #[cfg(target_os = "macos")]
@@ -31,6 +31,8 @@ use core_foundation::data::CFData;
 use core_foundation::dictionary::CFDictionary;
 #[cfg(target_os = "macos")]
 use core_foundation::string::CFString;
+#[cfg(target_os = "macos")]
+use security_framework_sys::keychain_item::{SecItemAdd, SecItemCopyMatching, SecItemDelete};
 
 /// Store a key in macOS Keychain with device-bound protection.
 ///
@@ -82,7 +84,8 @@ pub fn store_key(service: &str, account: &str, key: &[u8]) -> Result<(), AppErro
         ),
         (
             unsafe { CFString::wrap_under_get_rule(kSecAttrAccessible) },
-            unsafe { CFString::wrap_under_get_rule(kSecAttrAccessibleWhenUnlockedThisDeviceOnly) }.as_CFType(),
+            unsafe { CFString::wrap_under_get_rule(kSecAttrAccessibleWhenUnlockedThisDeviceOnly) }
+                .as_CFType(),
         ),
     ]);
 
@@ -171,8 +174,7 @@ pub fn keys_exist(service: &str) -> Result<bool, AppError> {
         ]);
 
         let mut result: CFTypeRef = std::ptr::null();
-        let status =
-            unsafe { SecItemCopyMatching(query.as_concrete_TypeRef(), &mut result) };
+        let status = unsafe { SecItemCopyMatching(query.as_concrete_TypeRef(), &mut result) };
 
         // Release the returned attributes dictionary (if any).
         if !result.is_null() {

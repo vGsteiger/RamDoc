@@ -40,10 +40,7 @@ fn lfs_pointer_url(filename: &str) -> Option<&'static str> {
 /// oid sha256:<64-char-hex>
 /// size <bytes>
 /// ```
-async fn fetch_lfs_sha256(
-    client: &reqwest::Client,
-    pointer_url: &str,
-) -> Result<String, AppError> {
+async fn fetch_lfs_sha256(client: &reqwest::Client, pointer_url: &str) -> Result<String, AppError> {
     let response = client
         .get(pointer_url)
         .send()

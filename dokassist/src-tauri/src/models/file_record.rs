@@ -27,7 +27,14 @@ pub fn create_file_record(
     conn.execute(
         "INSERT INTO files (id, patient_id, filename, vault_path, mime_type, size_bytes)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        rusqlite::params![id, patient_id, filename, vault_path, mime_type, size_bytes as i64],
+        rusqlite::params![
+            id,
+            patient_id,
+            filename,
+            vault_path,
+            mime_type,
+            size_bytes as i64
+        ],
     )?;
 
     get_file_record(conn, &id)

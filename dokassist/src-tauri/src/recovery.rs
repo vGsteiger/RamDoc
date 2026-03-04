@@ -114,9 +114,7 @@ fn derive_keys_from_entropy(entropy: &[u8; 32]) -> Result<([u8; 32], [u8; 32]), 
 /// Returns `(mnemonic_words, db_key, fs_key)` and writes a 1-byte vault marker
 /// to `vault_path`. The marker's existence signals "app initialized" to `state.rs`;
 /// its version byte enables future vault-format migrations.
-pub fn create_recovery(
-    vault_path: &Path,
-) -> Result<(Vec<String>, [u8; 32], [u8; 32]), AppError> {
+pub fn create_recovery(vault_path: &Path) -> Result<(Vec<String>, [u8; 32], [u8; 32]), AppError> {
     // Generate 256 bits of entropy for a 24-word mnemonic
     let mut entropy = [0u8; 32];
     rand::rng().fill(&mut entropy);
@@ -132,7 +130,7 @@ pub fn create_recovery(
     entropy.zeroize();
 
     // Write 1-byte vault marker (signals "app initialized" to state.rs)
-    fs::write(vault_path, &[VAULT_VERSION]).map_err(|e| {
+    fs::write(vault_path, [VAULT_VERSION]).map_err(|e| {
         AppError::Filesystem(std::io::Error::new(
             e.kind(),
             format!("Failed to write recovery vault: {}", e),
@@ -248,7 +246,7 @@ mod tests {
         let vault_path = temp_dir.path().join("recovery.vault");
 
         // Create a valid vault marker
-        std::fs::write(&vault_path, &[VAULT_VERSION]).unwrap();
+        std::fs::write(&vault_path, [VAULT_VERSION]).unwrap();
 
         // Try to recover with invalid mnemonic words
         let invalid_words = vec!["invalid".to_string(); 24];
@@ -282,7 +280,7 @@ mod tests {
         let vault_path = temp_dir.path().join("recovery.vault");
 
         // Write a vault with an unknown version byte
-        std::fs::write(&vault_path, &[0xFFu8]).unwrap();
+        std::fs::write(&vault_path, [0xFFu8]).unwrap();
 
         // Generate valid mnemonic
         let mut entropy = [0u8; 32];

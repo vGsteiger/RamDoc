@@ -108,8 +108,7 @@ impl LlmEngine {
             .map_err(|e| AppError::Llm(format!("Tokenization failed: {e}")))?;
 
         // 2. Context (4 096-token window)
-        let ctx_params =
-            LlamaContextParams::default().with_n_ctx(NonZeroU32::new(4096));
+        let ctx_params = LlamaContextParams::default().with_n_ctx(NonZeroU32::new(4096));
         let mut ctx = model
             .new_context(&self.backend, ctx_params)
             .map_err(|e| AppError::Llm(format!("Failed to create context: {e}")))?;
