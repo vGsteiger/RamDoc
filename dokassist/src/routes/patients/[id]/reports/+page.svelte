@@ -1,20 +1,21 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import { onMount } from 'svelte';
-  import { listReports, deleteReport, type Report } from '$lib/api';
+  import { listReports, deleteReport, parseError, type Report, type AppError } from '$lib/api';
+  import ErrorDisplay from '$lib/components/ErrorDisplay.svelte';
 
   $: patientId = $page.params.id;
   let reports: Report[] = [];
   let loading = true;
-  let error = '';
+  let error: AppError | null = null;
 
   async function loadReports() {
     try {
       loading = true;
-      error = '';
+      error = null;
       reports = await listReports(patientId);
     } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
+      error = parseError(e);
     } finally {
       loading = false;
     }
@@ -28,7 +29,7 @@
       await deleteReport(reportId);
       await loadReports();
     } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
+      error = parseError(e);
     }
   }
 
@@ -74,9 +75,7 @@
   {#if loading}
     <div class="text-gray-400">Loading reports...</div>
   {:else if error}
-    <div class="p-4 bg-red-900/20 border border-red-500 rounded text-red-400">
-      Error: {error}
-    </div>
+    <ErrorDisplay {error} showDetails={true} />
   {:else if reports.length === 0}
     <div class="text-center py-12">
       <p class="text-gray-400 mb-4">No reports yet.</p>
