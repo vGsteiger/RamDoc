@@ -37,11 +37,12 @@ const RECOMMENDED = {
   reason: 'Unter 16 GB RAM: Phi-4 Mini für minimale Ressourcen',
 };
 
-// Helper: mock the two onMount invoke calls for a "not loaded" machine.
+// Helper: mock the three onMount invoke calls for a "not loaded" machine.
 function setupNotLoaded() {
   mockInvoke
-    .mockResolvedValueOnce(NOT_LOADED)  // get_engine_status
-    .mockResolvedValueOnce(RECOMMENDED); // get_recommended_model
+    .mockResolvedValueOnce(NOT_LOADED)   // get_engine_status
+    .mockResolvedValueOnce(RECOMMENDED)  // get_recommended_model
+    .mockResolvedValueOnce('0.1.0');     // get_app_version
 }
 
 beforeEach(() => {
@@ -170,6 +171,7 @@ describe('Settings — "Load existing" button', () => {
     mockInvoke
       .mockResolvedValueOnce(NOT_LOADED)
       .mockResolvedValueOnce(RECOMMENDED)
+      .mockResolvedValueOnce('0.1.0')     // getAppVersion
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce(LOADED);
 
@@ -186,6 +188,7 @@ describe('Settings — "Load existing" button', () => {
     mockInvoke
       .mockResolvedValueOnce(NOT_LOADED)
       .mockResolvedValueOnce(RECOMMENDED)
+      .mockResolvedValueOnce('0.1.0')     // getAppVersion
       .mockRejectedValueOnce(new Error('File not found'));
 
     render(Settings);
@@ -201,6 +204,7 @@ describe('Settings — "Load existing" button', () => {
     mockInvoke
       .mockResolvedValueOnce(NOT_LOADED)
       .mockResolvedValueOnce(RECOMMENDED)
+      .mockResolvedValueOnce('0.1.0')     // getAppVersion
       .mockRejectedValueOnce({ code: 'LLM_ERROR', message: 'Model binary missing' });
 
     render(Settings);
@@ -217,6 +221,7 @@ describe('Settings — "Load existing" button', () => {
     mockInvoke
       .mockResolvedValueOnce(NOT_LOADED)
       .mockResolvedValueOnce(RECOMMENDED)
+      .mockResolvedValueOnce('0.1.0')     // getAppVersion
       .mockReturnValueOnce(new Promise((res) => { resolveLoad = () => res(undefined); }));
 
     render(Settings);
@@ -277,6 +282,7 @@ describe('Settings — "Download & Load" button', () => {
     mockInvoke
       .mockResolvedValueOnce(NOT_LOADED)
       .mockResolvedValueOnce(RECOMMENDED)
+      .mockResolvedValueOnce('0.1.0')     // getAppVersion
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce(LOADED);
@@ -295,6 +301,7 @@ describe('Settings — "Download & Load" button', () => {
     mockInvoke
       .mockResolvedValueOnce(NOT_LOADED)
       .mockResolvedValueOnce(RECOMMENDED)
+      .mockResolvedValueOnce('0.1.0')     // getAppVersion
       .mockReturnValueOnce(new Promise((res) => { resolveDownload = () => res(undefined); }));
 
     render(Settings);
@@ -330,6 +337,7 @@ describe('Settings — "Download & Load" button', () => {
     mockInvoke
       .mockResolvedValueOnce(NOT_LOADED)
       .mockResolvedValueOnce(RECOMMENDED)
+      .mockResolvedValueOnce('0.1.0')     // getAppVersion
       .mockRejectedValueOnce(new Error('Network error'));
 
     render(Settings);

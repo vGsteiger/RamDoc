@@ -31,6 +31,9 @@ pub enum AppError {
 
     #[error("Too many recovery attempts. Try again in {0} seconds.")]
     RateLimited(u64),
+
+    #[error("Update error: {0}")]
+    Update(String),
 }
 
 impl AppError {
@@ -47,6 +50,7 @@ impl AppError {
             AppError::NotFound(_) => "NOT_FOUND",
             AppError::Validation(_) => "VALIDATION_ERROR",
             AppError::RateLimited(_) => "RATE_LIMITED",
+            AppError::Update(_) => "UPDATE_ERROR",
         }
     }
 }

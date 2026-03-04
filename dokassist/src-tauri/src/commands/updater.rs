@@ -1,6 +1,6 @@
 use crate::error::AppError;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter};
 use tauri_plugin_updater::UpdaterExt;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,7 +29,7 @@ pub async fn check_for_updates(app: AppHandle) -> Result<UpdateInfo, AppError> {
                     latest_version: Some(update.version.clone()),
                     update_available: true,
                     body: update.body.clone(),
-                    date: update.date.clone(),
+                    date: update.date.map(|d| d.to_string()),
                 })
             }
             Ok(None) => {
@@ -44,18 +44,15 @@ pub async fn check_for_updates(app: AppHandle) -> Result<UpdateInfo, AppError> {
             }
             Err(e) => {
                 log::error!("Failed to check for updates: {}", e);
-                Err(AppError {
-                    code: "UPDATE_CHECK_FAILED".to_string(),
-                    message: format!("Failed to check for updates: {}", e),
-                })
+                Err(AppError::Update(format!(
+                    "Failed to check for updates: {}",
+                    e
+                )))
             }
         },
         Err(e) => {
             log::error!("Failed to get updater: {}", e);
-            Err(AppError {
-                code: "UPDATER_NOT_AVAILABLE".to_string(),
-                message: format!("Updater not available: {}", e),
-            })
+            Err(AppError::Update(format!("Updater not available: {}", e)))
         }
     }
 }
@@ -92,31 +89,22 @@ pub async fn install_update(app: AppHandle) -> Result<(), AppError> {
                     }
                     Err(e) => {
                         log::error!("Failed to download and install update: {}", e);
-                        Err(AppError {
-                            code: "UPDATE_INSTALL_FAILED".to_string(),
-                            message: format!("Failed to install update: {}", e),
-                        })
+                        Err(AppError::Update(format!("Failed to install update: {}", e)))
                     }
                 }
             }
-            Ok(None) => Err(AppError {
-                code: "NO_UPDATE_AVAILABLE".to_string(),
-                message: "No update available".to_string(),
-            }),
+            Ok(None) => Err(AppError::Update("No update available".to_string())),
             Err(e) => {
                 log::error!("Failed to check for updates: {}", e);
-                Err(AppError {
-                    code: "UPDATE_CHECK_FAILED".to_string(),
-                    message: format!("Failed to check for updates: {}", e),
-                })
+                Err(AppError::Update(format!(
+                    "Failed to check for updates: {}",
+                    e
+                )))
             }
         },
         Err(e) => {
             log::error!("Failed to get updater: {}", e);
-            Err(AppError {
-                code: "UPDATER_NOT_AVAILABLE".to_string(),
-                message: format!("Updater not available: {}", e),
-            })
+            Err(AppError::Update(format!("Updater not available: {}", e)))
         }
     }
 }
