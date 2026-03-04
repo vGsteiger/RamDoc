@@ -2,8 +2,9 @@
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
-  import { getReport, updateReport, deleteReport, type Report, type UpdateReport } from '$lib/api';
+  import { getReport, updateReport, deleteReport, parseError, type Report, type UpdateReport, type AppError } from '$lib/api';
   import ReportEditor from '$lib/components/ReportEditor.svelte';
+  import ErrorDisplay from '$lib/components/ErrorDisplay.svelte';
 
   $: patientId = $page.params.id;
   $: reportId = $page.params.reportId;
@@ -12,16 +13,16 @@
   let editMode = false;
   let editableContent = '';
   let loading = true;
-  let error = '';
+  let error: AppError | null = null;
 
   async function loadReport() {
     try {
       loading = true;
-      error = '';
+      error = null;
       report = await getReport(reportId);
       editableContent = report.content;
     } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
+      error = parseError(e);
     } finally {
       loading = false;
     }
@@ -31,13 +32,13 @@
     if (!report) return;
 
     try {
-      error = '';
+      error = null;
       const input: UpdateReport = { content: editableContent };
       await updateReport(reportId, input);
       report.content = editableContent;
       editMode = false;
     } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
+      error = parseError(e);
     }
   }
 
@@ -49,7 +50,7 @@
       await deleteReport(reportId);
       await goto(`/patients/${patientId}/reports`);
     } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
+      error = parseError(e);
     }
   }
 
@@ -86,9 +87,7 @@
     {#if loading}
       <div class="text-gray-400">Loading report...</div>
     {:else if error}
-      <div class="p-4 bg-red-900/20 border border-red-500 rounded text-red-400">
-        Error: {error}
-      </div>
+      <ErrorDisplay {error} showDetails={true} />
     {:else if report}
       <div class="mb-6">
         <div class="flex items-center justify-between mb-4">

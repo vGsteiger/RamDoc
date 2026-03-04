@@ -9,11 +9,12 @@ import type { AuthStatus } from "./stores/auth";
 export interface AppError {
   code: string;
   message: string;
+  ref: string;
 }
 
 /**
  * Parse an unknown catch-block value into an {@link AppError}.
- * Tauri rejects with `{ code, message }` objects; any other shape is wrapped
+ * Tauri rejects with `{ code, message, ref }` objects; any other shape is wrapped
  * into an `UNKNOWN_ERROR`.
  */
 export function parseError(err: unknown): AppError {
@@ -23,9 +24,57 @@ export function parseError(err: unknown): AppError {
     "code" in err &&
     "message" in err
   ) {
-    return err as AppError;
+    const ref = "ref" in err ? String(err.ref) : "UNKNOWN_REF";
+    return {
+      code: String(err.code),
+      message: String(err.message),
+      ref
+    };
   }
-  return { code: "UNKNOWN_ERROR", message: String(err) };
+  return {
+    code: "UNKNOWN_ERROR",
+    message: String(err),
+    ref: "UNKNOWN_REF"
+  };
+}
+
+/**
+ * Format an AppError for display to the user.
+ * Includes the error message and a shareable error reference for support.
+ */
+export function formatError(err: AppError): string {
+  return `${err.message}\n\nError Reference: ${err.ref}\n(Share this reference with support if you need help)`;
+}
+
+/**
+ * Get a user-friendly error message based on the error code.
+ * Falls back to the original message if no specific handling exists.
+ */
+export function getUserFriendlyMessage(err: AppError): string {
+  switch (err.code) {
+    case "REPORT_NOT_FOUND":
+      return "The requested report could not be found. It may have been deleted.";
+    case "PATIENT_NOT_FOUND":
+      return "The requested patient could not be found. They may have been deleted.";
+    case "SESSION_NOT_FOUND":
+      return "The requested session could not be found. It may have been deleted.";
+    case "FILE_NOT_FOUND":
+      return "The requested file could not be found. It may have been deleted.";
+    case "REPORT_VALIDATION_ERROR":
+      return "The report data is invalid. Please check your input and try again.";
+    case "PATIENT_VALIDATION_ERROR":
+      return "The patient data is invalid. Please check your input and try again.";
+    case "DB_UNIQUE_CONSTRAINT":
+      return "This record already exists in the database.";
+    case "DB_FOREIGN_KEY":
+      return "Cannot complete this operation because it references data that doesn't exist.";
+    case "AUTH_REQUIRED":
+      return "Please unlock the application to continue.";
+    case "LLM_ERROR":
+      return "An error occurred while generating content with the language model.";
+    default:
+      return err.message;
+  }
 }
 
 export async function checkAuth(): Promise<AuthStatus> {

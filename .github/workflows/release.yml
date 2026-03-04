@@ -1,20 +1,23 @@
 name: Release
 
 on:
-  push:
-    branches:
-      - main
+  pull_request:
+    types: [closed]
 
 permissions:
   contents: write
   pull-requests: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.event.pull_request.number }}
   cancel-in-progress: false
 
 jobs:
   semantic-release:
+    # Only run when the PR was actually merged and has the autorelease label
+    if: >
+      github.event.pull_request.merged == true &&
+      contains(github.event.pull_request.labels.*.name, 'autorelease')
     runs-on: ubuntu-latest
     outputs:
       new_version: ${{ steps.version.outputs.new_version }}
@@ -26,6 +29,7 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
 
       - name: Get latest tag
         id: get_tag
@@ -38,53 +42,11 @@ jobs:
           echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
           echo "Latest tag: $LATEST_TAG"
 
-      - name: Get merged PR info
-        id: pr_info
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Use GitHub commits API to find PRs associated with this exact commit
-          PR_DATA=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" \
-            --header "Accept: application/vnd.github.groot-preview+json")
-
-          if [ "$(echo "$PR_DATA" | jq length)" -eq 0 ]; then
-            echo "No merged PR found for this commit, skipping release"
-            echo "should_release=false" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-
-          PR_NUMBER=$(echo "$PR_DATA" | jq -r '.[0].number')
-          PR_TITLE=$(echo "$PR_DATA" | jq -r '.[0].title')
-          PR_MERGED=$(echo "$PR_DATA" | jq -r '.[0].merged_at')
-          # Extract label names as a JSON array
-          PR_LABELS=$(echo "$PR_DATA" | jq -c '[.[0].labels[].name]')
-
-          if [ "$PR_MERGED" = "null" ] || [ -z "$PR_MERGED" ]; then
-            echo "PR #$PR_NUMBER is not merged, skipping release"
-            echo "should_release=false" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-
-          # Only release PRs that explicitly opt in with the autorelease label
-          if ! echo "$PR_LABELS" | jq -e '. | contains(["autorelease"])' > /dev/null 2>&1; then
-            echo "PR #$PR_NUMBER does not have 'autorelease' label, skipping release"
-            echo "should_release=false" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-
-          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
-          echo "pr_title=$PR_TITLE" >> $GITHUB_OUTPUT
-          echo "pr_labels=$PR_LABELS" >> $GITHUB_OUTPUT
-          echo "should_release=true" >> $GITHUB_OUTPUT
-          echo "Found PR #$PR_NUMBER: $PR_TITLE"
-          echo "Labels: $PR_LABELS"
-
       - name: Determine version bump
         id: version
-        if: steps.pr_info.outputs.should_release == 'true'
         env:
-          PR_TITLE: ${{ steps.pr_info.outputs.pr_title }}
-          PR_LABELS: ${{ steps.pr_info.outputs.pr_labels }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
         run: |
           LATEST_TAG="${{ steps.get_tag.outputs.latest_tag }}"
           VERSION=${LATEST_TAG#v}
@@ -93,7 +55,14 @@ jobs:
           # Default to patch bump
           BUMP_TYPE="patch"
 
-          # Check PR labels first (highest priority) - use exact matching
+          # Check for skip-release label first
+          if echo "$PR_LABELS" | jq -e '. | contains(["skip-release"])' > /dev/null 2>&1; then
+            echo "should_release=false" >> $GITHUB_OUTPUT
+            echo "Skipping release due to skip-release label"
+            exit 0
+          fi
+
+          # Check PR labels (highest priority) - use exact matching
           if echo "$PR_LABELS" | jq -e '. | contains(["major"])' > /dev/null 2>&1; then
             BUMP_TYPE="major"
           elif echo "$PR_LABELS" | jq -e '. | contains(["minor"])' > /dev/null 2>&1; then
@@ -109,13 +78,6 @@ jobs:
             elif echo "$PR_TITLE" | grep -qiE "^(fix|perf|refactor|docs|style|test|chore)(\(.+\))?:"; then
               BUMP_TYPE="patch"
             fi
-          fi
-
-          # Check for skip-release label
-          if echo "$PR_LABELS" | jq -e '. | contains(["skip-release"])' > /dev/null 2>&1; then
-            echo "should_release=false" >> $GITHUB_OUTPUT
-            echo "Skipping release due to skip-release label"
-            exit 0
           fi
 
           # Bump version based on type
@@ -141,7 +103,7 @@ jobs:
           echo "New version: v$NEW_VERSION (bump: $BUMP_TYPE)"
 
       - name: Update version in source files
-        if: steps.pr_info.outputs.should_release == 'true' && steps.version.outputs.should_release == 'true'
+        if: steps.version.outputs.should_release == 'true'
         run: |
           NEW_VERSION="${{ steps.version.outputs.new_version }}"
           git config user.name "github-actions[bot]"
@@ -161,7 +123,7 @@ jobs:
           git push origin HEAD:main
 
       - name: Create and push tag
-        if: steps.pr_info.outputs.should_release == 'true' && steps.version.outputs.should_release == 'true'
+        if: steps.version.outputs.should_release == 'true'
         run: |
           NEW_VERSION="${{ steps.version.outputs.new_version }}"
           git config user.name "github-actions[bot]"
@@ -170,15 +132,15 @@ jobs:
           git push origin "v$NEW_VERSION"
 
       - name: Create GitHub Release
-        if: steps.pr_info.outputs.should_release == 'true' && steps.version.outputs.should_release == 'true'
+        if: steps.version.outputs.should_release == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           NEW_VERSION="${{ steps.version.outputs.new_version }}"
           BUMP_TYPE="${{ steps.version.outputs.bump_type }}"
           LATEST_TAG="${{ steps.get_tag.outputs.latest_tag }}"
-          PR_TITLE="${{ steps.pr_info.outputs.pr_title }}"
-          PR_NUMBER="${{ steps.pr_info.outputs.pr_number }}"
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          PR_NUMBER="${{ github.event.pull_request.number }}"
 
           RELEASE_NOTES="## Changes in v$NEW_VERSION
 

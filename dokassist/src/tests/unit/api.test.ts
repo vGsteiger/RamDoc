@@ -332,13 +332,13 @@ describe('resetApp', () => {
 
 describe('parseError', () => {
   it('returns code and message from a structured Tauri error object', () => {
-    const err = { code: 'KEYCHAIN_ERROR', message: 'Keychain error: item not found' };
-    expect(parseError(err)).toEqual({ code: 'KEYCHAIN_ERROR', message: 'Keychain error: item not found' });
+    const err = { code: 'KEYCHAIN_ERROR', message: 'Keychain error: item not found', ref: 'SOME_REF' };
+    expect(parseError(err)).toEqual({ code: 'KEYCHAIN_ERROR', message: 'Keychain error: item not found', ref: 'SOME_REF' });
   });
 
   it('wraps a plain string in UNKNOWN_ERROR', () => {
     const result = parseError('something went wrong');
-    expect(result).toEqual({ code: 'UNKNOWN_ERROR', message: 'something went wrong' });
+    expect(result).toEqual({ code: 'UNKNOWN_ERROR', message: 'something went wrong', ref: 'UNKNOWN_REF' });
   });
 
   it('wraps an Error instance in UNKNOWN_ERROR', () => {

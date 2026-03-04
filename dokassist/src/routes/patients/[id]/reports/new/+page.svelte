@@ -3,11 +3,12 @@
   import { goto } from '$app/navigation';
   import { onMount, onDestroy } from 'svelte';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-  import { getEngineStatus, getPatient, createReport, type LlmEngineStatus, type CreateReport, type Patient } from '$lib/api';
+  import { getEngineStatus, getPatient, createReport, parseError, type LlmEngineStatus, type CreateReport, type Patient, type AppError } from '$lib/api';
   import { invoke } from '@tauri-apps/api/core';
   import ReportTypeSelector from '$lib/components/ReportTypeSelector.svelte';
   import ReportStream from '$lib/components/ReportStream.svelte';
   import ReportEditor from '$lib/components/ReportEditor.svelte';
+  import ErrorDisplay from '$lib/components/ErrorDisplay.svelte';
 
   $: patientId = $page.params.id;
 
@@ -18,7 +19,7 @@
   let editableContent = '';
   let isGenerating = false;
   let isEditing = false;
-  let error = '';
+  let error: AppError | null = null;
   let llmStatus: LlmEngineStatus | null = null;
 
   let unlistenChunk: UnlistenFn | null = null;
@@ -28,18 +29,26 @@
     try {
       llmStatus = await getEngineStatus();
     } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
+      error = parseError(e);
     }
   }
 
   async function generateReport() {
     if (!selectedType) {
-      error = 'Please select a report type';
+      error = {
+        code: 'VALIDATION_ERROR',
+        message: 'Please select a report type',
+        ref: 'VALIDATION'
+      };
       return;
     }
 
     if (!llmStatus?.is_loaded) {
-      error = 'LLM model not loaded. Please configure the model in Settings.';
+      error = {
+        code: 'LLM_ERROR',
+        message: 'LLM model not loaded. Please configure the model in Settings.',
+        ref: 'LLM_NOT_LOADED'
+      };
       return;
     }
 
@@ -55,7 +64,7 @@
       }
 
       isGenerating = true;
-      error = '';
+      error = null;
       generatedContent = '';
 
       // Set up event listeners for streaming
@@ -85,7 +94,7 @@
         systemPrompt: null
       });
     } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
+      error = parseError(e);
       isGenerating = false;
       // Unlisten on error
       if (unlistenChunk) {
@@ -113,7 +122,7 @@
       await createReport(input);
       await goto(`/patients/${patientId}/reports`);
     } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
+      error = parseError(e);
     }
   }
 
@@ -124,7 +133,7 @@
     generatedContent = '';
     editableContent = '';
     isEditing = false;
-    error = '';
+    error = null;
   }
 
   function formatPatientContext(p: Patient): string {
@@ -172,11 +181,7 @@
       </a>
     </div>
 
-    {#if error}
-      <div class="mb-6 p-4 bg-red-900/20 border border-red-500 rounded text-red-400">
-        {error}
-      </div>
-    {/if}
+    <ErrorDisplay {error} showDetails={true} />
 
     {#if !llmStatus?.is_loaded && !error}
       <div class="p-6 bg-yellow-900/20 border border-yellow-500 rounded">

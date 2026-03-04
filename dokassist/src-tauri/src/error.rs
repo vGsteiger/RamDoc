@@ -38,34 +38,93 @@ pub enum AppError {
 
 impl AppError {
     /// Machine-readable error code sent to the frontend.
-    pub fn code(&self) -> &'static str {
+    /// Format: CATEGORY_SPECIFIC_DETAIL for easier debugging and support.
+    pub fn code(&self) -> String {
         match self {
-            AppError::Keychain(_) => "KEYCHAIN_ERROR",
-            AppError::Crypto(_) => "CRYPTO_ERROR",
-            AppError::Database(_) => "DATABASE_ERROR",
-            AppError::Filesystem(_) => "FILESYSTEM_ERROR",
-            AppError::Llm(_) => "LLM_ERROR",
-            AppError::AuthRequired => "AUTH_REQUIRED",
-            AppError::InvalidRecoveryPhrase => "INVALID_RECOVERY_PHRASE",
-            AppError::NotFound(_) => "NOT_FOUND",
-            AppError::Validation(_) => "VALIDATION_ERROR",
-            AppError::RateLimited(_) => "RATE_LIMITED",
-            AppError::Update(_) => "UPDATE_ERROR",
+            AppError::Keychain(_) => "KEYCHAIN_ERROR".to_string(),
+            AppError::Crypto(_) => "CRYPTO_ERROR".to_string(),
+            AppError::Database(e) => {
+                // Generate specific database error codes based on the error message
+                let msg = e.to_string().to_lowercase();
+                if msg.contains("unique") {
+                    "DB_UNIQUE_CONSTRAINT".to_string()
+                } else if msg.contains("foreign key") {
+                    "DB_FOREIGN_KEY".to_string()
+                } else if msg.contains("not null") {
+                    "DB_NOT_NULL".to_string()
+                } else {
+                    "DATABASE_ERROR".to_string()
+                }
+            }
+            AppError::Filesystem(_) => "FILESYSTEM_ERROR".to_string(),
+            AppError::Llm(_) => "LLM_ERROR".to_string(),
+            AppError::AuthRequired => "AUTH_REQUIRED".to_string(),
+            AppError::InvalidRecoveryPhrase => "INVALID_RECOVERY_PHRASE".to_string(),
+            AppError::NotFound(resource) => {
+                // Generate specific NOT_FOUND codes based on the resource
+                if resource.to_lowercase().contains("report") {
+                    "REPORT_NOT_FOUND".to_string()
+                } else if resource.to_lowercase().contains("patient") {
+                    "PATIENT_NOT_FOUND".to_string()
+                } else if resource.to_lowercase().contains("session") {
+                    "SESSION_NOT_FOUND".to_string()
+                } else if resource.to_lowercase().contains("file") {
+                    "FILE_NOT_FOUND".to_string()
+                } else {
+                    "NOT_FOUND".to_string()
+                }
+            }
+            AppError::Validation(msg) => {
+                // Generate specific validation error codes
+                let lower = msg.to_lowercase();
+                if lower.contains("report") {
+                    "REPORT_VALIDATION_ERROR".to_string()
+                } else if lower.contains("patient") {
+                    "PATIENT_VALIDATION_ERROR".to_string()
+                } else {
+                    "VALIDATION_ERROR".to_string()
+                }
+            }
+            AppError::RateLimited(_) => "RATE_LIMITED".to_string(),
+            AppError::Update(_) => "UPDATE_ERROR".to_string(),
         }
+    }
+
+    /// Generate a unique error reference ID for tracking purposes.
+    /// Format: ERR-{TIMESTAMP}-{CODE_HASH}
+    pub fn error_ref(&self) -> String {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        let code = self.code();
+        let msg = self.to_string();
+
+        // Create a simple hash from the error code and message
+        let hash: u32 = code
+            .bytes()
+            .chain(msg.bytes())
+            .fold(0u32, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u32));
+
+        format!("ERR-{}-{:08X}", timestamp, hash)
     }
 }
 
-/// Serialises as `{ "code": "KEYCHAIN_ERROR", "message": "Keychain error: ..." }`
-/// so the frontend can branch on the machine-readable `code` field.
+/// Serialises as `{ "code": "REPORT_NOT_FOUND", "message": "Not found: report", "ref": "ERR-1234567890-ABCD1234" }`
+/// so the frontend can branch on the machine-readable `code` field and users can share the `ref` for support.
 impl serde::Serialize for AppError {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
         use serde::ser::SerializeStruct;
-        let mut s = serializer.serialize_struct("AppError", 2)?;
-        s.serialize_field("code", self.code())?;
+        let mut s = serializer.serialize_struct("AppError", 3)?;
+        s.serialize_field("code", &self.code())?;
         s.serialize_field("message", &self.to_string())?;
+        s.serialize_field("ref", &self.error_ref())?;
         s.end()
     }
 }
