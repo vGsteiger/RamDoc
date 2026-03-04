@@ -10,8 +10,6 @@ permissions:
 jobs:
   auto-label:
     runs-on: ubuntu-latest
-    # Skip Dependabot PRs — dependency bumps are not releasable app changes
-    if: github.actor != 'dependabot[bot]'
     steps:
       - name: Add default labels to PR
         env:
