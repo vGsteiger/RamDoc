@@ -1,4 +1,5 @@
 pub mod agent;
+pub mod chunk;
 pub mod download;
 pub mod embed;
 pub mod engine;

@@ -105,6 +105,15 @@ pub fn run() {
             commands::chat::delete_chat_session,
             commands::chat::get_chat_messages,
             commands::chat::rename_chat_session,
+            commands::literature::upload_literature,
+            commands::literature::get_literature_by_id,
+            commands::literature::list_all_literature,
+            commands::literature::update_literature_metadata,
+            commands::literature::delete_literature_document,
+            commands::literature::download_literature,
+            commands::literature::process_literature,
+            commands::literature::search_literature,
+            commands::literature::get_literature_document_chunks,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {

@@ -402,6 +402,43 @@ pub fn save_embedding(conn: &Connection, file_id: &str, vector: &[f32]) -> Resul
     Ok(())
 }
 
+/// Persist a chunk embedding as a little-endian f32 BLOB.
+/// Replaces any existing embedding for the same chunk_id (UPSERT).
+pub fn save_chunk_embedding(
+    conn: &Connection,
+    chunk_id: &str,
+    vector: &[f32],
+) -> Result<(), AppError> {
+    let blob = vec_to_blob(vector);
+    conn.execute(
+        r#"
+        INSERT INTO chunk_embeddings (chunk_id, vector)
+        VALUES (?1, ?2)
+        ON CONFLICT(chunk_id) DO UPDATE SET vector = excluded.vector,
+                                           created_at = datetime('now')
+        "#,
+        rusqlite::params![chunk_id, blob],
+    )?;
+    Ok(())
+}
+
+/// Load all chunk embeddings.  Returns `(chunk_id, vector)` pairs.
+pub fn load_chunk_embeddings(conn: &Connection) -> Result<Vec<(String, Vec<f32>)>, AppError> {
+    let mut stmt = conn.prepare("SELECT chunk_id, vector FROM chunk_embeddings")?;
+    let rows = stmt
+        .query_map([], |row| {
+            let chunk_id: String = row.get(0)?;
+            let blob: Vec<u8> = row.get(1)?;
+            Ok((chunk_id, blob))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(rows
+        .into_iter()
+        .map(|(id, blob)| (id, blob_to_vec(&blob)))
+        .collect())
+}
+
 /// Load all stored embeddings.  Returns `(file_id, vector)` pairs.
 pub fn load_embeddings(conn: &Connection) -> Result<Vec<(String, Vec<f32>)>, AppError> {
     let mut stmt = conn.prepare("SELECT file_id, vector FROM document_embeddings")?;
@@ -558,6 +595,75 @@ pub fn hybrid_search(
 
     merged.truncate(limit as usize);
     Ok(merged)
+}
+
+// ── Literature chunk search ──────────────────────────────────────────────────
+
+#[derive(Debug, Serialize)]
+pub struct LiteratureChunkResult {
+    pub chunk_id: String,
+    pub literature_id: String,
+    pub filename: String,
+    pub chunk_index: i32,
+    pub content: String,
+    pub similarity: f64,
+}
+
+/// Semantic search over literature document chunks.
+///
+/// Returns the top-k most similar chunks from literature documents.
+/// Used for RAG retrieval in chat and report generation.
+pub fn search_literature_chunks(
+    conn: &Connection,
+    query_vec: &[f32],
+    limit: usize,
+) -> Result<Vec<LiteratureChunkResult>, AppError> {
+    let embeddings = load_chunk_embeddings(conn)?;
+    if embeddings.is_empty() {
+        return Ok(vec![]);
+    }
+
+    // Score and rank all chunks
+    let mut scored: Vec<(f32, String)> = embeddings
+        .into_iter()
+        .map(|(chunk_id, vec)| (cosine_similarity(query_vec, &vec), chunk_id))
+        .collect();
+    scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+    scored.truncate(limit);
+
+    // Fetch chunk metadata and filter for literature chunks only
+    let mut results = Vec::with_capacity(scored.len());
+    for (sim, chunk_id) in scored {
+        let result = conn.query_row(
+            r#"
+            SELECT dc.id, dc.literature_id, dc.chunk_index, dc.content, l.filename
+            FROM document_chunks dc
+            JOIN literature l ON dc.literature_id = l.id
+            WHERE dc.id = ?1
+            "#,
+            [&chunk_id],
+            |row| {
+                Ok(LiteratureChunkResult {
+                    chunk_id: row.get(0)?,
+                    literature_id: row.get(1)?,
+                    chunk_index: row.get(2)?,
+                    content: row.get(3)?,
+                    filename: row.get(4)?,
+                    similarity: sim as f64,
+                })
+            },
+        );
+
+        match result {
+            Ok(r) => results.push(r),
+            Err(rusqlite::Error::QueryReturnedNoRows) => {
+                // Chunk might be from a patient file, or deleted — skip
+            }
+            Err(e) => return Err(AppError::Database(e)),
+        }
+    }
+
+    Ok(results)
 }
 
 /// Normalize AHV queries: "7561234567897" and "756.1234.5678.97" both match

@@ -77,6 +77,7 @@ fn build_system_prompt(scope: &AgentScope, patient_context: Option<&str>) -> Str
             "get_calendar_events(start?: string, end?: string, patient_id?: string) - Listet Therapiesitzungen. Datum im Format YYYY-MM-DD.\n",
             "create_calendar_event(patient_id: string, date: string, session_type: string, duration_minutes: number, notes?: string) - Erstellt eine neue Therapiesitzung.\n",
             "search(query: string) - Volltextsuche über Patienten, Diagnosen, Sitzungen und Berichte.\n",
+            "search_literature(query: string) - Semantische Suche in Fachliteratur (z.B. Medikamentenrichtlinien, Behandlungsleitlinien). Gibt relevante Textausschnitte zurück.\n",
             "write_report(patient_id: string, report_type: string, session_notes: string) - Generiert einen klinischen Bericht. report_type: Befundbericht | Verlaufsbericht | Ueberweisungsschreiben.",
         ),
         AgentScope::Global => concat!(
@@ -85,6 +86,7 @@ fn build_system_prompt(scope: &AgentScope, patient_context: Option<&str>) -> Str
             "get_calendar_events(start?: string, end?: string, patient_id?: string) - Listet Therapiesitzungen. Datum im Format YYYY-MM-DD.\n",
             "create_calendar_event(patient_id: string, date: string, session_type: string, duration_minutes: number, notes?: string) - Erstellt eine neue Therapiesitzung.\n",
             "search(query: string) - Volltextsuche über Patienten, Diagnosen, Sitzungen und Berichte.\n",
+            "search_literature(query: string) - Semantische Suche in Fachliteratur (z.B. Medikamentenrichtlinien, Behandlungsleitlinien). Gibt relevante Textausschnitte zurück.\n",
             "write_report(patient_id: string, report_type: string, session_notes: string) - Generiert einen klinischen Bericht. report_type: Befundbericht | Verlaufsbericht | Ueberweisungsschreiben.",
         ),
     };
