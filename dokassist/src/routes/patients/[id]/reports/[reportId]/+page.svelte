@@ -3,7 +3,7 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { getReport, updateReport, deleteReport, parseError, type Report, type UpdateReport, type AppError } from '$lib/api';
-  import ReportEditor from '$lib/components/ReportEditor.svelte';
+  import EnhancedReportEditor from '$lib/components/EnhancedReportEditor.svelte';
   import ErrorDisplay from '$lib/components/ErrorDisplay.svelte';
 
   $: patientId = $page.params.id;
@@ -146,7 +146,7 @@
 
       {#if editMode}
         <div class="h-[600px]">
-          <ReportEditor bind:content={editableContent} />
+          <EnhancedReportEditor bind:content={editableContent} />
         </div>
       {:else}
         <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">

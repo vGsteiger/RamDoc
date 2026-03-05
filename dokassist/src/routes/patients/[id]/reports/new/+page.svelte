@@ -1,24 +1,34 @@
 <script lang="ts">
-  import { page } from '$app/stores';
-  import { goto } from '$app/navigation';
-  import { onMount, onDestroy } from 'svelte';
-  import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-  import { getEngineStatus, getPatient, createReport, parseError, type LlmEngineStatus, type CreateReport, type Patient, type AppError } from '$lib/api';
-  import { invoke } from '@tauri-apps/api/core';
-  import ReportTypeSelector from '$lib/components/ReportTypeSelector.svelte';
-  import ReportStream from '$lib/components/ReportStream.svelte';
-  import ReportEditor from '$lib/components/ReportEditor.svelte';
-  import ErrorDisplay from '$lib/components/ErrorDisplay.svelte';
+  import { page } from "$app/stores";
+  import { goto } from "$app/navigation";
+  import { onMount, onDestroy } from "svelte";
+  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+  import {
+    getEngineStatus,
+    getPatient,
+    createReport,
+    parseError,
+    type LlmEngineStatus,
+    type CreateReport,
+    type Patient,
+    type AppError,
+  } from "$lib/api";
+  import { invoke } from "@tauri-apps/api/core";
+  import ReportTypeSelector from "$lib/components/ReportTypeSelector.svelte";
+  import ReportStream from "$lib/components/ReportStream.svelte";
+  import EnhancedReportEditor from "$lib/components/EnhancedReportEditor.svelte";
+  import ErrorDisplay from "$lib/components/ErrorDisplay.svelte";
 
   $: patientId = $page.params.id;
 
-  let selectedType = '';
-  let sessionNotes = '';
-  let patientContext = '';
-  let generatedContent = '';
-  let editableContent = '';
+  let selectedType = "";
+  let sessionNotes = "";
+  let patientContext = "";
+  let generatedContent = "";
+  let editableContent = "";
   let isGenerating = false;
   let isEditing = false;
+  let createMode: "generate" | "direct" | null = null;
   let error: AppError | null = null;
   let llmStatus: LlmEngineStatus | null = null;
 
@@ -36,18 +46,19 @@
   async function generateReport() {
     if (!selectedType) {
       error = {
-        code: 'VALIDATION_ERROR',
-        message: 'Please select a report type',
-        ref: 'VALIDATION'
+        code: "VALIDATION_ERROR",
+        message: "Please select a report type",
+        ref: "VALIDATION",
       };
       return;
     }
 
     if (!llmStatus?.is_loaded) {
       error = {
-        code: 'LLM_ERROR',
-        message: 'LLM model not loaded. Please configure the model in Settings.',
-        ref: 'LLM_NOT_LOADED'
+        code: "LLM_ERROR",
+        message:
+          "LLM model not loaded. Please configure the model in Settings.",
+        ref: "LLM_NOT_LOADED",
       };
       return;
     }
@@ -65,14 +76,14 @@
 
       isGenerating = true;
       error = null;
-      generatedContent = '';
+      generatedContent = "";
 
       // Set up event listeners for streaming
-      unlistenChunk = await listen<string>('report-chunk', (event) => {
+      unlistenChunk = await listen<string>("report-chunk", (event) => {
         generatedContent += event.payload;
       });
 
-      unlistenDone = await listen('report-done', () => {
+      unlistenDone = await listen("report-done", () => {
         isGenerating = false;
         editableContent = stripThinkTags(generatedContent);
         isEditing = true;
@@ -87,11 +98,11 @@
         }
       });
 
-      await invoke('generate_report', {
+      await invoke("generate_report", {
         patientContext,
         reportType: selectedType,
         sessionNotes,
-        systemPrompt: null
+        systemPrompt: null,
       });
     } catch (e) {
       error = parseError(e);
@@ -116,7 +127,7 @@
         content: editableContent,
         model_name: llmStatus?.model_name || null,
         prompt_hash: null,
-        session_ids: null
+        session_ids: null,
       };
 
       await createReport(input);
@@ -127,18 +138,19 @@
   }
 
   function reset() {
-    selectedType = '';
-    sessionNotes = '';
-    patientContext = '';
-    generatedContent = '';
-    editableContent = '';
+    selectedType = "";
+    sessionNotes = "";
+    patientContext = "";
+    generatedContent = "";
+    editableContent = "";
     isEditing = false;
+    createMode = null;
     error = null;
   }
 
   function stripThinkTags(content: string): string {
-    const THINK_START = '<think>';
-    const THINK_END = '</think>';
+    const THINK_START = "<think>";
+    const THINK_END = "</think>";
 
     if (content.startsWith(THINK_START)) {
       const endIdx = content.indexOf(THINK_END);
@@ -147,6 +159,20 @@
       }
     }
     return content;
+  }
+
+  function startDirectCreation() {
+    if (!selectedType) {
+      error = {
+        code: "VALIDATION_ERROR",
+        message: "Bitte wählen Sie einen Berichtstyp",
+        ref: "VALIDATION",
+      };
+      return;
+    }
+    createMode = "direct";
+    isEditing = true;
+    editableContent = "";
   }
 
   function formatPatientContext(p: Patient): string {
@@ -162,7 +188,7 @@
     if (p.gp_name) lines.push(`Hausarzt: ${p.gp_name}`);
     if (p.gp_address) lines.push(`Hausarzt-Adresse: ${p.gp_address}`);
     if (p.notes) lines.push(`Notizen: ${p.notes}`);
-    return lines.join('\n');
+    return lines.join("\n");
   }
 
   onMount(async () => {
@@ -172,7 +198,7 @@
       patientContext = formatPatientContext(patient);
     } catch (e) {
       // Non-fatal: user can still fill in patient context manually
-      console.error('Failed to load patient data:', e);
+      console.error("Failed to load patient data:", e);
     }
   });
 
@@ -185,113 +211,201 @@
 <div class="p-8">
   <div class="max-w-5xl mx-auto">
     <div class="flex items-center justify-between mb-6">
-      <h2 class="text-2xl font-bold text-gray-100">Generate Report</h2>
+      <h2 class="text-2xl font-bold text-gray-100">Bericht erstellen</h2>
       <a
         href={`/patients/${patientId}/reports`}
         class="text-sm text-gray-400 hover:text-gray-300"
       >
-        ← Back to Reports
+        ← Zurück zu Berichten
       </a>
     </div>
 
     <ErrorDisplay {error} showDetails={true} />
 
-    {#if !llmStatus?.is_loaded && !error}
-      <div class="p-6 bg-yellow-900/20 border border-yellow-500 rounded">
-        <h3 class="text-lg font-semibold text-yellow-400 mb-2">LLM Not Configured</h3>
-        <p class="text-gray-300 mb-4">
-          You need to download and load a language model before generating reports.
-        </p>
-        <a
-          href="/settings"
-          class="inline-block px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-        >
-          Go to Settings
-        </a>
-      </div>
-    {:else if !isEditing}
+    {#if !isEditing}
       <div class="space-y-6">
         <ReportTypeSelector bind:selectedType />
 
-        <div>
-          <label class="block text-sm font-medium text-gray-300 mb-2">
-            Patientenkontext
-            <span class="text-gray-500">(automatisch befüllt, bearbeitbar)</span>
-          </label>
-          <textarea
-            bind:value={patientContext}
-            class="w-full h-32 px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 focus:outline-none focus:border-blue-500"
-            placeholder="Patientendaten werden geladen..."
-          />
-        </div>
-
-        <div>
-          <label class="block text-sm font-medium text-gray-300 mb-2">
-            Session Notes
-            <span class="text-gray-500">(optional)</span>
-          </label>
-          <textarea
-            bind:value={sessionNotes}
-            class="w-full h-48 px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 focus:outline-none focus:border-blue-500 font-mono text-sm"
-            placeholder="Enter session notes or select sessions to include..."
-          />
-        </div>
-
-        {#if isGenerating}
-          <div class="space-y-4">
-            <h3 class="text-lg font-semibold text-gray-100">Generated Report</h3>
-            <ReportStream content={generatedContent} isStreaming={isGenerating} />
+        {#if !llmStatus?.is_loaded && !error}
+          <div class="p-6 bg-yellow-900/20 border border-yellow-500 rounded">
+            <h3 class="text-lg font-semibold text-yellow-400 mb-2">
+              LLM nicht konfiguriert
+            </h3>
+            <p class="text-gray-300 mb-4">
+              Um Berichte mit LLM zu generieren, müssen Sie ein Sprachmodell
+              herunterladen und laden.
+            </p>
+            <a
+              href="/settings"
+              class="inline-block px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+            >
+              Zu den Einstellungen
+            </a>
           </div>
         {/if}
 
-        <div class="flex justify-end space-x-4">
-          <button
-            on:click={reset}
-            class="px-6 py-2 bg-gray-700 text-gray-300 rounded hover:bg-gray-600 transition-colors"
-            disabled={isGenerating}
-          >
-            Reset
-          </button>
-          <button
-            on:click={generateReport}
-            disabled={!selectedType || isGenerating}
-            class="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isGenerating ? 'Generating...' : 'Generate Report'}
-          </button>
-        </div>
+        <!-- Creation mode selection -->
+        {#if selectedType && !isGenerating}
+          <div class="bg-gray-800 border border-gray-700 rounded-lg p-6">
+            <h3 class="text-lg font-semibold text-gray-100 mb-4">
+              Wie möchten Sie den Bericht erstellen?
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <button
+                on:click={() => {
+                  createMode = "generate";
+                }}
+                disabled={!llmStatus?.is_loaded}
+                class="p-6 bg-gray-900 border-2 border-gray-700 rounded-lg hover:border-blue-500 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <div class="flex items-center gap-3 mb-2">
+                  <svg
+                    class="w-6 h-6 text-blue-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M13 10V3L4 14h7v7l9-11h-7z"
+                    ></path>
+                  </svg>
+                  <h4 class="text-lg font-semibold text-gray-100">
+                    Mit LLM generieren
+                  </h4>
+                </div>
+                <p class="text-sm text-gray-400">
+                  Lassen Sie den Bericht vom KI-Modell basierend auf
+                  Patientenkontext und Sitzungsnotizen generieren.
+                </p>
+              </button>
+
+              <button
+                on:click={startDirectCreation}
+                class="p-6 bg-gray-900 border-2 border-gray-700 rounded-lg hover:border-green-500 transition-colors text-left"
+              >
+                <div class="flex items-center gap-3 mb-2">
+                  <svg
+                    class="w-6 h-6 text-green-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                    ></path>
+                  </svg>
+                  <h4 class="text-lg font-semibold text-gray-100">
+                    Direkt schreiben
+                  </h4>
+                </div>
+                <p class="text-sm text-gray-400">
+                  Erstellen Sie den Bericht manuell mit dem erweiterten Editor
+                  und optionalen LLM-Vorschlägen.
+                </p>
+              </button>
+            </div>
+          </div>
+        {/if}
+
+        {#if createMode === "generate"}
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">
+              Patientenkontext
+              <span class="text-gray-500"
+                >(automatisch befüllt, bearbeitbar)</span
+              >
+            </label>
+            <textarea
+              bind:value={patientContext}
+              class="w-full h-32 px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 focus:outline-none focus:border-blue-500"
+              placeholder="Patientendaten werden geladen..."
+            />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">
+              Sitzungsnotizen
+              <span class="text-gray-500">(optional)</span>
+            </label>
+            <textarea
+              bind:value={sessionNotes}
+              class="w-full h-48 px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 focus:outline-none focus:border-blue-500 font-mono text-sm"
+              placeholder="Geben Sie Sitzungsnotizen ein oder wählen Sie Sitzungen aus..."
+            />
+          </div>
+
+          {#if isGenerating}
+            <div class="space-y-4">
+              <h3 class="text-lg font-semibold text-gray-100">
+                Generierter Bericht
+              </h3>
+              <ReportStream
+                content={generatedContent}
+                isStreaming={isGenerating}
+              />
+            </div>
+          {/if}
+
+          <div class="flex justify-end space-x-4">
+            <button
+              on:click={reset}
+              class="px-6 py-2 bg-gray-700 text-gray-300 rounded hover:bg-gray-600 transition-colors"
+              disabled={isGenerating}
+            >
+              Zurücksetzen
+            </button>
+            <button
+              on:click={generateReport}
+              disabled={!selectedType || isGenerating}
+              class="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isGenerating ? "Generiere..." : "Bericht generieren"}
+            </button>
+          </div>
+        {/if}
       </div>
     {:else}
       <div class="space-y-6">
         <div>
           <h3 class="text-lg font-semibold text-gray-100 mb-2">
-            Edit Generated Report
+            {createMode === "generate"
+              ? "Generierten Bericht bearbeiten"
+              : "Neuen Bericht schreiben"}
           </h3>
           <p class="text-sm text-gray-400 mb-4">
-            Review and edit the generated report before saving.
+            {createMode === "generate"
+              ? "Überprüfen und bearbeiten Sie den generierten Bericht vor dem Speichern."
+              : "Schreiben Sie den Bericht mit LLM-Vorschlägen zur Unterstützung."}
           </p>
         </div>
 
-        <div class="h-[500px]">
-          <ReportEditor bind:content={editableContent} />
+        <div class="h-[600px]">
+          <EnhancedReportEditor bind:content={editableContent} />
         </div>
 
         <div class="flex justify-end space-x-4">
           <button
             on:click={() => {
               isEditing = false;
-              generatedContent = '';
-              editableContent = '';
+              generatedContent = "";
+              editableContent = "";
+              createMode = null;
             }}
             class="px-6 py-2 bg-gray-700 text-gray-300 rounded hover:bg-gray-600 transition-colors"
           >
-            Regenerate
+            {createMode === "generate" ? "Neu generieren" : "Abbrechen"}
           </button>
           <button
             on:click={saveReport}
             class="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
           >
-            Save Report
+            Bericht speichern
           </button>
         </div>
       </div>

@@ -222,3 +222,48 @@ pub async fn generate_report(
     let _ = app.emit("report-done", ());
     Ok(report)
 }
+
+/// Improve or provide suggestions for a piece of text with streaming output.
+/// Emits `"text-improvement-chunk"` events for each token and `"text-improvement-done"` on completion.
+/// `system_prompt`: optional override; falls back to the built-in German prompt.
+#[tauri::command]
+pub async fn improve_text(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    text: String,
+    instruction: String,
+    system_prompt: Option<String>,
+) -> Result<String, AppError> {
+    // Check authentication before processing patient data
+    check_auth(&state)?;
+
+    // Acquire the engine handle under the mutex, but do not run inference while holding the lock.
+    let engine = {
+        let llm = state.llm.lock().unwrap();
+        let engine = llm
+            .as_ref()
+            .ok_or_else(|| AppError::Llm("Model not loaded".to_string()))?;
+        // Clone the Arc so we can release the lock before inference.
+        Arc::clone(engine)
+    };
+
+    // Resolve the system prompt into an owned String we can move into the blocking task.
+    let prompt: String = system_prompt.unwrap_or_else(|| SYSTEM_PROMPT_DE.to_string());
+
+    // Run the potentially long-running text improvement on a blocking thread.
+    let app_clone = app.clone();
+    let improved = tokio::task::spawn_blocking(move || {
+        llm::improve_text_streaming_with_prompt(
+            &app_clone,
+            &engine,
+            &text,
+            &instruction,
+            &prompt,
+        )
+    })
+    .await
+    .map_err(|e| AppError::Llm(format!("spawn_blocking error: {e}")))??;
+
+    let _ = app.emit("text-improvement-done", ());
+    Ok(improved)
+}

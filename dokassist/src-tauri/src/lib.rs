@@ -89,6 +89,7 @@ pub fn run() {
             commands::llm::load_model,
             commands::llm::extract_file_metadata,
             commands::llm::generate_report,
+            commands::llm::improve_text,
             commands::reports::create_report,
             commands::reports::get_report,
             commands::reports::list_reports,
