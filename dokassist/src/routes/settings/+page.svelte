@@ -174,7 +174,7 @@
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `DokAssist_Export_${new Date().toISOString().split('T')[0]}.zip`;
+      a.download = `RamDoc_Export_${new Date().toISOString().split('T')[0]}.zip`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

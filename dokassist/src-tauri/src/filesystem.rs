@@ -369,6 +369,129 @@ pub fn patient_vault_size(base_dir: &Path, patient_id: &str) -> Result<u64, AppE
     Ok(total_size)
 }
 
+/// Validate a literature vault path: must be "literature/<uuid>.enc"
+fn validate_literature_path(vault_path: &str) -> Result<(), AppError> {
+    let parts: Vec<&str> = vault_path.split('/').collect();
+    if parts.len() != 2 || parts[0] != "literature" || !parts[1].ends_with(".enc") {
+        return Err(AppError::Validation(
+            "Literature path must be in format literature/<uuid>.enc".to_string(),
+        ));
+    }
+    let file_stem = parts[1].trim_end_matches(".enc");
+    if uuid::Uuid::parse_str(file_stem).is_err() {
+        return Err(AppError::Validation(
+            "Invalid UUID in literature vault path".to_string(),
+        ));
+    }
+    // No path traversal possible with these constraints (no `..`, no absolute paths)
+    let path = Path::new(vault_path);
+    for component in path.components() {
+        if !matches!(component, Component::Normal(_)) {
+            return Err(AppError::Validation(format!(
+                "Invalid path component in literature path: {}",
+                vault_path
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Encrypt and store a literature file. Returns vault-relative path "literature/<uuid>.enc".
+pub fn store_literature_file(
+    base_dir: &Path,
+    fs_key: &[u8; 32],
+    plaintext: &[u8],
+) -> Result<String, AppError> {
+    if plaintext.len() > MAX_FILE_SIZE {
+        return Err(AppError::Validation(format!(
+            "File size {} bytes exceeds maximum allowed size of {} bytes",
+            plaintext.len(),
+            MAX_FILE_SIZE
+        )));
+    }
+
+    let lit_vault = base_dir.join(VAULT_DIR).join("literature");
+    if !lit_vault.exists() {
+        fs::create_dir_all(&lit_vault)?;
+    }
+
+    // CRIT-2: Verify literature vault didn't escape via symlinks
+    let canonical_vault_base = base_dir
+        .join(VAULT_DIR)
+        .canonicalize()
+        .map_err(AppError::Filesystem)?;
+    let canonical_lit_vault = lit_vault.canonicalize().map_err(|e| {
+        AppError::Filesystem(std::io::Error::new(
+            e.kind(),
+            format!("Failed to canonicalize literature vault: {}", e),
+        ))
+    })?;
+    if !canonical_lit_vault.starts_with(&canonical_vault_base) {
+        return Err(AppError::Validation(
+            "Literature vault path escapes vault boundary".to_string(),
+        ));
+    }
+
+    let file_uuid = Uuid::now_v7();
+    let encrypted_filename = format!("{}.enc", file_uuid);
+    let vault_relative_path = format!("literature/{}", encrypted_filename);
+
+    let encrypted_data = crypto::encrypt(fs_key, plaintext)?;
+    let full_path = canonical_lit_vault.join(&encrypted_filename);
+    fs::write(&full_path, encrypted_data)?;
+
+    Ok(vault_relative_path)
+}
+
+/// Decrypt a literature file from the vault.
+pub fn read_literature_file(
+    base_dir: &Path,
+    fs_key: &[u8; 32],
+    vault_path: &str,
+) -> Result<Vec<u8>, AppError> {
+    validate_literature_path(vault_path)?;
+
+    let full_path = base_dir.join(VAULT_DIR).join(vault_path);
+    let canonical_vault_base = base_dir
+        .join(VAULT_DIR)
+        .canonicalize()
+        .map_err(AppError::Filesystem)?;
+    assert_within_vault(&canonical_vault_base, &full_path).map_err(|e| {
+        match full_path.exists() {
+            false => AppError::NotFound(vault_path.to_string()),
+            true => e,
+        }
+    })?;
+
+    let encrypted_data = fs::read(&full_path).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            AppError::NotFound(vault_path.to_string())
+        } else {
+            AppError::Filesystem(e)
+        }
+    })?;
+
+    crypto::decrypt(fs_key, &encrypted_data)
+}
+
+/// Delete a literature file from the vault.
+pub fn delete_literature_file(base_dir: &Path, vault_path: &str) -> Result<(), AppError> {
+    validate_literature_path(vault_path)?;
+
+    let full_path = base_dir.join(VAULT_DIR).join(vault_path);
+    if !full_path.exists() {
+        return Err(AppError::NotFound(vault_path.to_string()));
+    }
+
+    let canonical_vault_base = base_dir
+        .join(VAULT_DIR)
+        .canonicalize()
+        .map_err(AppError::Filesystem)?;
+    assert_within_vault(&canonical_vault_base, &full_path)?;
+
+    fs::remove_file(&full_path).map_err(AppError::Filesystem)
+}
+
 /// Sanitize a filename to make it safe for filesystem storage.
 fn sanitize_filename(filename: &str) -> String {
     filename

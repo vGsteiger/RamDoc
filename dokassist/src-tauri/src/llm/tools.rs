@@ -13,6 +13,7 @@ use crate::search;
 use rusqlite::Connection;
 use serde_json::{json, Value};
 use std::sync::Arc;
+use tauri::Manager;
 
 /// Dispatch a tool call, returning a JSON Value.
 pub fn dispatch_tool(
@@ -184,10 +185,11 @@ fn tool_search_literature(
 
     // Get embed engine from app state
     let state = app.state::<crate::state::AppState>();
-    let embed_engine = state.try_get_embed()
-        .ok_or_else(|| AppError::Validation(
-            "Embedding engine not yet loaded. Literature search is unavailable.".to_string()
-        ))?;
+    let embed_engine = state.try_get_embed().ok_or_else(|| {
+        AppError::Validation(
+            "Embedding engine not yet loaded. Literature search is unavailable.".to_string(),
+        )
+    })?;
 
     // Embed the query (CPU-bound operation)
     let query_vec = embed_engine

@@ -1,9 +1,7 @@
 //! Tauri commands for literature document management
 
-use crate::crypto::CryptoEngine;
-use crate::database::DbPool;
 use crate::error::AppError;
-use crate::filesystem::FileSystem;
+use crate::filesystem;
 use crate::llm::chunk::{create_literature_chunks, get_literature_chunks, ChunkConfig};
 use crate::llm::embed::EmbedEngine;
 use crate::models::literature::{
@@ -11,14 +9,27 @@ use crate::models::literature::{
     CreateLiterature, Literature, UpdateLiterature,
 };
 use crate::search::{save_chunk_embedding, search_literature_chunks, LiteratureChunkResult};
-use std::sync::Arc;
+use crate::state::{AppState, AuthState};
+use rusqlite;
 use tauri::Emitter;
+
+fn get_fs_key(state: &AppState) -> Result<[u8; 32], AppError> {
+    let auth = state.auth.lock().map_err(|_| {
+        AppError::Database(rusqlite::Error::SqliteFailure(
+            rusqlite::ffi::Error::new(1),
+            Some("Auth state mutex poisoned".to_string()),
+        ))
+    })?;
+    match &*auth {
+        AuthState::Unlocked { fs_key, .. } => Ok(**fs_key),
+        _ => Err(AppError::AuthRequired),
+    }
+}
 
 /// Upload a literature document
 #[tauri::command]
 pub async fn upload_literature(
-    db: tauri::State<'_, DbPool>,
-    fs: tauri::State<'_, Arc<FileSystem>>,
+    state: tauri::State<'_, AppState>,
     filename: String,
     data: Vec<u8>,
     mime_type: String,
@@ -30,14 +41,11 @@ pub async fn upload_literature(
         ));
     }
 
-    // Generate vault path
-    let lit_id = uuid::Uuid::now_v7().to_string();
-    let vault_path = format!("literature/{}.enc", lit_id);
+    filesystem::init_vault(&state.data_dir)?;
+    let fs_key = get_fs_key(&state)?;
+    let vault_path = filesystem::store_literature_file(&state.data_dir, &fs_key, &data)?;
 
-    // Write encrypted file to vault
-    fs.write_encrypted(&vault_path, &data)?;
-
-    // Create database record
+    let db = state.get_db()?;
     let conn = db.conn()?;
     let literature = create_literature(
         &conn,
@@ -56,9 +64,10 @@ pub async fn upload_literature(
 /// Get a literature document by ID
 #[tauri::command]
 pub async fn get_literature_by_id(
-    db: tauri::State<'_, DbPool>,
+    state: tauri::State<'_, AppState>,
     id: String,
 ) -> Result<Literature, AppError> {
+    let db = state.get_db()?;
     let conn = db.conn()?;
     get_literature(&conn, &id)
 }
@@ -66,10 +75,11 @@ pub async fn get_literature_by_id(
 /// List all literature documents
 #[tauri::command]
 pub async fn list_all_literature(
-    db: tauri::State<'_, DbPool>,
+    state: tauri::State<'_, AppState>,
     limit: Option<u32>,
     offset: Option<u32>,
 ) -> Result<Vec<Literature>, AppError> {
+    let db = state.get_db()?;
     let conn = db.conn()?;
     list_literature(&conn, limit.unwrap_or(100), offset.unwrap_or(0))
 }
@@ -77,10 +87,11 @@ pub async fn list_all_literature(
 /// Update literature metadata
 #[tauri::command]
 pub async fn update_literature_metadata(
-    db: tauri::State<'_, DbPool>,
+    state: tauri::State<'_, AppState>,
     id: String,
     description: Option<String>,
 ) -> Result<Literature, AppError> {
+    let db = state.get_db()?;
     let conn = db.conn()?;
     update_literature(&conn, &id, UpdateLiterature { description })
 }
@@ -88,20 +99,16 @@ pub async fn update_literature_metadata(
 /// Delete a literature document
 #[tauri::command]
 pub async fn delete_literature_document(
-    db: tauri::State<'_, DbPool>,
-    fs: tauri::State<'_, Arc<FileSystem>>,
+    state: tauri::State<'_, AppState>,
     id: String,
 ) -> Result<(), AppError> {
+    let db = state.get_db()?;
     let conn = db.conn()?;
 
-    // Get literature to find vault path
     let literature = get_literature(&conn, &id)?;
-
-    // Delete from database (cascades to chunks and embeddings)
     delete_literature(&conn, &id)?;
 
-    // Delete encrypted file from vault
-    fs.delete_file(&literature.vault_path)?;
+    filesystem::delete_literature_file(&state.data_dir, &literature.vault_path)?;
 
     Ok(())
 }
@@ -109,48 +116,55 @@ pub async fn delete_literature_document(
 /// Download a literature document
 #[tauri::command]
 pub async fn download_literature(
-    db: tauri::State<'_, DbPool>,
-    fs: tauri::State<'_, Arc<FileSystem>>,
+    state: tauri::State<'_, AppState>,
     id: String,
 ) -> Result<Vec<u8>, AppError> {
+    let db = state.get_db()?;
     let conn = db.conn()?;
     let literature = get_literature(&conn, &id)?;
-    let decrypted = fs.read_decrypted(&literature.vault_path)?;
-    Ok(decrypted)
+    drop(conn);
+    drop(db);
+
+    let fs_key = get_fs_key(&state)?;
+    filesystem::read_literature_file(&state.data_dir, &fs_key, &literature.vault_path)
 }
 
 /// Process a literature document (extract text, chunk, and embed)
 #[tauri::command]
 pub async fn process_literature(
-    db: tauri::State<'_, DbPool>,
-    fs: tauri::State<'_, Arc<FileSystem>>,
-    crypto: tauri::State<'_, Arc<CryptoEngine>>,
-    embed: tauri::State<'_, Arc<EmbedEngine>>,
+    state: tauri::State<'_, AppState>,
     app: tauri::AppHandle,
     id: String,
 ) -> Result<(), AppError> {
-    let conn = db.conn()?;
-    let literature = get_literature(&conn, &id)?;
+    let fs_key = get_fs_key(&state)?;
 
-    // Read and decrypt file
-    let decrypted = fs.read_decrypted(&literature.vault_path)?;
-
-    // Extract text based on mime type
-    let extracted_text = match literature.mime_type.as_str() {
-        "application/pdf" => {
-            let text = pdf_extract::extract_text_from_mem(&decrypted)
-                .map_err(|e| AppError::Validation(format!("PDF extraction failed: {}", e)))?;
-            text
-        }
-        "text/plain" => String::from_utf8(decrypted)
-            .map_err(|e| AppError::Validation(format!("UTF-8 decode failed: {}", e)))?,
-        _ => {
-            return Err(AppError::Validation(format!(
-                "Unsupported file type for processing: {}",
-                literature.mime_type
-            )));
-        }
+    let (literature, vault_path) = {
+        let db = state.get_db()?;
+        let conn = db.conn()?;
+        let lit = get_literature(&conn, &id)?;
+        let vp = lit.vault_path.clone();
+        (lit, vp)
     };
+
+    let data_dir = state.data_dir.clone();
+    let mime_type = literature.mime_type.clone();
+
+    // Decrypt and extract text (blocking I/O / CPU)
+    let extracted_text = tokio::task::spawn_blocking(move || -> Result<String, AppError> {
+        let decrypted = filesystem::read_literature_file(&data_dir, &fs_key, &vault_path)?;
+        match mime_type.as_str() {
+            "application/pdf" => pdf_extract::extract_text_from_mem(&decrypted)
+                .map_err(|e| AppError::Validation(format!("PDF extraction failed: {}", e))),
+            "text/plain" => String::from_utf8(decrypted)
+                .map_err(|e| AppError::Validation(format!("UTF-8 decode failed: {}", e))),
+            _ => Err(AppError::Validation(format!(
+                "Unsupported file type for processing: {}",
+                mime_type
+            ))),
+        }
+    })
+    .await
+    .map_err(|e| AppError::Llm(format!("Task join error: {}", e)))??;
 
     if extracted_text.trim().is_empty() {
         return Err(AppError::Validation(
@@ -160,25 +174,44 @@ pub async fn process_literature(
 
     // Chunk the text
     let config = ChunkConfig::default();
-    let chunks = create_literature_chunks(&conn, &id, &extracted_text, &config)?;
+    let chunks = {
+        let db = state.get_db()?;
+        let conn = db.conn()?;
+        create_literature_chunks(&conn, &id, &extracted_text, &config)?
+    };
 
-    // Generate and save embeddings for each chunk
-    // EmbedEngine operations are CPU-bound, run in blocking task
-    let embed_engine = embed.inner().clone();
-    for chunk in chunks {
-        let content = chunk.content.clone();
-        let chunk_id = chunk.id.clone();
-
-        let embedding = tokio::task::spawn_blocking(move || {
-            embed_engine.embed_one(&content)
+    // Get or create embed engine
+    let embed_engine = if let Some(engine) = state.try_get_embed() {
+        engine
+    } else {
+        let embed_cache_dir = state.data_dir.join("models").join("embed");
+        let (engine,) = tokio::task::spawn_blocking(move || -> Result<(EmbedEngine,), AppError> {
+            std::fs::create_dir_all(&embed_cache_dir)?;
+            Ok((EmbedEngine::new(&embed_cache_dir)?,))
         })
         .await
         .map_err(|e| AppError::Llm(format!("Task join error: {}", e)))??;
+        state.set_embed(engine)?;
+        state
+            .try_get_embed()
+            .ok_or_else(|| AppError::Llm("Embed engine unavailable".to_string()))?
+    };
 
+    // Generate and save embeddings for each chunk
+    for chunk in chunks {
+        let content = chunk.content.clone();
+        let chunk_id = chunk.id.clone();
+        let engine = embed_engine.clone();
+
+        let embedding = tokio::task::spawn_blocking(move || engine.embed_one(&content))
+            .await
+            .map_err(|e| AppError::Llm(format!("Task join error: {}", e)))??;
+
+        let db = state.get_db()?;
+        let conn = db.conn()?;
         save_chunk_embedding(&conn, &chunk_id, &embedding)?;
     }
 
-    // Emit event that processing is complete
     app.emit("literature-processed", &id)
         .map_err(|e| AppError::Llm(format!("Failed to emit event: {}", e)))?;
 
@@ -188,8 +221,7 @@ pub async fn process_literature(
 /// Search literature chunks using semantic similarity
 #[tauri::command]
 pub async fn search_literature(
-    db: tauri::State<'_, DbPool>,
-    embed: tauri::State<'_, Arc<EmbedEngine>>,
+    state: tauri::State<'_, AppState>,
     query: String,
     limit: Option<usize>,
 ) -> Result<Vec<LiteratureChunkResult>, AppError> {
@@ -197,16 +229,18 @@ pub async fn search_literature(
         return Ok(vec![]);
     }
 
-    // Embed the query (CPU-bound operation, run in blocking task)
-    let embed_engine = embed.inner().clone();
-    let query_clone = query.clone();
-    let query_vec = tokio::task::spawn_blocking(move || {
-        embed_engine.embed_one(&query_clone)
-    })
-    .await
-    .map_err(|e| AppError::Llm(format!("Task join error: {}", e)))??;
+    let embed_engine = state.try_get_embed().ok_or_else(|| {
+        AppError::Validation(
+            "Embedding engine not yet loaded. Literature search is unavailable.".to_string(),
+        )
+    })?;
 
-    // Search literature chunks
+    let query_clone = query.clone();
+    let query_vec = tokio::task::spawn_blocking(move || embed_engine.embed_one(&query_clone))
+        .await
+        .map_err(|e| AppError::Llm(format!("Task join error: {}", e)))??;
+
+    let db = state.get_db()?;
     let conn = db.conn()?;
     search_literature_chunks(&conn, &query_vec, limit.unwrap_or(5))
 }
@@ -214,9 +248,10 @@ pub async fn search_literature(
 /// Get all chunks for a literature document (for debugging/inspection)
 #[tauri::command]
 pub async fn get_literature_document_chunks(
-    db: tauri::State<'_, DbPool>,
+    state: tauri::State<'_, AppState>,
     id: String,
 ) -> Result<Vec<crate::llm::chunk::DocumentChunk>, AppError> {
+    let db = state.get_db()?;
     let conn = db.conn()?;
     get_literature_chunks(&conn, &id)
 }

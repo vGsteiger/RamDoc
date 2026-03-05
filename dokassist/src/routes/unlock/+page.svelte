@@ -66,7 +66,7 @@
   <div class="max-w-md w-full text-center space-y-8">
     <div>
       <h1 class="text-3xl font-bold text-gray-100 mb-2">Welcome Back</h1>
-      <p class="text-gray-400">Unlock DokAssist to continue</p>
+      <p class="text-gray-400">Unlock RamDoc to continue</p>
     </div>
 
     {#if error}

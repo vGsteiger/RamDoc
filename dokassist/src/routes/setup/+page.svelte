@@ -65,7 +65,7 @@
     {:else if !showConfirmation}
       <div class="space-y-6">
         <div class="text-center">
-          <h1 class="text-3xl font-bold text-gray-100 mb-2">Welcome to DokAssist</h1>
+          <h1 class="text-3xl font-bold text-gray-100 mb-2">Welcome to RamDoc</h1>
           <p class="text-gray-400">
             Please write down these 24 words in order. You'll need them to recover your account.
           </p>

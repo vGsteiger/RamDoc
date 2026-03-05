@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-cli/schema.json",
-  "productName": "DokAssist",
+  "productName": "RamDoc",
   "identifier": "ch.dokassist.app",
   "build": {
     "beforeBuildCommand": "pnpm build",
@@ -11,7 +11,7 @@
   "app": {
     "windows": [
       {
-        "title": "DokAssist",
+        "title": "RamDoc",
         "width": 1280,
         "height": 800,
         "minWidth": 900,

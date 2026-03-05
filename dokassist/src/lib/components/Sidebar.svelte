@@ -27,7 +27,7 @@
 
 <aside class="w-64 bg-gray-900 border-r border-gray-800 flex flex-col h-screen">
   <div class="p-6 border-b border-gray-800">
-    <h1 class="text-xl font-bold text-gray-100">DokAssist</h1>
+    <h1 class="text-xl font-bold text-gray-100">RamDoc</h1>
   </div>
 
   <nav class="flex-1 p-4">

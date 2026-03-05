@@ -99,6 +99,13 @@ fn run_migrations(conn: &Connection) -> Result<(), AppError> {
         conn.execute("PRAGMA user_version = 4;", [])?;
     }
 
+    // Migration 5: Literature management and document chunks for RAG
+    if version < 5 {
+        log::info!("Running migration 005: Literature and document chunks");
+        conn.execute_batch(include_str!("migrations/005_literature.sql"))?;
+        conn.execute("PRAGMA user_version = 5;", [])?;
+    }
+
     log::info!("Database migrations complete");
     Ok(())
 }
@@ -157,6 +164,6 @@ mod tests {
         let version: i32 = conn
             .query_row("PRAGMA user_version;", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 4);
+        assert_eq!(version, 5);
     }
 }
