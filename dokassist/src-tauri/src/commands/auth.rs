@@ -167,10 +167,8 @@ pub async fn reset_app(state: State<'_, AppState>) -> Result<(), AppError> {
         *auth = AuthState::FirstRun;
     }
     state.clear_db()?;
-    {
-        let mut llm_lock = state.llm.lock().unwrap();
-        *llm_lock = None;
-    }
+    state.clear_llm();
+    state.clear_embed();
 
     // 2. Delete keychain entries (ignore "not found" errors).
     let _ = keychain::delete_key(KEYCHAIN_SERVICE, DB_KEY_ACCOUNT);
@@ -198,8 +196,10 @@ pub async fn lock_app(state: State<'_, AppState>) -> Result<(), AppError> {
         *auth = AuthState::Locked;
         drop(auth);
 
-        // Clear database pool
+        // Clear database pool and ML resources
         state.clear_db()?;
+        state.clear_llm();
+        state.clear_embed();
     }
 
     Ok(())
