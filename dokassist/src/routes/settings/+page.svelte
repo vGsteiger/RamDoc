@@ -13,6 +13,7 @@
     checkForUpdates,
     installUpdate,
     getAppVersion,
+    exportAllPatientData,
     type LlmEngineStatus,
     type ModelChoice,
     type UpdateInfo,
@@ -140,6 +141,12 @@
   let resetting = $state(false);
   let resetError = $state("");
 
+  // Export state
+  let showExportConfirm = $state(false);
+  let exportInput = $state("");
+  let exporting = $state(false);
+  let exportError = $state("");
+
   async function handleReset() {
     resetting = true;
     resetError = "";
@@ -149,6 +156,37 @@
     } catch (e) {
       resetError = parseError(e).message;
       resetting = false;
+    }
+  }
+
+  async function handleExport() {
+    exporting = true;
+    exportError = "";
+    try {
+      const zipData = await exportAllPatientData();
+
+      // Convert number array to Uint8Array
+      const blob = new Blob([new Uint8Array(zipData)], {
+        type: "application/zip"
+      });
+
+      // Create download link
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `DokAssist_Export_${new Date().toISOString().split('T')[0]}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      // Reset the form
+      showExportConfirm = false;
+      exportInput = "";
+    } catch (e) {
+      exportError = parseError(e).message;
+    } finally {
+      exporting = false;
     }
   }
 </script>
@@ -371,6 +409,74 @@
 
   <section class="mt-10">
     <h2 class="text-lg font-semibold text-red-400 mb-4">Danger Zone</h2>
+
+    <!-- Emergency Export -->
+    <div class="border border-amber-600 rounded-lg p-4 mb-4">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <p class="text-sm font-medium text-gray-100">Emergency Export</p>
+          <p class="text-xs text-gray-400 mt-1">
+            Export all patient data to a ZIP file. Use this if you need to
+            migrate to another system or create a complete backup.
+          </p>
+        </div>
+        {#if !showExportConfirm}
+          <button
+            onclick={() => {
+              showExportConfirm = true;
+              exportInput = "";
+              exportError = "";
+            }}
+            class="px-4 py-2 text-sm rounded-lg bg-amber-700 hover:bg-amber-600 text-white transition-colors shrink-0"
+          >
+            Export All Data
+          </button>
+        {/if}
+      </div>
+
+      {#if showExportConfirm}
+        <div class="mt-4 border-t border-amber-700 pt-4">
+          <p class="text-sm text-amber-300 mb-3">
+            Type <strong>EXPORT</strong> to confirm. This will create a ZIP file
+            with all patient data including decrypted files.
+          </p>
+          <div class="flex gap-2">
+            <input
+              type="text"
+              bind:value={exportInput}
+              placeholder="EXPORT"
+              class="flex-1 px-3 py-2 text-sm rounded-lg bg-gray-900 border border-gray-600 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-amber-500"
+              onkeydown={(e) => {
+                if (e.key === "Enter" && exportInput === "EXPORT")
+                  handleExport();
+              }}
+            />
+            <button
+              onclick={handleExport}
+              disabled={exporting || exportInput !== "EXPORT"}
+              class="px-4 py-2 text-sm rounded-lg bg-amber-700 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors shrink-0"
+            >
+              {exporting ? "Exporting…" : "Confirm Export"}
+            </button>
+            <button
+              onclick={() => {
+                showExportConfirm = false;
+                exportInput = "";
+                exportError = "";
+              }}
+              class="px-4 py-2 text-sm rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-100 transition-colors shrink-0"
+            >
+              Cancel
+            </button>
+          </div>
+          {#if exportError}
+            <p class="text-xs text-red-400 mt-2">{exportError}</p>
+          {/if}
+        </div>
+      {/if}
+    </div>
+
+    <!-- Factory Reset -->
     <div class="border border-red-800 rounded-lg p-4">
       <div class="flex items-start justify-between gap-4">
         <div>
