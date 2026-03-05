@@ -18,20 +18,16 @@ jobs:
       - name: Check for hard blockers
         id: check
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
         run: |
           PR_NUMBER="${{ github.event.pull_request.number }}"
-
           PR_INFO=$(gh pr view "$PR_NUMBER" \
             --repo ${{ github.repository }} \
             --json mergeable,reviewDecision)
-
           MERGEABLE=$(echo "$PR_INFO" | jq -r '.mergeable')
           REVIEW=$(echo "$PR_INFO"   | jq -r '.reviewDecision')
-
           echo "Mergeable:       $MERGEABLE"
           echo "Review decision: $REVIEW"
-
           # MED-6: block on review rejections regardless of branch protection config.
           if [ "$REVIEW" = "CHANGES_REQUESTED" ]; then
             echo "blocked=true"  >> $GITHUB_OUTPUT
@@ -49,12 +45,13 @@ jobs:
       - name: Enable auto-merge
         if: steps.check.outputs.blocked == 'false'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
         run: |
           PR_NUMBER="${{ github.event.pull_request.number }}"
           echo "Enabling auto-merge for PR #$PR_NUMBER"
           # --auto tells GitHub to merge once all required status checks pass.
-          # This replaces the old check_suite/status re-trigger approach.
+          # Using GH_PAT ensures the merge is attributed to a user, not github-actions[bot],
+          # which allows downstream workflows (like release.yml) to trigger.
           gh pr merge "$PR_NUMBER" \
             --repo ${{ github.repository }} \
             --squash \
