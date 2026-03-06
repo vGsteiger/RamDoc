@@ -1,4 +1,8 @@
-# IbexDoc / DokAssist
+<p align="center">
+  <img src="dokassist/src-tauri/icons/icon.png" alt="RamDoc Logo" width="128" height="128">
+</p>
+
+# RamDoc / DokAssist
 
 [![Rust CI](https://github.com/vGsteiger/IbexDoc/actions/workflows/rust-ci.yml/badge.svg)](https://github.com/vGsteiger/IbexDoc/actions/workflows/rust-ci.yml)
 [![Frontend CI](https://github.com/vGsteiger/IbexDoc/actions/workflows/frontend-ci.yml/badge.svg)](https://github.com/vGsteiger/IbexDoc/actions/workflows/frontend-ci.yml)
@@ -8,7 +12,7 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 **DokAssist** is a 100% local, encrypted macOS application for Swiss patient record management.
-This repository (**IbexDoc**) hosts the full open-source code.
+This repository (**RamDoc**) hosts the full open-source code.
 
 ## Releases / Download
 
