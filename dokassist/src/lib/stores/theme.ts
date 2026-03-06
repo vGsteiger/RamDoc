@@ -19,7 +19,7 @@ function getInitialTheme(): ThemeMode {
 // Determine the actual theme to apply based on preference and system settings
 export function resolveTheme(preference: ThemeMode): 'light' | 'dark' {
   if (preference === 'system') {
-    if (!browser) return 'dark';
+    if (!browser || typeof window.matchMedia !== 'function') return 'dark';
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   }
   return preference;
@@ -43,7 +43,7 @@ function createThemeStore() {
 export const themePreference = createThemeStore();
 
 // Watch for system theme changes when in 'system' mode
-if (browser) {
+if (browser && typeof window.matchMedia === 'function') {
   const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
   mediaQuery.addEventListener('change', () => {
     // This will trigger reactivity in components subscribed to theme changes
