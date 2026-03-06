@@ -79,6 +79,15 @@ To enable these workflows, ensure the following repository settings are configur
 2. Under "Workflow permissions", ensure "Read and write permissions" is selected
 3. Check "Allow GitHub Actions to create and approve pull requests"
 
+### Optional: Personal Access Token (GH_PAT)
+For repositories with branch protection rules or rulesets that prevent the default GITHUB_TOKEN from pushing to main:
+1. Create a Personal Access Token (classic) with `repo` scope
+2. Go to **Settings** → **Secrets and variables** → **Actions**
+3. Add a new repository secret named `GH_PAT` with your token
+4. The release and auto-merge workflows will automatically use this token when available
+
+**Note:** The workflows use `secrets.GH_PAT || secrets.GITHUB_TOKEN` as a fallback pattern, so GH_PAT is optional but recommended for repositories with strict branch protection.
+
 ### Optional: Branch Protection
 For additional safety, consider enabling branch protection on `main`:
 1. Go to **Settings** → **Branches**
@@ -119,3 +128,9 @@ All PRs are automatically labeled with `autorelease` and `merge when ready` when
 - Check the [release workflow](https://github.com/vGsteiger/IbexDoc/actions/workflows/release.yml) in the Actions tab
 - Verify the PR was successfully merged to `main`
 - Check that the workflow has necessary permissions
+
+### Permission errors when pushing version commits or tags
+- This typically occurs when branch protection or rulesets prevent the default GITHUB_TOKEN from pushing
+- Add a `GH_PAT` secret (Personal Access Token with `repo` scope) to your repository
+- Ensure the PAT has an exception in your branch protection rules or rulesets
+- The release workflow will automatically use GH_PAT when available

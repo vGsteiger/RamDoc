@@ -96,3 +96,12 @@ git push origin v1.0.0
 - Check the Actions tab for detailed logs
 - Ensure all dependencies are properly configured
 - Verify Tauri build requirements are met on macOS runner
+
+### Permission errors when pushing version commits or tags
+If the release workflow fails with permission errors when trying to push the version commit or tag:
+- This typically occurs when branch protection rules or rulesets prevent the default GITHUB_TOKEN from pushing to main
+- Solution: Add a Personal Access Token (classic) with `repo` scope as a repository secret named `GH_PAT`
+- Go to **Settings** → **Secrets and variables** → **Actions** → **New repository secret**
+- Name: `GH_PAT`, Value: your personal access token
+- Ensure the PAT has an exception in your branch protection rules or rulesets
+- The release workflow will automatically use GH_PAT when available (falls back to GITHUB_TOKEN otherwise)
