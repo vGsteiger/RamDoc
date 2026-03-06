@@ -97,6 +97,8 @@ pub fn run() {
             commands::reports::list_reports,
             commands::reports::update_report,
             commands::reports::delete_report,
+            commands::reports::export_report_to_pdf,
+            commands::reports::export_report_to_docx,
             commands::updater::check_for_updates,
             commands::updater::install_update,
             commands::updater::get_app_version,
