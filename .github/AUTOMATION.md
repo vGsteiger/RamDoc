@@ -80,7 +80,7 @@ To enable these workflows, ensure the following repository settings are configur
 3. Check "Allow GitHub Actions to create and approve pull requests"
 
 ### Optional: Personal Access Token (GH_PAT)
-For repositories with branch protection rules or ruleset exceptions that prevent the default GITHUB_TOKEN from pushing to main:
+For repositories with branch protection rules or rulesets that prevent the default GITHUB_TOKEN from pushing to main:
 1. Create a Personal Access Token (classic) with `repo` scope
 2. Go to **Settings** → **Secrets and variables** → **Actions**
 3. Add a new repository secret named `GH_PAT` with your token
