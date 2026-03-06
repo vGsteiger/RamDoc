@@ -1,17 +1,19 @@
 //! Document chunking for RAG (Retrieval-Augmented Generation)
 //!
-//! Splits documents into overlapping chunks of approximately 500 words each
-//! to enable fine-grained semantic search and context retrieval.
+//! Splits documents into overlapping chunks of approximately 200 words each
+//! to enable fine-grained semantic search and context retrieval while staying
+//! within model context limits.
 
 use crate::error::AppError;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
-/// Target words per chunk (~512 tokens for most models)
-const TARGET_WORDS_PER_CHUNK: usize = 500;
+/// Target words per chunk (~200-250 tokens for most models)
+/// Reduced from 500 to prevent context overflow when multiple chunks are retrieved
+const TARGET_WORDS_PER_CHUNK: usize = 200;
 
-/// Overlap between consecutive chunks (words)
-const CHUNK_OVERLAP_WORDS: usize = 50;
+/// Overlap between consecutive chunks (words) - 10% of chunk size
+const CHUNK_OVERLAP_WORDS: usize = 20;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentChunk {
@@ -293,8 +295,12 @@ mod tests {
         let config = ChunkConfig::default();
         let chunks = create_literature_chunks(&conn, &lit.id, &text, &config).unwrap();
 
-        // Should create 2 chunks (600 words with 500-word target and 50-word overlap)
-        assert!(chunks.len() >= 2);
+        // Should create 4 chunks (600 words with 200-word target and 20-word overlap)
+        // Chunk 0: words 0-199 (200 words)
+        // Chunk 1: words 180-379 (200 words, starts at 200-20=180)
+        // Chunk 2: words 360-559 (200 words, starts at 380-20=360)
+        // Chunk 3: words 540-599 (60 words, starts at 560-20=540)
+        assert!(chunks.len() >= 4);
 
         // Verify chunks are stored in database
         let fetched_chunks = get_literature_chunks(&conn, &lit.id).unwrap();
@@ -346,7 +352,7 @@ mod tests {
     #[test]
     fn test_chunk_config_default() {
         let config = ChunkConfig::default();
-        assert_eq!(config.target_words, 500);
-        assert_eq!(config.overlap_words, 50);
+        assert_eq!(config.target_words, 200);
+        assert_eq!(config.overlap_words, 20);
     }
 }
