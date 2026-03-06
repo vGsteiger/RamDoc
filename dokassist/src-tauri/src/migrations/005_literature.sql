@@ -13,7 +13,7 @@ CREATE TABLE literature (
 ) STRICT;
 
 -- Document chunks for RAG retrieval (supports both patient files and literature)
--- Using ~500 words per chunk (≈512 tokens) with overlap for better context
+-- Using ~200 words per chunk (≈200-250 tokens) with overlap for better context and reduced memory pressure
 CREATE TABLE document_chunks (
     id          TEXT PRIMARY KEY NOT NULL,
     file_id     TEXT,
