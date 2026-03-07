@@ -2,12 +2,7 @@ name: Tauri Build
 
 on:
   push:
-    branches: [ "main", "develop" ]
-    tags: [ "v*" ]
-  pull_request:
-    branches: [ "main", "develop" ]
-  release:
-    types: [created]
+    tags: [ "v*" ]    # Only build on version tags — one run per release, no branch/PR noise
 
 jobs:
   tauri-build:
@@ -100,6 +95,7 @@ jobs:
         name: dokassist-${{ matrix.platform }}
         path: |
           dokassist/src-tauri/target/*/release/bundle/dmg/*.dmg
+          dokassist/src-tauri/target/*/release/bundle/dmg/*.dmg.sig
           dokassist/src-tauri/target/*/release/bundle/macos/*.app
         retention-days: 7
         if-no-files-found: warn
@@ -136,24 +132,44 @@ jobs:
         path: ./artifacts
         merge-multiple: true
 
-    - name: Upload DMG + generate latest.json
+    - name: Upload DMGs + generate latest.json
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         TAG="${GITHUB_REF#refs/tags/}"
         VERSION="${TAG#v}"
+        REPO="${{ github.repository }}"
+        BASE_URL="https://github.com/${REPO}/releases/download/${TAG}"
 
-        # Upload all DMG files to the release
-        DMG_URL=""
-        DMG_FILE=$(find ./artifacts -name "*.dmg" | head -n1)
-        if [ -n "$DMG_FILE" ] && [ -f "$DMG_FILE" ]; then
-          DMG_FILENAME=$(basename "$DMG_FILE")
-          echo "Uploading DMG: $DMG_FILENAME"
-          gh release upload "$TAG" "$DMG_FILE" --clobber
-          DMG_URL="https://github.com/${{ github.repository }}/releases/download/${TAG}/${DMG_FILENAME}"
+        # Locate platform-specific DMGs and their .sig sidecars
+        ARM_DMG=$(find ./artifacts -name "*aarch64*.dmg" | head -n1)
+        X86_DMG=$(find ./artifacts -name "*x86_64*.dmg" | head -n1)
+        ARM_SIG=$(find ./artifacts -name "*aarch64*.dmg.sig" | head -n1)
+        X86_SIG=$(find ./artifacts -name "*x86_64*.dmg.sig" | head -n1)
+
+        ARM_URL=""
+        X86_URL=""
+        ARM_SIG_CONTENT=""
+        X86_SIG_CONTENT=""
+
+        if [ -f "$ARM_DMG" ]; then
+          echo "Uploading ARM64 DMG: $(basename "$ARM_DMG")"
+          gh release upload "$TAG" "$ARM_DMG" --clobber
+          ARM_URL="${BASE_URL}/$(basename "$ARM_DMG")"
         else
-          echo "Warning: No DMG found in artifacts"
+          echo "Warning: No aarch64 DMG found in artifacts"
         fi
+
+        if [ -f "$X86_DMG" ]; then
+          echo "Uploading x86_64 DMG: $(basename "$X86_DMG")"
+          gh release upload "$TAG" "$X86_DMG" --clobber
+          X86_URL="${BASE_URL}/$(basename "$X86_DMG")"
+        else
+          echo "Warning: No x86_64 DMG found in artifacts"
+        fi
+
+        [ -f "$ARM_SIG" ] && ARM_SIG_CONTENT=$(cat "$ARM_SIG")
+        [ -f "$X86_SIG" ] && X86_SIG_CONTENT=$(cat "$X86_SIG")
 
         # Generate and upload latest.json for Tauri updater
         # NOTE: Tauri v2 requires plain semver (no "v" prefix)
@@ -166,13 +182,13 @@ jobs:
           "notes": $(echo "$RELEASE_NOTES" | jq -Rs .),
           "pub_date": "${RELEASE_DATE}",
           "platforms": {
-            "darwin-x86_64": {
-              "signature": "",
-              "url": "${DMG_URL}"
-            },
             "darwin-aarch64": {
-              "signature": "",
-              "url": "${DMG_URL}"
+              "signature": $(echo "$ARM_SIG_CONTENT" | jq -Rs .),
+              "url": "${ARM_URL}"
+            },
+            "darwin-x86_64": {
+              "signature": $(echo "$X86_SIG_CONTENT" | jq -Rs .),
+              "url": "${X86_URL}"
             }
           }
         }
