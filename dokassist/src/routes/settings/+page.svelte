@@ -472,7 +472,7 @@
               {phase === "loading" ? "Loading…" : "Load existing"}
             </button>
           </div>
-          <p class="text-xs text-gray-600 dark:text-gray-500 mt-2">
+          <p class="text-xs text-gray-600 dark:text-gray-400 mt-2">
             "Load existing" if the model file is already downloaded.
           </p>
         {/if}

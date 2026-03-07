@@ -1,4 +1,4 @@
-import { writable } from 'svelte/store';
+import { writable, derived, readable } from 'svelte/store';
 import { browser } from '$app/environment';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
@@ -16,14 +16,23 @@ function getInitialTheme(): ThemeMode {
   return 'system';
 }
 
-// Determine the actual theme to apply based on preference and system settings
-export function resolveTheme(preference: ThemeMode): 'light' | 'dark' {
-  if (preference === 'system') {
-    if (!browser || typeof window.matchMedia !== 'function') return 'dark';
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+// Create a store that tracks the system's dark mode preference
+const systemDarkMode = readable(false, (set) => {
+  if (!browser || typeof window.matchMedia !== 'function') {
+    return;
   }
-  return preference;
-}
+
+  const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+  // Set initial value
+  set(mediaQuery.matches);
+
+  // Listen for changes
+  const listener = (e: MediaQueryListEvent) => set(e.matches);
+  mediaQuery.addEventListener('change', listener);
+
+  return () => mediaQuery.removeEventListener('change', listener);
+});
 
 function createThemeStore() {
   const { subscribe, set, update } = writable<ThemeMode>(getInitialTheme());
@@ -42,11 +51,18 @@ function createThemeStore() {
 
 export const themePreference = createThemeStore();
 
-// Watch for system theme changes when in 'system' mode
-if (browser && typeof window.matchMedia === 'function') {
-  const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-  mediaQuery.addEventListener('change', () => {
-    // This will trigger reactivity in components subscribed to theme changes
-    themePreference.update(v => v);
-  });
-}
+// Determine the actual theme to apply based on preference and system settings.
+// Note: When `preference` is 'system' and `window.matchMedia` is not available
+// (e.g. during SSR, in non-browser, or certain test environments), this
+// intentionally falls back to 'dark'. This provides a deterministic value in
+// environments where the real system preference cannot be detected; the
+// client-side browser environment will re-resolve the theme once available.
+export const resolvedTheme = derived(
+  [themePreference, systemDarkMode],
+  ([$preference, $systemDark]) => {
+    if ($preference === 'system') {
+      return $systemDark ? 'dark' : 'light';
+    }
+    return $preference;
+  }
+);
