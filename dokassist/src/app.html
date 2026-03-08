@@ -4,9 +4,27 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>RamDoc</title>
+    <script>
+      // Apply theme immediately to prevent FOUC (Flash of Unstyled Content)
+      (function() {
+        const stored = localStorage.getItem('theme-preference');
+        const preference = (stored === 'light' || stored === 'dark' || stored === 'system') ? stored : 'system';
+
+        let isDark = false;
+        if (preference === 'system') {
+          isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        } else {
+          isDark = preference === 'dark';
+        }
+
+        if (isDark) {
+          document.documentElement.classList.add('dark');
+        }
+      })();
+    </script>
     %sveltekit.head%
   </head>
-  <body data-sveltekit-prerender="true" class="bg-gray-950 text-gray-100">
+  <body data-sveltekit-prerender="true">
     <div style="display: contents">%sveltekit.body%</div>
   </body>
 </html>

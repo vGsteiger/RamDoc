@@ -21,6 +21,7 @@
     type UpdateInfo,
     type EmbedStatus,
   } from "$lib/api";
+  import { themePreference, type ThemeMode } from "$lib/stores/theme";
 
   let status = $state<LlmEngineStatus | null>(null);
   let recommended = $state<ModelChoice | null>(null);
@@ -215,18 +216,18 @@
 </script>
 
 <div class="p-8 max-w-xl">
-  <h1 class="text-2xl font-bold text-gray-100 mb-6">Settings</h1>
+  <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">Settings</h1>
 
   <section class="mb-10">
-    <h2 class="text-lg font-semibold text-gray-200 mb-4">
+    <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-200 mb-4">
       Application Updates
     </h2>
 
-    <div class="bg-gray-800 rounded-lg p-4 mb-4">
+    <div class="bg-gray-100 dark:bg-gray-800 rounded-lg p-4 mb-4">
       <div class="flex items-center justify-between mb-3">
         <div>
-          <p class="text-sm font-medium text-gray-100">Current Version</p>
-          <p class="text-xs text-gray-400 mt-1">{appVersion || "Loading..."}</p>
+          <p class="text-sm font-medium text-gray-900 dark:text-gray-100">Current Version</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">{appVersion || "Loading..."}</p>
         </div>
         <button
           onclick={handleCheckForUpdates}
@@ -239,13 +240,13 @@
 
       {#if updateInfo}
         {#if updateInfo.update_available}
-          <div class="border-t border-gray-700 pt-3 mt-3">
+          <div class="border-t border-gray-300 dark:border-gray-700 pt-3 mt-3">
             <div class="flex items-start justify-between gap-4 mb-2">
               <div>
                 <p class="text-sm font-medium text-green-400">
                   Update Available
                 </p>
-                <p class="text-xs text-gray-400 mt-1">
+                <p class="text-xs text-gray-600 dark:text-gray-400 mt-1">
                   Version {updateInfo.latest_version} is now available
                 </p>
               </div>
@@ -253,7 +254,7 @@
 
             {#if updateInfo.body}
               <div
-                class="text-xs text-gray-400 mb-3 max-h-32 overflow-y-auto bg-gray-900 rounded p-2"
+                class="text-xs text-gray-600 dark:text-gray-400 mb-3 max-h-32 overflow-y-auto bg-gray-200 dark:bg-gray-900 rounded p-2"
               >
                 <p class="font-medium mb-1">Release Notes:</p>
                 <div class="whitespace-pre-wrap">{updateInfo.body}</div>
@@ -262,17 +263,17 @@
 
             {#if installingUpdate}
               <div class="mb-3">
-                <div class="flex justify-between text-xs text-gray-400 mb-1">
+                <div class="flex justify-between text-xs text-gray-600 dark:text-gray-400 mb-1">
                   <span>Downloading and installing update...</span>
                   <span>{updateProgress}%</span>
                 </div>
-                <div class="w-full bg-gray-700 rounded-full h-2">
+                <div class="w-full bg-gray-300 dark:bg-gray-700 rounded-full h-2">
                   <div
                     class="bg-blue-500 h-2 rounded-full transition-all"
                     style="width: {updateProgress}%"
                   ></div>
                 </div>
-                <p class="text-xs text-gray-400 mt-2">
+                <p class="text-xs text-gray-600 dark:text-gray-400 mt-2">
                   The app will restart automatically after installation.
                 </p>
               </div>
@@ -292,25 +293,87 @@
             {/if}
           </div>
         {:else}
-          <div class="border-t border-gray-700 pt-3 mt-3">
+          <div class="border-t border-gray-300 dark:border-gray-700 pt-3 mt-3">
             <p class="text-sm text-green-400">You're up to date!</p>
           </div>
         {/if}
       {/if}
 
       {#if updateError && !updateInfo}
-        <div class="border-t border-gray-700 pt-3 mt-3">
+        <div class="border-t border-gray-300 dark:border-gray-700 pt-3 mt-3">
           <p class="text-xs text-red-400">{updateError}</p>
         </div>
       {/if}
     </div>
   </section>
 
+  <section class="mb-10">
+    <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-200 mb-4">
+      Appearance
+    </h2>
+
+    <div class="bg-gray-100 dark:bg-gray-800 rounded-lg p-4">
+      <p class="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
+        Theme
+      </p>
+      <p class="text-xs text-gray-600 dark:text-gray-400 mb-4">
+        Choose how RamDoc looks on your device
+      </p>
+
+      <div class="space-y-2">
+        <label class="flex items-center gap-3 p-3 rounded-lg border border-gray-300 dark:border-gray-700 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors {$themePreference === 'light' ? 'bg-gray-200 dark:bg-gray-700 border-blue-500' : ''}">
+          <input
+            type="radio"
+            name="theme"
+            value="light"
+            checked={$themePreference === 'light'}
+            onchange={() => themePreference.set('light')}
+            class="w-4 h-4 text-blue-600 focus:ring-blue-500"
+          />
+          <div>
+            <p class="text-sm font-medium text-gray-900 dark:text-gray-100">Light</p>
+            <p class="text-xs text-gray-600 dark:text-gray-400">Always use light mode</p>
+          </div>
+        </label>
+
+        <label class="flex items-center gap-3 p-3 rounded-lg border border-gray-300 dark:border-gray-700 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors {$themePreference === 'dark' ? 'bg-gray-200 dark:bg-gray-700 border-blue-500' : ''}">
+          <input
+            type="radio"
+            name="theme"
+            value="dark"
+            checked={$themePreference === 'dark'}
+            onchange={() => themePreference.set('dark')}
+            class="w-4 h-4 text-blue-600 focus:ring-blue-500"
+          />
+          <div>
+            <p class="text-sm font-medium text-gray-900 dark:text-gray-100">Dark</p>
+            <p class="text-xs text-gray-600 dark:text-gray-400">Always use dark mode</p>
+          </div>
+        </label>
+
+        <label class="flex items-center gap-3 p-3 rounded-lg border border-gray-300 dark:border-gray-700 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors {$themePreference === 'system' ? 'bg-gray-200 dark:bg-gray-700 border-blue-500' : ''}">
+          <input
+            type="radio"
+            name="theme"
+            value="system"
+            checked={$themePreference === 'system'}
+            onchange={() => themePreference.set('system')}
+            class="w-4 h-4 text-blue-600 focus:ring-blue-500"
+          />
+          <div>
+            <p class="text-sm font-medium text-gray-900 dark:text-gray-100">System</p>
+            <p class="text-xs text-gray-600 dark:text-gray-400">Use your system's theme setting (default)</p>
+          </div>
+        </label>
+      </div>
+    </div>
+  </section>
+
   <section>
-    <h2 class="text-lg font-semibold text-gray-200 mb-4">LLM Model</h2>
+    <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-200 mb-4">LLM Model</h2>
 
     <!-- Current status -->
-    <div class="bg-gray-800 rounded-lg p-4 mb-6 flex items-center gap-3">
+    <div class="bg-gray-100 dark:bg-gray-800 rounded-lg p-4 mb-6 flex items-center gap-3">
       <div
         class="w-3 h-3 rounded-full shrink-0 {status?.is_loaded
           ? 'bg-green-500'
@@ -320,22 +383,22 @@
       ></div>
       <div>
         {#if status?.is_loaded}
-          <p class="text-sm text-gray-100 font-medium">{status.model_name}</p>
-          <p class="text-xs text-gray-400">
+          <p class="text-sm text-gray-900 dark:text-gray-100 font-medium">{status.model_name}</p>
+          <p class="text-xs text-gray-600 dark:text-gray-400">
             Loaded · {formatBytes(status.total_ram_bytes)} system RAM
           </p>
         {:else if status?.is_downloaded}
-          <p class="text-sm text-gray-100 font-medium">
+          <p class="text-sm text-gray-900 dark:text-gray-100 font-medium">
             Model downloaded, not loaded
           </p>
-          <p class="text-xs text-gray-400">
+          <p class="text-xs text-gray-600 dark:text-gray-400">
             {status.downloaded_filename} · {formatBytes(status.total_ram_bytes)}
             RAM available
           </p>
         {:else}
-          <p class="text-sm text-gray-100 font-medium">No model downloaded</p>
+          <p class="text-sm text-gray-900 dark:text-gray-100 font-medium">No model downloaded</p>
           {#if status}
-            <p class="text-xs text-gray-400">
+            <p class="text-xs text-gray-600 dark:text-gray-400">
               {formatBytes(status.total_ram_bytes)} system RAM available
             </p>
           {/if}
@@ -345,22 +408,22 @@
 
     <!-- Recommended model card -->
     {#if recommended && !status?.is_loaded}
-      <div class="bg-gray-800 border border-gray-700 rounded-lg p-4 mb-4">
+      <div class="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-4 mb-4">
         <div class="flex items-start justify-between gap-4 mb-1">
-          <p class="text-sm font-medium text-gray-100">{recommended.name}</p>
-          <span class="text-xs text-gray-400 shrink-0"
+          <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{recommended.name}</p>
+          <span class="text-xs text-gray-600 dark:text-gray-400 shrink-0"
             >{formatBytes(recommended.size_bytes)}</span
           >
         </div>
-        <p class="text-xs text-gray-400 mb-4">{recommended.reason}</p>
+        <p class="text-xs text-gray-600 dark:text-gray-400 mb-4">{recommended.reason}</p>
 
         {#if phase === "downloading"}
           <div class="mb-3">
-            <div class="flex justify-between text-xs text-gray-400 mb-1">
+            <div class="flex justify-between text-xs text-gray-600 dark:text-gray-400 mb-1">
               <span>Downloading…</span>
               <span>{downloadProgress ?? 0}%</span>
             </div>
-            <div class="w-full bg-gray-700 rounded-full h-2">
+            <div class="w-full bg-gray-300 dark:bg-gray-700 rounded-full h-2">
               <div
                 class="bg-blue-500 h-2 rounded-full transition-all"
                 style="width: {downloadProgress ?? 0}%"
@@ -387,7 +450,7 @@
             <button
               onclick={handleDownload}
               disabled={phase === "downloading" || phase === "loading"}
-              class="px-4 py-2 text-sm rounded-lg bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-gray-100 transition-colors"
+              class="px-4 py-2 text-sm rounded-lg bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 dark:text-gray-100 transition-colors"
             >
               {phase === "downloading" ? "Downloading…" : "Re-download"}
             </button>
@@ -404,12 +467,12 @@
             <button
               onclick={handleLoad}
               disabled={phase === "downloading" || phase === "loading"}
-              class="px-4 py-2 text-sm rounded-lg bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-gray-100 transition-colors"
+              class="px-4 py-2 text-sm rounded-lg bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 dark:text-gray-100 transition-colors"
             >
               {phase === "loading" ? "Loading…" : "Load existing"}
             </button>
           </div>
-          <p class="text-xs text-gray-500 mt-2">
+          <p class="text-xs text-gray-600 dark:text-gray-400 mt-2">
             "Load existing" if the model file is already downloaded.
           </p>
         {/if}
@@ -424,13 +487,13 @@
   </section>
 
   <section class="mt-10">
-    <h2 class="text-lg font-semibold text-gray-200 mb-4">Embedding Model</h2>
-    <p class="text-xs text-gray-400 mb-4">
+    <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-200 mb-4">Embedding Model</h2>
+    <p class="text-xs text-gray-600 dark:text-gray-400 mb-4">
       Required for literature semantic search (~130 MB, downloaded once and
       cached locally).
     </p>
 
-    <div class="bg-gray-800 rounded-lg p-4 mb-4 flex items-center gap-3">
+    <div class="bg-gray-100 dark:bg-gray-800 rounded-lg p-4 mb-4 flex items-center gap-3">
       <div
         class="w-3 h-3 rounded-full shrink-0 {embedStatus?.is_loaded
           ? 'bg-green-500'
@@ -440,20 +503,20 @@
       ></div>
       <div class="flex-1">
         {#if embedStatus?.is_loaded}
-          <p class="text-sm text-gray-100 font-medium">
+          <p class="text-sm text-gray-900 dark:text-gray-100 font-medium">
             nomic-embed-text-v1.5
           </p>
-          <p class="text-xs text-gray-400">Loaded · literature search ready</p>
+          <p class="text-xs text-gray-600 dark:text-gray-400">Loaded · literature search ready</p>
         {:else if embedStatus?.is_downloaded}
-          <p class="text-sm text-gray-100 font-medium">
+          <p class="text-sm text-gray-900 dark:text-gray-100 font-medium">
             Model cached, not loaded
           </p>
-          <p class="text-xs text-gray-400">
+          <p class="text-xs text-gray-600 dark:text-gray-400">
             Will load automatically on first search
           </p>
         {:else}
-          <p class="text-sm text-gray-100 font-medium">Not downloaded</p>
-          <p class="text-xs text-gray-400">
+          <p class="text-sm text-gray-900 dark:text-gray-100 font-medium">Not downloaded</p>
+          <p class="text-xs text-gray-600 dark:text-gray-400">
             Will download automatically on first literature search
           </p>
         {/if}
@@ -481,9 +544,9 @@
   </section>
 
   <section class="mt-10">
-    <h2 class="text-lg font-semibold text-gray-200 mb-2">About</h2>
-    <p class="text-sm text-gray-400">
-      App Version: <span class="text-gray-100">{appVersion || "…"}</span>
+    <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-200 mb-2">About</h2>
+    <p class="text-sm text-gray-600 dark:text-gray-400">
+      App Version: <span class="text-gray-900 dark:text-gray-100">{appVersion || "…"}</span>
     </p>
   </section>
 
@@ -494,8 +557,8 @@
     <div class="border border-amber-600 rounded-lg p-4 mb-4">
       <div class="flex items-start justify-between gap-4">
         <div>
-          <p class="text-sm font-medium text-gray-100">Emergency Export</p>
-          <p class="text-xs text-gray-400 mt-1">
+          <p class="text-sm font-medium text-gray-900 dark:text-gray-100">Emergency Export</p>
+          <p class="text-xs text-gray-600 dark:text-gray-400 mt-1">
             Export all patient data to a ZIP file. Use this if you need to
             migrate to another system or create a complete backup.
           </p>
@@ -525,7 +588,7 @@
               type="text"
               bind:value={exportInput}
               placeholder="EXPORT"
-              class="flex-1 px-3 py-2 text-sm rounded-lg bg-gray-900 border border-gray-600 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-amber-500"
+              class="flex-1 px-3 py-2 text-sm rounded-lg bg-gray-200 dark:bg-gray-900 border border-gray-400 dark:border-gray-600 text-gray-900 dark:text-gray-100 placeholder-gray-500 focus:outline-none focus:border-amber-500"
               onkeydown={(e) => {
                 if (e.key === "Enter" && exportInput === "EXPORT")
                   handleExport();
@@ -544,7 +607,7 @@
                 exportInput = "";
                 exportError = "";
               }}
-              class="px-4 py-2 text-sm rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-100 transition-colors shrink-0"
+              class="px-4 py-2 text-sm rounded-lg bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 transition-colors shrink-0"
             >
               Cancel
             </button>
@@ -560,8 +623,8 @@
     <div class="border border-red-800 rounded-lg p-4">
       <div class="flex items-start justify-between gap-4">
         <div>
-          <p class="text-sm font-medium text-gray-100">Factory Reset</p>
-          <p class="text-xs text-gray-400 mt-1">
+          <p class="text-sm font-medium text-gray-900 dark:text-gray-100">Factory Reset</p>
+          <p class="text-xs text-gray-600 dark:text-gray-400 mt-1">
             Deletes all patient data, encryption keys, and model files. This
             cannot be undone.
           </p>
@@ -591,7 +654,7 @@
               type="text"
               bind:value={resetInput}
               placeholder="RESET"
-              class="flex-1 px-3 py-2 text-sm rounded-lg bg-gray-900 border border-gray-600 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-red-500"
+              class="flex-1 px-3 py-2 text-sm rounded-lg bg-gray-200 dark:bg-gray-900 border border-gray-400 dark:border-gray-600 text-gray-900 dark:text-gray-100 placeholder-gray-500 focus:outline-none focus:border-red-500"
               onkeydown={(e) => {
                 if (e.key === "Enter" && resetInput === "RESET") handleReset();
               }}
@@ -609,7 +672,7 @@
                 resetInput = "";
                 resetError = "";
               }}
-              class="px-4 py-2 text-sm rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-100 transition-colors shrink-0"
+              class="px-4 py-2 text-sm rounded-lg bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 transition-colors shrink-0"
             >
               Cancel
             </button>
