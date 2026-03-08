@@ -2,7 +2,7 @@
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
-  import { getReport, updateReport, deleteReport, parseError, type Report, type UpdateReport, type AppError } from '$lib/api';
+  import { getReport, updateReport, deleteReport, exportReportToPdf, exportReportToDocx, parseError, type Report, type UpdateReport, type AppError } from '$lib/api';
   import EnhancedReportEditor from '$lib/components/EnhancedReportEditor.svelte';
   import ErrorDisplay from '$lib/components/ErrorDisplay.svelte';
 
@@ -77,6 +77,60 @@
     }
   }
 
+  async function handleExportPdf() {
+    if (!report) return;
+
+    try {
+      error = null;
+      const bytes = await exportReportToPdf(reportId);
+
+      // Convert number[] to Uint8Array
+      const uint8Array = new Uint8Array(bytes);
+
+      // Create a blob from the byte array
+      const blob = new Blob([uint8Array], { type: 'application/pdf' });
+
+      // Create a download link
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${formatReportType(report.report_type)}_${new Date(report.generated_at).toISOString().split('T')[0]}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      error = parseError(e);
+    }
+  }
+
+  async function handleExportDocx() {
+    if (!report) return;
+
+    try {
+      error = null;
+      const bytes = await exportReportToDocx(reportId);
+
+      // Convert number[] to Uint8Array
+      const uint8Array = new Uint8Array(bytes);
+
+      // Create a blob from the byte array
+      const blob = new Blob([uint8Array], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+
+      // Create a download link
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${formatReportType(report.report_type)}_${new Date(report.generated_at).toISOString().split('T')[0]}.docx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      error = parseError(e);
+    }
+  }
+
   onMount(() => {
     loadReport();
   });
@@ -135,6 +189,22 @@
               Cancel
             </button>
           {/if}
+          <button
+            on:click={handleExportPdf}
+            disabled={editMode}
+            class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title={editMode ? 'Save changes before exporting PDF' : undefined}
+          >
+            Export PDF
+          </button>
+          <button
+            on:click={handleExportDocx}
+            disabled={editMode}
+            class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title={editMode ? 'Save changes before exporting DOCX' : undefined}
+          >
+            Export DOCX
+          </button>
           <button
             on:click={handleDeleteReport}
             class="px-4 py-2 bg-red-900/20 text-red-400 rounded hover:bg-red-900/40 transition-colors"

@@ -70,4 +70,56 @@ describe('deserializeAMDP', () => {
     const result = deserializeAMDP(serialized);
     expect(result[2].items[0].score).toBe(3);
   });
+
+  it('returns the parsed value as-is when JSON is valid but not an array', () => {
+    // The function does not validate the shape of the parsed value;
+    // it returns JSON.parse output directly for valid JSON.
+    const result = deserializeAMDP('{"not": "an array"}') as unknown;
+    expect(result).toEqual({ not: 'an array' });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// serializeAMDP — additional edge cases
+// ---------------------------------------------------------------------------
+
+describe('serializeAMDP — edge cases', () => {
+  it('serializes an empty categories array to "[]"', () => {
+    expect(serializeAMDP([])).toBe('[]');
+  });
+
+  it('serializes and preserves all 12 category names', () => {
+    const parsed = JSON.parse(serializeAMDP(AMDP_CATEGORIES));
+    const names = parsed.map((c: { name: string }) => c.name);
+    const expected = AMDP_CATEGORIES.map((c) => c.name);
+    expect(names).toEqual(expected);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// deserializeAMDP — additional edge cases
+// ---------------------------------------------------------------------------
+
+describe('deserializeAMDP — additional edge cases', () => {
+  it('returns default categories for undefined (treated as null)', () => {
+    // undefined coerces to null in the function's falsy check
+    const result = deserializeAMDP(undefined as unknown as null);
+    expect(result).toHaveLength(AMDP_CATEGORIES.length);
+  });
+
+  it('returns a fresh deep clone each time null is passed', () => {
+    const first = deserializeAMDP(null);
+    const second = deserializeAMDP(null);
+    expect(first).not.toBe(second);
+    first[0].items[0].score = 3;
+    expect(second[0].items[0].score).toBe(0);
+  });
+
+  it('returns a fresh deep clone each time invalid JSON is passed', () => {
+    const first = deserializeAMDP('{{invalid}}');
+    const second = deserializeAMDP('{{invalid}}');
+    expect(first).not.toBe(second);
+    first[0].items[0].score = 2;
+    expect(second[0].items[0].score).toBe(0);
+  });
 });

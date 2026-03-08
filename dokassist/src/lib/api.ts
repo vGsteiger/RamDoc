@@ -581,6 +581,14 @@ export async function generateReport(
   });
 }
 
+export async function exportReportToPdf(reportId: string): Promise<number[]> {
+  return await invoke<number[]>("export_report_to_pdf", { reportId });
+}
+
+export async function exportReportToDocx(reportId: string): Promise<number[]> {
+  return await invoke<number[]>("export_report_to_docx", { reportId });
+}
+
 // ---------------------------------------------------------------------------
 // Updater
 // ---------------------------------------------------------------------------
