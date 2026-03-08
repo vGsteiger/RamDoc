@@ -1,5 +1,6 @@
 <script lang="ts">
   import { uploadFile, processFile, type FileRecord } from '$lib/api';
+  import { Paperclip } from 'lucide-svelte';
 
   interface Props {
     patientId: string;
@@ -106,7 +107,9 @@
     />
 
     <div class="text-center pointer-events-none">
-      <div class="text-4xl mb-4">📎</div>
+      <div class="mb-4 flex justify-center text-gray-400">
+        <Paperclip size={48} />
+      </div>
       <p class="text-gray-300 font-medium mb-2">
         Drop files here or click to browse
       </p>

@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
   import { getPatient, type Patient } from '$lib/api';
+  import { Hourglass } from 'lucide-svelte';
 
   let patientId = $derived($page.params.id);
   let patient = $state<Patient | null>(null);
@@ -34,7 +35,9 @@
   {#if isLoading}
     <div class="flex-1 flex items-center justify-center">
       <div class="text-center">
-        <div class="text-4xl mb-4">⏳</div>
+        <div class="mb-4 flex justify-center text-gray-400">
+          <Hourglass size={48} />
+        </div>
         <p class="text-gray-400">Loading patient...</p>
       </div>
     </div>

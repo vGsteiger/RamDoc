@@ -3,13 +3,14 @@
   import { lockApp } from '$lib/api';
   import { authStatus } from '$lib/stores/auth';
   import { goto } from '$app/navigation';
+  import { Users, Calendar, BookOpen, MessageSquare, Settings, Lock } from 'lucide-svelte';
 
   const navItems = [
-    { path: '/patients', label: 'Patients', icon: '👥' },
-    { path: '/calendar', label: 'Calendar', icon: '📅' },
-    { path: '/literature', label: 'Literature', icon: '📚' },
-    { path: '/chat', label: 'Chat', icon: '💬' },
-    { path: '/settings', label: 'Settings', icon: '⚙️' }
+    { path: '/patients', label: 'Patients', icon: Users },
+    { path: '/calendar', label: 'Calendar', icon: Calendar },
+    { path: '/literature', label: 'Literature', icon: BookOpen },
+    { path: '/chat', label: 'Chat', icon: MessageSquare },
+    { path: '/settings', label: 'Settings', icon: Settings }
   ];
 
   async function handleLock() {
@@ -33,6 +34,7 @@
   <nav class="flex-1 p-4">
     <ul class="space-y-2">
       {#each navItems as item}
+        {@const Icon = item.icon}
         <li>
           <a
             href={item.path}
@@ -40,7 +42,7 @@
               ? 'bg-blue-600 text-white'
               : 'text-gray-300 hover:bg-gray-800'}"
           >
-            <span class="text-lg">{item.icon}</span>
+            <Icon size={20} />
             <span class="font-medium">{item.label}</span>
           </a>
         </li>
@@ -53,7 +55,7 @@
       onclick={handleLock}
       class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-gray-300 hover:bg-gray-800 transition-colors"
     >
-      <span class="text-lg">🔒</span>
+      <Lock size={20} />
       <span class="font-medium">Lock</span>
     </button>
   </div>

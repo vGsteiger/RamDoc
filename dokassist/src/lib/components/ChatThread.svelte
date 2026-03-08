@@ -9,6 +9,7 @@
   } from '$lib/api';
   import ChatMessage from './ChatMessage.svelte';
   import { goto } from '$app/navigation';
+  import { AlertTriangle } from 'lucide-svelte';
 
   interface Props {
     sessionId: string;
@@ -141,7 +142,7 @@
 <div class="flex flex-col h-full">
   {#if !isModelLoaded}
     <div class="bg-amber-900/30 border-b border-amber-700 px-4 py-3 flex items-center gap-3">
-      <span class="text-amber-400">⚠️</span>
+      <AlertTriangle size={18} class="text-amber-400" />
       <p class="text-sm text-amber-300 flex-1">
         Kein Modell geladen. Bitte laden Sie ein Modell in den Einstellungen.
       </p>
