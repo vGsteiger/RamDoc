@@ -50,7 +50,13 @@ pub async fn list_emails(
     let emails = email::list_emails_for_patient(&conn, &patient_id, limit, offset)?;
 
     // Audit logging for list access
-    audit::log(&conn, AuditAction::View, "email", None, Some(&format!("list emails for patient {}", patient_id)))?;
+    audit::log(
+        &conn,
+        AuditAction::View,
+        "email",
+        None,
+        Some(&format!("list emails for patient {}", patient_id)),
+    )?;
 
     Ok(emails)
 }
@@ -94,10 +100,7 @@ pub async fn delete_email(state: State<'_, AppState>, id: String) -> Result<(), 
 }
 
 #[tauri::command]
-pub async fn mark_email_as_sent(
-    state: State<'_, AppState>,
-    id: String,
-) -> Result<Email, AppError> {
+pub async fn mark_email_as_sent(state: State<'_, AppState>, id: String) -> Result<Email, AppError> {
     let pool = state.get_db()?;
     let conn = pool.conn()?;
 
@@ -106,7 +109,13 @@ pub async fn mark_email_as_sent(
     let email = email::mark_email_as_sent(&tx, &id)?;
 
     // Audit logging
-    audit::log(&tx, AuditAction::Update, "email", Some(&id), Some("marked as sent"))?;
+    audit::log(
+        &tx,
+        AuditAction::Update,
+        "email",
+        Some(&id),
+        Some("marked as sent"),
+    )?;
 
     tx.commit()?;
 
