@@ -68,6 +68,8 @@ import {
   processLiterature,
   searchLiterature,
   getLiteratureDocumentChunks,
+  exportReportToPdf,
+  exportReportToDocx,
   type ModelChoice,
   type AppError,
 } from '$lib/api';
@@ -788,6 +790,26 @@ describe('exportAllPatientData', () => {
     mockInvoke.mockResolvedValueOnce(bytes);
     const result = await exportAllPatientData();
     expect(mockInvoke).toHaveBeenCalledWith('export_all_patient_data');
+    expect(result).toEqual(bytes);
+  });
+});
+
+describe('exportReportToPdf', () => {
+  it('calls export_report_to_pdf with reportId and returns byte array', async () => {
+    const bytes = [37, 80, 68, 70]; // %PDF magic bytes
+    mockInvoke.mockResolvedValueOnce(bytes);
+    const result = await exportReportToPdf('report-abc');
+    expect(mockInvoke).toHaveBeenCalledWith('export_report_to_pdf', { reportId: 'report-abc' });
+    expect(result).toEqual(bytes);
+  });
+});
+
+describe('exportReportToDocx', () => {
+  it('calls export_report_to_docx with reportId and returns byte array', async () => {
+    const bytes = [80, 75, 3, 4]; // PK ZIP magic bytes (DOCX is a ZIP)
+    mockInvoke.mockResolvedValueOnce(bytes);
+    const result = await exportReportToDocx('report-xyz');
+    expect(mockInvoke).toHaveBeenCalledWith('export_report_to_docx', { reportId: 'report-xyz' });
     expect(result).toEqual(bytes);
   });
 });

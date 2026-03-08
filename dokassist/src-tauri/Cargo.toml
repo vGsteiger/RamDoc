@@ -59,6 +59,8 @@ fastembed = { version = "4", default-features = false, features = ["ort-download
 
 # Export
 zip = "2"
+printpdf = "0.9"
+docx-rs = "0.4"
 
 [features]
 # Enable Metal GPU acceleration for llama.cpp on Apple Silicon.
