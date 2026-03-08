@@ -3,6 +3,7 @@
   import { goto } from '$app/navigation';
   import { listPatients, globalSearch, type Patient, type SearchResult } from '$lib/api';
   import PatientCard from '$lib/components/PatientCard.svelte';
+  import { t } from '$lib/translations';
 
   let patients = $state<Patient[]>([]);
   let filteredPatients = $state<Patient[]>([]);
@@ -100,12 +101,12 @@
   <div class="max-w-7xl mx-auto">
     <!-- Header -->
     <div class="flex justify-between items-center mb-6">
-      <h1 class="text-3xl font-bold text-gray-100">Patients</h1>
+      <h1 class="text-3xl font-bold text-gray-100">{$t('patients.title')}</h1>
       <button
         onclick={handleNewPatient}
         class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
       >
-        + New Patient
+        + {$t('patients.newPatient')}
       </button>
     </div>
 
@@ -114,7 +115,7 @@
       <div class="flex-1">
         <input
           type="search"
-          placeholder="Search patients by name or AHV number..."
+          placeholder={$t('patients.search')}
           bind:value={searchQuery}
           oninput={(e) => handleSearch(e.currentTarget.value)}
           class="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500"
@@ -124,17 +125,17 @@
         bind:value={sortBy}
         class="px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 focus:outline-none focus:border-blue-500"
       >
-        <option value="name">Sort by Name</option>
-        <option value="created">Sort by Created Date</option>
+        <option value="name">{$t('patients.sortByName')}</option>
+        <option value="created">{$t('patients.sortByCreated')}</option>
       </select>
     </div>
 
     <!-- Patient Count -->
     {#if !isLoading}
       <div class="mb-4 text-sm text-gray-400">
-        {sortedPatients.length} {sortedPatients.length === 1 ? 'patient' : 'patients'}
+        {sortedPatients.length} {sortedPatients.length === 1 ? $t('patients.patient') : $t('patients.patients')}
         {#if searchQuery}
-          matching "{searchQuery}"
+          {$t('patients.matching')} "{searchQuery}"
         {/if}
       </div>
     {/if}
@@ -142,7 +143,7 @@
     <!-- Loading State -->
     {#if isLoading}
       <div class="flex justify-center items-center py-12">
-        <div class="text-gray-400">Loading patients...</div>
+        <div class="text-gray-400">{$t('common.loading')}</div>
       </div>
     {:else if error}
       <div class="bg-red-900/20 border border-red-800 rounded-lg p-4 text-red-400">
@@ -151,14 +152,14 @@
     {:else if sortedPatients.length === 0}
       <div class="text-center py-12">
         <p class="text-gray-400 mb-4">
-          {searchQuery ? 'No patients found matching your search' : 'No patients yet'}
+          {searchQuery ? $t('patients.noSearchResults') : $t('patients.noPatients')}
         </p>
         {#if !searchQuery}
           <button
             onclick={handleNewPatient}
             class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
-            Create your first patient
+            {$t('patients.createFirst')}
           </button>
         {/if}
       </div>
