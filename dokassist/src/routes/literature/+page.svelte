@@ -14,6 +14,7 @@
     formatError
   } from '$lib/api';
   import ErrorDisplay from '$lib/components/ErrorDisplay.svelte';
+  import { FileText, FileType, Check, AlertTriangle } from 'lucide-svelte';
 
   let literature: Literature[] = $state([]);
   let loading = $state(false);
@@ -250,11 +251,11 @@
           <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
             <div class="flex items-start justify-between mb-3">
               <div class="flex items-center gap-2">
-                <span class="text-2xl">
+                <span class="text-gray-400">
                   {#if lit.mime_type === 'application/pdf'}
-                    📄
+                    <FileText size={24} />
                   {:else}
-                    📝
+                    <FileType size={24} />
                   {/if}
                 </span>
                 <div class="min-w-0">
@@ -273,9 +274,13 @@
                   title="Processing…"
                 />
               {:else if lit.chunk_count > 0}
-                <span class="text-green-500 text-sm" title="Extracted and embedded ({lit.chunk_count} chunks)">✓</span>
+                <span class="text-green-500" title="Extracted and embedded ({lit.chunk_count} chunks)">
+                  <Check size={16} />
+                </span>
               {:else}
-                <span class="text-yellow-500 text-sm" title="Not yet processed">⚠</span>
+                <span class="text-yellow-500" title="Not yet processed">
+                  <AlertTriangle size={16} />
+                </span>
               {/if}
             </div>
 

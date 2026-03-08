@@ -5,6 +5,7 @@
   import FileUploader from '$lib/components/FileUploader.svelte';
   import FileCard from '$lib/components/FileCard.svelte';
   import FileViewer from '$lib/components/FileViewer.svelte';
+  import { Hourglass, FolderOpen } from 'lucide-svelte';
 
   let patientId = $derived($page.params.id);
   let files = $state<FileRecord[]>([]);
@@ -98,13 +99,17 @@
   {#if isLoading}
     <div class="flex items-center justify-center py-12">
       <div class="text-center">
-        <div class="text-4xl mb-4">⏳</div>
+        <div class="mb-4 flex justify-center text-gray-400">
+          <Hourglass size={48} />
+        </div>
         <p class="text-gray-400">Loading files...</p>
       </div>
     </div>
   {:else if files.length === 0}
     <div class="text-center py-12 bg-gray-900 rounded-lg border border-gray-800">
-      <div class="text-4xl mb-4">📁</div>
+      <div class="mb-4 flex justify-center text-gray-400">
+        <FolderOpen size={48} />
+      </div>
       <p class="text-gray-400">No files uploaded yet</p>
       <p class="text-sm text-gray-500 mt-2">Upload files using the area above</p>
     </div>

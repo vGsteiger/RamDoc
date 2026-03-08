@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ChatMessageRow } from '$lib/api';
+  import { Zap, Check } from 'lucide-svelte';
 
   interface Props {
     message: ChatMessageRow;
@@ -62,7 +63,7 @@
         onclick={() => (toolCallCollapsed = !toolCallCollapsed)}
         class="flex items-center gap-2 text-xs text-gray-500 hover:text-gray-400 transition-colors"
       >
-        <span class="text-amber-500">⚡</span>
+        <Zap size={14} class="text-amber-500" />
         <span>Tool: {message.tool_name ?? 'unknown'}</span>
         <span>{toolCallCollapsed ? '▶' : '▼'}</span>
       </button>
@@ -81,7 +82,7 @@
         onclick={() => (toolResultCollapsed = !toolResultCollapsed)}
         class="flex items-center gap-2 text-xs text-gray-500 hover:text-gray-400 transition-colors"
       >
-        <span class="text-green-500">✓</span>
+        <Check size={14} class="text-green-500" />
         <span>Ergebnis</span>
         <span>{toolResultCollapsed ? '▶' : '▼'}</span>
       </button>

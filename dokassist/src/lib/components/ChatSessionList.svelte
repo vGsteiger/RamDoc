@@ -1,5 +1,6 @@
 <script lang="ts">
   import { renameChatSession, deleteChatSession, type ChatSession } from '$lib/api';
+  import { Check, X, Pencil, Trash2 } from 'lucide-svelte';
 
   interface Props {
     sessions: ChatSession[];
@@ -90,11 +91,13 @@
                 <button
                   onclick={() => confirmRename(session.id)}
                   class="text-xs text-green-400 hover:text-green-300 px-1"
-                >✓</button>
+                  aria-label="Bestätigen"
+                ><Check size={14} /></button>
                 <button
                   onclick={() => (renamingId = null)}
                   class="text-xs text-gray-500 hover:text-gray-400 px-1"
-                >✕</button>
+                  aria-label="Abbrechen"
+                ><X size={14} /></button>
               </div>
             {:else}
               <div
@@ -113,12 +116,12 @@
                     onclick={(e) => { e.stopPropagation(); startRename(session); }}
                     class="text-xs text-gray-500 hover:text-gray-300 p-0.5"
                     title="Umbenennen"
-                  >✏️</button>
+                  ><Pencil size={14} /></button>
                   <button
                     onclick={(e) => { e.stopPropagation(); handleDelete(session.id); }}
                     class="text-xs text-gray-500 hover:text-red-400 p-0.5"
                     title="Löschen"
-                  >🗑️</button>
+                  ><Trash2 size={14} /></button>
                 </div>
               </div>
             {/if}

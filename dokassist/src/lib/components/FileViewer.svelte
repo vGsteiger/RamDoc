@@ -1,6 +1,7 @@
 <script lang="ts">
   import { downloadFile, type FileRecord } from '$lib/api';
   import { onMount, onDestroy } from 'svelte';
+  import { Hourglass, FileText } from 'lucide-svelte';
 
   interface Props {
     file: FileRecord | null;
@@ -102,7 +103,9 @@
         {#if isLoading}
           <div class="flex items-center justify-center h-full">
             <div class="text-center">
-              <div class="text-4xl mb-4">⏳</div>
+              <div class="mb-4 flex justify-center text-gray-400">
+                <Hourglass size={48} />
+              </div>
               <p class="text-gray-400">Loading file...</p>
             </div>
           </div>
@@ -130,7 +133,9 @@
           {:else}
             <div class="flex items-center justify-center h-full">
               <div class="text-center">
-                <div class="text-4xl mb-4">📄</div>
+                <div class="mb-4 flex justify-center text-gray-400">
+                  <FileText size={48} />
+                </div>
                 <p class="text-gray-400 mb-4">Preview not available for this file type</p>
                 <button
                   onclick={handleDownload}

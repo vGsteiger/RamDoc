@@ -4,6 +4,7 @@
   import { initializeApp, parseError } from '$lib/api';
   import { authStatus } from '$lib/stores/auth';
   import MnemonicDisplay from '$lib/components/MnemonicDisplay.svelte';
+  import { AlertTriangle } from 'lucide-svelte';
 
   let words = $state<string[]>([]);
   let isLoading = $state(true);
@@ -72,8 +73,9 @@
         </div>
 
         <div class="bg-yellow-900/20 border border-yellow-600 rounded-lg p-4">
-          <p class="text-yellow-500 text-sm font-medium">
-            ⚠️ Store these words safely. They cannot be recovered if lost.
+          <p class="text-yellow-500 text-sm font-medium flex items-center gap-2">
+            <AlertTriangle size={16} />
+            Store these words safely. They cannot be recovered if lost.
           </p>
         </div>
 

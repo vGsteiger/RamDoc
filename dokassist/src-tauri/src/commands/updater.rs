@@ -50,6 +50,9 @@ pub async fn check_for_updates(app: AppHandle) -> Result<UpdateInfo, AppError> {
                     || msg.contains("404")
                     || msg.contains("release JSON")
                     || msg.contains("status code")
+                    || msg.contains("relative URL")
+                    || msg.contains("pubkey")
+                    || msg.contains("No pubkey")
                 {
                     log::info!(
                         "Updater manifest not available ({}), treating as up to date",
