@@ -3,10 +3,18 @@ name: Tauri Build
 on:
   push:
     tags: [ "v*" ]    # Only build on version tags — one run per release, no branch/PR noise
+  workflow_run:
+    workflows: ["Release"]
+    types:
+      - completed
 
 jobs:
   tauri-build:
     name: Tauri Build - ${{ matrix.platform }}
+    # Run if: triggered by tag push OR triggered by successful Release workflow completion
+    if: |
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     strategy:
       fail-fast: false
       matrix:
@@ -27,6 +35,29 @@ jobs:
     - name: Checkout code
       # CRIT-7: Pinned to commit SHA for supply-chain security (tag: v4)
       uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      with:
+        fetch-depth: 0  # Fetch all history including tags
+
+    - name: Determine tag to build
+      id: get_tag
+      run: |
+        if [ "${{ github.event_name }}" = "push" ]; then
+          # Triggered by tag push - use the tag from the ref
+          TAG="${GITHUB_REF#refs/tags/}"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Building tag from push event: $TAG"
+        else
+          # Triggered by workflow_run - get the latest tag
+          git fetch --tags
+          TAG=$(git tag -l "v*" --sort=-v:refname | head -n 1)
+          if [ -z "$TAG" ]; then
+            echo "Error: No version tag found"
+            exit 1
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Building latest tag from workflow_run: $TAG"
+          git checkout "$TAG"
+        fi
 
     - name: Setup Node.js
       # CRIT-7: Pinned to commit SHA for supply-chain security (tag: v4)
@@ -115,8 +146,8 @@ jobs:
     name: Upload Release Assets
     needs: tauri-build
     runs-on: ubuntu-latest
-    # Only run when a version tag was pushed (release.yml already created the release)
-    if: startsWith(github.ref, 'refs/tags/v')
+    # Run when tauri-build completes (whether triggered by tag push or workflow_run)
+    if: always() && needs.tauri-build.result == 'success'
     permissions:
       contents: write
 
@@ -124,6 +155,26 @@ jobs:
     - name: Checkout code
       # CRIT-7: Pinned to commit SHA for supply-chain security (tag: v4)
       uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      with:
+        fetch-depth: 0  # Fetch all tags
+
+    - name: Determine release tag
+      id: get_tag
+      run: |
+        if [ "${{ github.event_name }}" = "push" ]; then
+          # Triggered by tag push - use the tag from the ref
+          TAG="${GITHUB_REF#refs/tags/}"
+        else
+          # Triggered by workflow_run - get the latest tag
+          git fetch --tags
+          TAG=$(git tag -l "v*" --sort=-v:refname | head -n 1)
+          if [ -z "$TAG" ]; then
+            echo "Error: No version tag found"
+            exit 1
+          fi
+        fi
+        echo "tag=$TAG" >> $GITHUB_OUTPUT
+        echo "Using tag for release: $TAG"
 
     - name: Download macOS artifacts
       uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -136,7 +187,7 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        TAG="${GITHUB_REF#refs/tags/}"
+        TAG="${{ steps.get_tag.outputs.tag }}"
         VERSION="${TAG#v}"
         REPO="${{ github.repository }}"
         BASE_URL="https://github.com/${REPO}/releases/download/${TAG}"
