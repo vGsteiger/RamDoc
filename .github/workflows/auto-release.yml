@@ -2,14 +2,14 @@ name: Auto-release Comment
 
 on:
   pull_request:
-    types: [closed]
+    types: [labeled]    # fires when a label is added, PR still open
 
 permissions:
   pull-requests: write
 
 jobs:
   notify-autorelease:
-    if: github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'autorelease')
+    if: github.event.label.name == 'autorelease'
     runs-on: ubuntu-latest
     steps:
       - name: Add comment to PR
