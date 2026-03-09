@@ -17,13 +17,13 @@ Thank you for your interest in contributing! This guide covers everything you ne
 
 1. Fork the repository and clone your fork:
    ```bash
-   git clone https://github.com/<your-username>/IbexDoc.git
-   cd IbexDoc
+   git clone https://github.com/<your-username>/RamDoc.git
+   cd RamDoc
    ```
 
 2. Add the upstream remote:
    ```bash
-   git remote add upstream https://github.com/vGsteiger/IbexDoc.git
+   git remote add upstream https://github.com/vGsteiger/RamDoc.git
    ```
 
 ## Development Setup
@@ -32,7 +32,7 @@ Thank you for your interest in contributing! This guide covers everything you ne
 
 | Tool | Minimum Version |
 |------|----------------|
-| Rust | 1.82 (MSRV) |
+| Rust | 1.88 (MSRV) |
 | Node.js | 20 |
 | pnpm | 8 |
 | macOS | 13 (Ventura) |
@@ -119,7 +119,7 @@ These prefixes drive automated semantic versioning in `release.yml` when no PR l
 
 All tests must pass before a PR can merge.
 
-### Rust (86 unit tests)
+### Rust
 
 ```bash
 cd dokassist/src-tauri
@@ -140,7 +140,7 @@ New code should include tests for non-trivial logic. Security-sensitive code (cr
 
 ## First Contribution
 
-Look for issues labelled [`good first issue`](https://github.com/vGsteiger/IbexDoc/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) — these are scoped tasks suitable for new contributors.
+Look for issues labelled [`good first issue`](https://github.com/vGsteiger/RamDoc/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) — these are scoped tasks suitable for new contributors.
 
 If you want to work on something not yet filed as an issue, open one first to discuss the approach before investing time in implementation.
 

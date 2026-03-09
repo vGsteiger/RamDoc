@@ -1,6 +1,6 @@
 # CI/CD Pipeline Documentation
 
-This document describes the comprehensive CI/CD pipeline setup for the IbexDoc project.
+This document describes the comprehensive CI/CD pipeline setup for the RamDoc project.
 
 ## Overview
 
@@ -13,20 +13,18 @@ The project uses GitHub Actions for continuous integration and deployment with m
 **Triggers:** Push to main/develop/claude branches, PRs to main/develop
 
 **Jobs:**
-- **Test Suite** - Runs on Ubuntu and macOS with stable and MSRV (1.82.0)
+- **Test Suite** - Runs on macOS with stable and MSRV (1.88.0)
   - Unit tests (`cargo test --lib`)
-  - Integration tests
   - Example runs
-  - Cross-platform validation
-- **Build Check** - Verifies release builds work on both platforms
+- **Build Check** - Verifies release builds work on macOS
 - **Clippy** - Runs linter with strict warnings
 - **Rustfmt** - Checks code formatting
 
 **Key Features:**
-- Matrix testing across OS and Rust versions
+- Matrix testing across Rust versions (stable and MSRV 1.88.0)
 - Comprehensive caching for faster builds
-- macOS-specific tests handled gracefully on Linux
-- System dependency installation for Linux (GTK, WebKit, etc.)
+- Example tests validated
+- macOS-specific testing environment
 
 ### 2. Frontend CI (`frontend-ci.yml`)
 
@@ -34,7 +32,7 @@ The project uses GitHub Actions for continuous integration and deployment with m
 
 **Jobs:**
 - **Frontend Build** - Builds the Svelte/TypeScript frontend
-- **Svelte Check** - Type checking for Svelte components
+- **Type Check** - Type checking for TypeScript and Svelte components
 
 **Key Features:**
 - pnpm dependency management
@@ -78,30 +76,27 @@ The project uses GitHub Actions for continuous integration and deployment with m
 **Jobs:**
 - **Rustfmt** - Rust code formatting check
 - **Clippy** - Rust linting with custom rules
-- **Prettier** - Frontend formatting check
-- **ESLint** - JavaScript/TypeScript linting
 - **Typos** - Spell checking across codebase
 
 **Key Features:**
 - Strict Clippy warnings with allowances for common patterns
-- Frontend tooling checks (when tools are available)
 - Automated typo detection
 
 ### 6. Tauri Build (`tauri-build.yml`)
 
-**Triggers:** Push to main/develop, tags (v*), PRs to main/develop
+**Triggers:** Version tags (v*), after successful Release workflow completion
 
 **Jobs:**
 - **Tauri Build** - Cross-platform Tauri app builds
   - macOS ARM64 (Apple Silicon)
   - macOS x86_64 (Intel)
   - Linux x86_64 (AppImage + Deb)
-- **Release** - Automated GitHub releases for version tags
+- **Release** - Upload artifacts to GitHub release
 
 **Key Features:**
 - Multi-platform build matrix
 - Artifact uploads (DMG, AppImage, Deb packages)
-- Automated draft releases for tags
+- Triggered by Release workflow
 - Signing support (when keys are configured)
 
 ## Caching Strategy
@@ -118,16 +113,15 @@ This reduces build times from ~15 minutes to ~3-5 minutes for cached builds.
 ## Platform Support
 
 ### Linux (Ubuntu 22.04)
-- ✅ Full test suite
-- ✅ All workflows supported
-- ✅ AppImage and Deb packages
-- ⚠️ Some macOS-specific tests skipped (Keychain, Spotlight)
+- ✅ Build and packaging (AppImage, Deb)
+- ✅ Supported for application builds via Tauri
 
-### macOS (13 & Latest)
+### macOS (14 & Latest)
 - ✅ Full test suite including platform-specific features
 - ✅ DMG and App bundle creation
 - ✅ Metal GPU support for LLM inference
 - ✅ Both Intel and Apple Silicon targets
+- ✅ Keychain integration
 
 ## Required Secrets (Optional)
 
@@ -158,19 +152,13 @@ Configure these in repository settings if needed:
 
 The test suite includes:
 
-- **Unit Tests** - 40+ tests across all modules
+- **Unit Tests** - Tests across all modules covering:
   - Crypto operations (PKG-1)
   - Database operations (PKG-2)
   - Filesystem encryption (PKG-3)
   - LLM sanitization (PKG-4)
   - Search functionality (PKG-5)
   - Audit logging (PKG-6)
-
-- **Integration Tests** - 4 comprehensive tests
-  - Full crypto flow (key generation → encryption → recovery)
-  - Key isolation testing
-  - Large data encryption (10 MB)
-  - Keychain operations (macOS)
 
 - **Example Tests** - Audit system validation
 
@@ -193,15 +181,11 @@ The pipelines are designed to be:
 
 ### Build Failures
 
-1. **Linux: glib-sys build error**
-   - Ensure all GTK/WebKit dependencies are installed
-   - Check system-deps version compatibility
-
-2. **macOS: Test failures**
+1. **macOS: Test failures**
    - Keychain tests require keychain access
    - Some tests may need manual intervention
 
-3. **Frontend: Build failures**
+2. **Frontend: Build failures**
    - Verify Node.js version (20+)
    - Check pnpm-lock.yaml is committed
    - Clear pnpm cache if needed
@@ -220,7 +204,6 @@ Potential additions:
 - [ ] Performance regression detection
 - [ ] Automatic changelog generation
 - [ ] Deployment to distribution channels (Homebrew, etc.)
-- [ ] Windows support (when implemented)
 
 ## Monitoring
 
@@ -234,5 +217,5 @@ All workflow runs are visible in the GitHub Actions tab. Key metrics to monitor:
 
 ---
 
-**Last Updated:** March 2, 2026
-**Maintained By:** IbexDoc Team
+**Last Updated:** March 9, 2026
+**Maintained By:** RamDoc Team

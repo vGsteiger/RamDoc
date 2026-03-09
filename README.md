@@ -4,11 +4,11 @@
 
 # RamDoc / DokAssist
 
-[![Rust CI](https://github.com/vGsteiger/IbexDoc/actions/workflows/rust-ci.yml/badge.svg)](https://github.com/vGsteiger/IbexDoc/actions/workflows/rust-ci.yml)
-[![Frontend CI](https://github.com/vGsteiger/IbexDoc/actions/workflows/frontend-ci.yml/badge.svg)](https://github.com/vGsteiger/IbexDoc/actions/workflows/frontend-ci.yml)
-[![Security Audit](https://github.com/vGsteiger/IbexDoc/actions/workflows/security.yml/badge.svg)](https://github.com/vGsteiger/IbexDoc/actions/workflows/security.yml)
-[![Lint & Format](https://github.com/vGsteiger/IbexDoc/actions/workflows/lint.yml/badge.svg)](https://github.com/vGsteiger/IbexDoc/actions/workflows/lint.yml)
-[![Tauri Build](https://github.com/vGsteiger/IbexDoc/actions/workflows/release.yml/badge.svg)](https://github.com/vGsteiger/IbexDoc/actions/workflows/release.yml)
+[![Rust CI](https://github.com/vGsteiger/RamDoc/actions/workflows/rust-ci.yml/badge.svg)](https://github.com/vGsteiger/RamDoc/actions/workflows/rust-ci.yml)
+[![Frontend CI](https://github.com/vGsteiger/RamDoc/actions/workflows/frontend-ci.yml/badge.svg)](https://github.com/vGsteiger/RamDoc/actions/workflows/frontend-ci.yml)
+[![Security Audit](https://github.com/vGsteiger/RamDoc/actions/workflows/security.yml/badge.svg)](https://github.com/vGsteiger/RamDoc/actions/workflows/security.yml)
+[![Lint & Format](https://github.com/vGsteiger/RamDoc/actions/workflows/lint.yml/badge.svg)](https://github.com/vGsteiger/RamDoc/actions/workflows/lint.yml)
+[![Tauri Build](https://github.com/vGsteiger/RamDoc/actions/workflows/release.yml/badge.svg)](https://github.com/vGsteiger/RamDoc/actions/workflows/release.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 **DokAssist** is a 100% local, encrypted macOS application for Swiss patient record management.
@@ -18,7 +18,7 @@ This repository (**RamDoc**) hosts the full open-source code.
 
 Pre-built **universal macOS DMGs** (Apple Silicon + Intel) are published automatically on every
 versioned merge to `main`. Download the latest release from the
-[GitHub Releases](https://github.com/vGsteiger/IbexDoc/releases) page.
+[GitHub Releases](https://github.com/vGsteiger/RamDoc/releases) page.
 
 Releases are triggered when a PR is labeled `major`, `minor`, or `patch` (or uses conventional
 commit prefixes such as `feat:` / `fix:`).
@@ -81,7 +81,7 @@ DokAssist is designed with a defence-in-depth approach:
 
 ### Prerequisites
 
-- Rust 1.82+ (MSRV)
+- Rust 1.88+ (MSRV)
 - Node.js 20+
 - pnpm 8+
 - macOS 13+ (for full Keychain + Metal GPU support)
@@ -106,7 +106,7 @@ pnpm build:dmg
 ### Testing
 
 ```bash
-# Rust unit tests (86 tests)
+# Rust unit tests
 cd dokassist/src-tauri
 cargo test --lib
 

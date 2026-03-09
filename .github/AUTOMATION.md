@@ -125,7 +125,7 @@ All PRs are automatically labeled with `autorelease` and `merge when ready` when
 
 ### Release not created
 - Ensure the `skip-release` label is not present
-- Check the [release workflow](https://github.com/vGsteiger/IbexDoc/actions/workflows/release.yml) in the Actions tab
+- Check the [release workflow](https://github.com/vGsteiger/RamDoc/actions/workflows/release.yml) in the Actions tab
 - Verify the PR was successfully merged to `main`
 - Check that the workflow has necessary permissions
 

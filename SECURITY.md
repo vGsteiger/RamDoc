@@ -14,7 +14,7 @@ Only the latest release is actively supported with security patches.
 **Please do not open a public GitHub issue for security vulnerabilities.**
 
 Use GitHub's private vulnerability reporting:
-**[Report a vulnerability](https://github.com/vGsteiger/IbexDoc/security/advisories/new)**
+**[Report a vulnerability](https://github.com/vGsteiger/RamDoc/security/advisories/new)**
 
 Include in your report:
 - DokAssist version (visible in the app's About screen)
