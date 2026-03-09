@@ -4,13 +4,14 @@
   import { authStatus } from '$lib/stores/auth';
   import { goto } from '$app/navigation';
   import { Users, Calendar, BookOpen, MessageSquare, Settings, Lock } from 'lucide-svelte';
+  import { t } from '$lib/translations';
 
   const navItems = [
-    { path: '/patients', label: 'Patients', icon: Users },
-    { path: '/calendar', label: 'Calendar', icon: Calendar },
-    { path: '/literature', label: 'Literature', icon: BookOpen },
-    { path: '/chat', label: 'Chat', icon: MessageSquare },
-    { path: '/settings', label: 'Settings', icon: Settings }
+    { path: '/patients', labelKey: 'nav.patients', icon: Users },
+    { path: '/calendar', labelKey: 'nav.calendar', icon: Calendar },
+    { path: '/literature', labelKey: 'nav.literature', icon: BookOpen },
+    { path: '/chat', labelKey: 'nav.chat', icon: MessageSquare },
+    { path: '/settings', labelKey: 'nav.settings', icon: Settings }
   ];
 
   async function handleLock() {
@@ -43,7 +44,7 @@
               : 'text-gray-300 hover:bg-gray-800'}"
           >
             <Icon size={20} />
-            <span class="font-medium">{item.label}</span>
+            <span class="font-medium">{$t(item.labelKey)}</span>
           </a>
         </li>
       {/each}
@@ -56,7 +57,7 @@
       class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-gray-300 hover:bg-gray-800 transition-colors"
     >
       <Lock size={20} />
-      <span class="font-medium">Lock</span>
+      <span class="font-medium">{$t('nav.lock')}</span>
     </button>
   </div>
 </aside>

@@ -22,6 +22,8 @@
     type EmbedStatus,
   } from "$lib/api";
   import { themePreference, type ThemeMode } from "$lib/stores/theme";
+  import { language } from "$lib/stores/language";
+  import { t } from "$lib/translations";
 
   let status = $state<LlmEngineStatus | null>(null);
   let recommended = $state<ModelChoice | null>(null);
@@ -216,25 +218,25 @@
 </script>
 
 <div class="p-8 max-w-xl">
-  <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">Settings</h1>
+  <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">{$t('settings.title')}</h1>
 
   <section class="mb-10">
     <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-200 mb-4">
-      Application Updates
+      {$t('settings.applicationUpdates')}
     </h2>
 
     <div class="bg-gray-100 dark:bg-gray-800 rounded-lg p-4 mb-4">
       <div class="flex items-center justify-between mb-3">
         <div>
-          <p class="text-sm font-medium text-gray-900 dark:text-gray-100">Current Version</p>
-          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">{appVersion || "Loading..."}</p>
+          <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{$t('settings.currentVersion')}</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">{appVersion || $t('common.loading')}</p>
         </div>
         <button
           onclick={handleCheckForUpdates}
           disabled={checkingUpdate || installingUpdate}
           class="px-4 py-2 text-sm rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors"
         >
-          {checkingUpdate ? "Checking..." : "Check for Updates"}
+          {checkingUpdate ? $t('settings.checking') : $t('settings.checkForUpdates')}
         </button>
       </div>
 
@@ -244,10 +246,10 @@
             <div class="flex items-start justify-between gap-4 mb-2">
               <div>
                 <p class="text-sm font-medium text-green-400">
-                  Update Available
+                  {$t('settings.updateAvailable')}
                 </p>
                 <p class="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                  Version {updateInfo.latest_version} is now available
+                  {$t('settings.version')} {updateInfo.latest_version} {$t('settings.versionAvailable')}
                 </p>
               </div>
             </div>
@@ -256,7 +258,7 @@
               <div
                 class="text-xs text-gray-600 dark:text-gray-400 mb-3 max-h-32 overflow-y-auto bg-gray-200 dark:bg-gray-900 rounded p-2"
               >
-                <p class="font-medium mb-1">Release Notes:</p>
+                <p class="font-medium mb-1">{$t('settings.releaseNotes')}</p>
                 <div class="whitespace-pre-wrap">{updateInfo.body}</div>
               </div>
             {/if}
@@ -264,7 +266,7 @@
             {#if installingUpdate}
               <div class="mb-3">
                 <div class="flex justify-between text-xs text-gray-600 dark:text-gray-400 mb-1">
-                  <span>Downloading and installing update...</span>
+                  <span>{$t('settings.downloading')} {$t('settings.downloadingAndInstalling')}</span>
                   <span>{updateProgress}%</span>
                 </div>
                 <div class="w-full bg-gray-300 dark:bg-gray-700 rounded-full h-2">
@@ -274,7 +276,7 @@
                   ></div>
                 </div>
                 <p class="text-xs text-gray-600 dark:text-gray-400 mt-2">
-                  The app will restart automatically after installation.
+                  {$t('settings.autoRestart')}
                 </p>
               </div>
             {/if}
@@ -294,7 +296,7 @@
           </div>
         {:else}
           <div class="border-t border-gray-300 dark:border-gray-700 pt-3 mt-3">
-            <p class="text-sm text-green-400">You're up to date!</p>
+            <p class="text-sm text-green-400">{$t('settings.noUpdatesAvailable')}</p>
           </div>
         {/if}
       {/if}
@@ -309,15 +311,15 @@
 
   <section class="mb-10">
     <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-200 mb-4">
-      Appearance
+      {$t('settings.appearance')}
     </h2>
 
-    <div class="bg-gray-100 dark:bg-gray-800 rounded-lg p-4">
+    <div class="bg-gray-100 dark:bg-gray-800 rounded-lg p-4 mb-4">
       <p class="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
-        Theme
+        {$t('settings.theme')}
       </p>
       <p class="text-xs text-gray-600 dark:text-gray-400 mb-4">
-        Choose how RamDoc looks on your device
+        {$t('settings.themeDescription')}
       </p>
 
       <div class="space-y-2">
@@ -331,8 +333,8 @@
             class="w-4 h-4 text-blue-600 focus:ring-blue-500"
           />
           <div>
-            <p class="text-sm font-medium text-gray-900 dark:text-gray-100">Light</p>
-            <p class="text-xs text-gray-600 dark:text-gray-400">Always use light mode</p>
+            <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{$t('settings.light')}</p>
+            <p class="text-xs text-gray-600 dark:text-gray-400">{$t('settings.lightDescription')}</p>
           </div>
         </label>
 
@@ -346,8 +348,8 @@
             class="w-4 h-4 text-blue-600 focus:ring-blue-500"
           />
           <div>
-            <p class="text-sm font-medium text-gray-900 dark:text-gray-100">Dark</p>
-            <p class="text-xs text-gray-600 dark:text-gray-400">Always use dark mode</p>
+            <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{$t('settings.dark')}</p>
+            <p class="text-xs text-gray-600 dark:text-gray-400">{$t('settings.darkDescription')}</p>
           </div>
         </label>
 
@@ -361,8 +363,49 @@
             class="w-4 h-4 text-blue-600 focus:ring-blue-500"
           />
           <div>
-            <p class="text-sm font-medium text-gray-900 dark:text-gray-100">System</p>
-            <p class="text-xs text-gray-600 dark:text-gray-400">Use your system's theme setting (default)</p>
+            <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{$t('settings.system')}</p>
+            <p class="text-xs text-gray-600 dark:text-gray-400">{$t('settings.systemDescription')}</p>
+          </div>
+        </label>
+      </div>
+    </div>
+
+    <div class="bg-gray-100 dark:bg-gray-800 rounded-lg p-4">
+      <p class="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
+        {$t('settings.language')}
+      </p>
+      <p class="text-xs text-gray-600 dark:text-gray-400 mb-4">
+        {$t('settings.languageDescription')}
+      </p>
+
+      <div class="space-y-2">
+        <label class="flex items-center gap-3 p-3 rounded-lg border border-gray-300 dark:border-gray-700 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors {$language === 'en' ? 'bg-gray-200 dark:bg-gray-700 border-blue-500' : ''}">
+          <input
+            type="radio"
+            name="language"
+            value="en"
+            checked={$language === 'en'}
+            onchange={() => language.set('en')}
+            class="w-4 h-4 text-blue-600 focus:ring-blue-500"
+          />
+          <div>
+            <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{$t('settings.english')}</p>
+            <p class="text-xs text-gray-600 dark:text-gray-400">English</p>
+          </div>
+        </label>
+
+        <label class="flex items-center gap-3 p-3 rounded-lg border border-gray-300 dark:border-gray-700 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors {$language === 'de' ? 'bg-gray-200 dark:bg-gray-700 border-blue-500' : ''}">
+          <input
+            type="radio"
+            name="language"
+            value="de"
+            checked={$language === 'de'}
+            onchange={() => language.set('de')}
+            class="w-4 h-4 text-blue-600 focus:ring-blue-500"
+          />
+          <div>
+            <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{$t('settings.german')}</p>
+            <p class="text-xs text-gray-600 dark:text-gray-400">Deutsch</p>
           </div>
         </label>
       </div>
