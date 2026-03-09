@@ -22,7 +22,7 @@
     type EmbedStatus,
   } from "$lib/api";
   import { themePreference, type ThemeMode } from "$lib/stores/theme";
-  import { language, type LanguageCode } from "$lib/stores/language";
+  import { language } from "$lib/stores/language";
   import { t } from "$lib/translations";
 
   let status = $state<LlmEngineStatus | null>(null);
@@ -249,7 +249,7 @@
                   {$t('settings.updateAvailable')}
                 </p>
                 <p class="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                  {$t('settings.version')} {updateInfo.latest_version} is now available
+                  {$t('settings.version')} {updateInfo.latest_version} {$t('settings.versionAvailable')}
                 </p>
               </div>
             </div>
@@ -258,7 +258,7 @@
               <div
                 class="text-xs text-gray-600 dark:text-gray-400 mb-3 max-h-32 overflow-y-auto bg-gray-200 dark:bg-gray-900 rounded p-2"
               >
-                <p class="font-medium mb-1">Release Notes:</p>
+                <p class="font-medium mb-1">{$t('settings.releaseNotes')}</p>
                 <div class="whitespace-pre-wrap">{updateInfo.body}</div>
               </div>
             {/if}
@@ -266,7 +266,7 @@
             {#if installingUpdate}
               <div class="mb-3">
                 <div class="flex justify-between text-xs text-gray-600 dark:text-gray-400 mb-1">
-                  <span>{$t('settings.downloading')} and installing update...</span>
+                  <span>{$t('settings.downloading')} {$t('settings.downloadingAndInstalling')}</span>
                   <span>{updateProgress}%</span>
                 </div>
                 <div class="w-full bg-gray-300 dark:bg-gray-700 rounded-full h-2">
@@ -276,7 +276,7 @@
                   ></div>
                 </div>
                 <p class="text-xs text-gray-600 dark:text-gray-400 mt-2">
-                  The app will restart automatically after installation.
+                  {$t('settings.autoRestart')}
                 </p>
               </div>
             {/if}
@@ -319,7 +319,7 @@
         {$t('settings.theme')}
       </p>
       <p class="text-xs text-gray-600 dark:text-gray-400 mb-4">
-        Choose how RamDoc looks on your device
+        {$t('settings.themeDescription')}
       </p>
 
       <div class="space-y-2">
@@ -334,7 +334,7 @@
           />
           <div>
             <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{$t('settings.light')}</p>
-            <p class="text-xs text-gray-600 dark:text-gray-400">Always use light mode</p>
+            <p class="text-xs text-gray-600 dark:text-gray-400">{$t('settings.lightDescription')}</p>
           </div>
         </label>
 
@@ -349,7 +349,7 @@
           />
           <div>
             <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{$t('settings.dark')}</p>
-            <p class="text-xs text-gray-600 dark:text-gray-400">Always use dark mode</p>
+            <p class="text-xs text-gray-600 dark:text-gray-400">{$t('settings.darkDescription')}</p>
           </div>
         </label>
 
@@ -364,7 +364,7 @@
           />
           <div>
             <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{$t('settings.system')}</p>
-            <p class="text-xs text-gray-600 dark:text-gray-400">Use your system's theme setting (default)</p>
+            <p class="text-xs text-gray-600 dark:text-gray-400">{$t('settings.systemDescription')}</p>
           </div>
         </label>
       </div>

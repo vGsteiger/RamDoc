@@ -1,4 +1,4 @@
-import { writable, derived } from 'svelte/store';
+import { writable } from 'svelte/store';
 import { browser } from '$app/environment';
 
 export type LanguageCode = 'en' | 'de';
@@ -37,7 +37,15 @@ function createLanguageStore() {
       }
       set(value);
     },
-    update,
+    update: (updater: (value: LanguageCode) => LanguageCode) => {
+      update((current) => {
+        const next = updater(current);
+        if (browser) {
+          localStorage.setItem(STORAGE_KEY, next);
+        }
+        return next;
+      });
+    },
   };
 }
 
