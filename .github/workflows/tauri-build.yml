@@ -126,8 +126,8 @@ jobs:
         name: dokassist-${{ matrix.platform }}
         path: |
           dokassist/src-tauri/target/*/release/bundle/dmg/*.dmg
-          dokassist/src-tauri/target/*/release/bundle/dmg/*.dmg.sig
-          dokassist/src-tauri/target/*/release/bundle/macos/*.app
+          dokassist/src-tauri/target/*/release/bundle/macos/*.app.tar.gz
+          dokassist/src-tauri/target/*/release/bundle/macos/*.app.tar.gz.sig
         retention-days: 7
         if-no-files-found: warn
 
@@ -192,21 +192,24 @@ jobs:
         REPO="${{ github.repository }}"
         BASE_URL="https://github.com/${REPO}/releases/download/${TAG}"
 
-        # Locate platform-specific DMGs and their .sig sidecars
+        # Locate DMGs (for manual download) and .app.tar.gz + .sig (for auto-updater)
+        # Tauri v2 macOS updater uses .app.tar.gz, NOT .dmg
         ARM_DMG=$(find ./artifacts -name "*aarch64*.dmg" | head -n1)
         X86_DMG=$(find ./artifacts -name "*x86_64*.dmg" | head -n1)
-        ARM_SIG=$(find ./artifacts -name "*aarch64*.dmg.sig" | head -n1)
-        X86_SIG=$(find ./artifacts -name "*x86_64*.dmg.sig" | head -n1)
+        ARM_TAR=$(find ./artifacts -name "*aarch64*.app.tar.gz" | head -n1)
+        X86_TAR=$(find ./artifacts -name "*x86_64*.app.tar.gz" | head -n1)
+        ARM_SIG=$(find ./artifacts -name "*aarch64*.app.tar.gz.sig" | head -n1)
+        X86_SIG=$(find ./artifacts -name "*x86_64*.app.tar.gz.sig" | head -n1)
 
         ARM_URL=""
         X86_URL=""
         ARM_SIG_CONTENT=""
         X86_SIG_CONTENT=""
 
+        # Upload DMGs as release assets for fresh installs
         if [ -f "$ARM_DMG" ]; then
           echo "Uploading ARM64 DMG: $(basename "$ARM_DMG")"
           gh release upload "$TAG" "$ARM_DMG" --clobber
-          ARM_URL="${BASE_URL}/$(basename "$ARM_DMG")"
         else
           echo "Warning: No aarch64 DMG found in artifacts"
         fi
@@ -214,9 +217,25 @@ jobs:
         if [ -f "$X86_DMG" ]; then
           echo "Uploading x86_64 DMG: $(basename "$X86_DMG")"
           gh release upload "$TAG" "$X86_DMG" --clobber
-          X86_URL="${BASE_URL}/$(basename "$X86_DMG")"
         else
           echo "Warning: No x86_64 DMG found in artifacts"
+        fi
+
+        # Upload .app.tar.gz bundles for auto-updater
+        if [ -f "$ARM_TAR" ]; then
+          echo "Uploading ARM64 app.tar.gz: $(basename "$ARM_TAR")"
+          gh release upload "$TAG" "$ARM_TAR" --clobber
+          ARM_URL="${BASE_URL}/$(basename "$ARM_TAR")"
+        else
+          echo "Warning: No aarch64 .app.tar.gz found in artifacts"
+        fi
+
+        if [ -f "$X86_TAR" ]; then
+          echo "Uploading x86_64 app.tar.gz: $(basename "$X86_TAR")"
+          gh release upload "$TAG" "$X86_TAR" --clobber
+          X86_URL="${BASE_URL}/$(basename "$X86_TAR")"
+        else
+          echo "Warning: No x86_64 .app.tar.gz found in artifacts"
         fi
 
         [ -f "$ARM_SIG" ] && ARM_SIG_CONTENT=$(cat "$ARM_SIG")
@@ -224,6 +243,7 @@ jobs:
 
         # Generate and upload latest.json for Tauri updater
         # NOTE: Tauri v2 requires plain semver (no "v" prefix)
+        # URL must point to .app.tar.gz (not .dmg) — that is what the updater downloads
         RELEASE_NOTES=$(gh release view "$TAG" --json body -q .body 2>/dev/null || echo "")
         RELEASE_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 

@@ -44,16 +44,15 @@ pub async fn check_for_updates(app: AppHandle) -> Result<UpdateInfo, AppError> {
             }
             Err(e) => {
                 let msg = e.to_string();
-                // A 404 / missing manifest means no release has been published yet.
-                // Treat it as "up to date" rather than surfacing a confusing error.
-                if msg.contains("fetch")
-                    || msg.contains("404")
+                // Only treat network/404 errors as "no release yet" — not signature errors.
+                // A 404 or network failure just means no manifest is published yet.
+                // Signature/pubkey failures must surface as real errors so the user
+                // knows the update cannot be trusted.
+                let is_no_release = msg.contains("404")
                     || msg.contains("release JSON")
-                    || msg.contains("status code")
-                    || msg.contains("relative URL")
-                    || msg.contains("pubkey")
-                    || msg.contains("No pubkey")
-                {
+                    || (msg.contains("status code") && !msg.contains("pubkey"))
+                    || msg.contains("relative URL");
+                if is_no_release {
                     log::info!(
                         "Updater manifest not available ({}), treating as up to date",
                         msg
