@@ -29,14 +29,14 @@ impl EmbedEngine {
     }
 
     /// Embed a batch of texts.  Returns one `Vec<f32>` per input string.
-    pub fn embed_texts(&self, texts: &[&str]) -> Result<Vec<Vec<f32>>, AppError> {
+    pub fn embed_texts(&mut self, texts: &[&str]) -> Result<Vec<Vec<f32>>, AppError> {
         self.model
-            .embed(texts.to_vec(), None)
+            .embed(texts, None)
             .map_err(|e| AppError::Llm(format!("Embedding failed: {e}")))
     }
 
     /// Embed a single text — convenience wrapper around [`embed_texts`].
-    pub fn embed_one(&self, text: &str) -> Result<Vec<f32>, AppError> {
+    pub fn embed_one(&mut self, text: &str) -> Result<Vec<f32>, AppError> {
         let mut vecs = self.embed_texts(&[text])?;
         vecs.pop()
             .ok_or_else(|| AppError::Llm("Embedding returned empty result".to_string()))

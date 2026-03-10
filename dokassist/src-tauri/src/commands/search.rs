@@ -18,10 +18,14 @@ pub async fn global_search(
     let embed_arc: Option<Arc<_>> = state.try_get_embed();
     let query_vec: Option<Vec<f32>> = if let Some(arc) = embed_arc {
         let q = query.clone();
-        tokio::task::spawn_blocking(move || arc.embed_one(&q))
-            .await
-            .ok()
-            .and_then(|r| r.ok())
+        tokio::task::spawn_blocking(move || {
+            arc.lock()
+                .map_err(|_| AppError::Llm("Embed mutex poisoned".to_string()))?
+                .embed_one(&q)
+        })
+        .await
+        .ok()
+        .and_then(|r| r.ok())
     } else {
         None
     };
