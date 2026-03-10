@@ -201,6 +201,8 @@ fn tool_search_literature(
 
     // Embed the query (CPU-bound operation)
     let query_vec = embed_engine
+        .lock()
+        .map_err(|_| AppError::Llm("Embed mutex poisoned".to_string()))?
         .embed_one(&safe_query)
         .map_err(|e| AppError::Llm(format!("Failed to embed query: {}", e)))?;
 
