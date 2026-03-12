@@ -196,7 +196,7 @@
                   {#if patient.phone}
                     <div>
                       <label
-                        class="block text-sm font-medium text-gray-400 mb-1"
+                        class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
                         >Phone</label
                       >
                       <p class="text-gray-900 dark:text-gray-100">{patient.phone}</p>
@@ -205,7 +205,7 @@
                   {#if patient.email}
                     <div>
                       <label
-                        class="block text-sm font-medium text-gray-400 mb-1"
+                        class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
                         >Email</label
                       >
                       <p class="text-gray-900 dark:text-gray-100">{patient.email}</p>
@@ -220,7 +220,7 @@
                 <label class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
                   >Address</label
                 >
-                <p class="text-gray-100 whitespace-pre-line">
+                <p class="text-gray-900 dark:text-gray-100 whitespace-pre-line">
                   {patient.address}
                 </p>
               </div>

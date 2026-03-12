@@ -31,7 +31,7 @@
 </script>
 
 <div class="space-y-4">
-  <h3 class="text-lg font-semibold text-gray-100">Select Report Type</h3>
+  <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Select Report Type</h3>
   <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
     {#each reportTypes as type}
       <button
