@@ -203,9 +203,14 @@ pub async fn process_literature(
         let chunk_id = chunk.id.clone();
         let engine = embed_engine.clone();
 
-        let embedding = tokio::task::spawn_blocking(move || engine.embed_one(&content))
-            .await
-            .map_err(|e| AppError::Llm(format!("Task join error: {}", e)))??;
+        let embedding = tokio::task::spawn_blocking(move || {
+            engine
+                .lock()
+                .map_err(|_| AppError::Llm("Embed mutex poisoned".to_string()))?
+                .embed_one(&content)
+        })
+        .await
+        .map_err(|e| AppError::Llm(format!("Task join error: {}", e)))??;
 
         let db = state.get_db()?;
         let conn = db.conn()?;
@@ -247,9 +252,14 @@ pub async fn search_literature(
     };
 
     let query_clone = query.clone();
-    let query_vec = tokio::task::spawn_blocking(move || embed_engine.embed_one(&query_clone))
-        .await
-        .map_err(|e| AppError::Llm(format!("Task join error: {}", e)))??;
+    let query_vec = tokio::task::spawn_blocking(move || {
+        embed_engine
+            .lock()
+            .map_err(|_| AppError::Llm("Embed mutex poisoned".to_string()))?
+            .embed_one(&query_clone)
+    })
+    .await
+    .map_err(|e| AppError::Llm(format!("Task join error: {}", e)))??;
 
     let db = state.get_db()?;
     let conn = db.conn()?;

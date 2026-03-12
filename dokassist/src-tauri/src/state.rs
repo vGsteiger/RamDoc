@@ -12,7 +12,7 @@ pub struct AppState {
     pub db: Mutex<Option<DbPool>>,
     pub llm: Mutex<Option<Arc<LlmEngine>>>,
     /// Embedding engine for semantic search.  Populated lazily by `process_file`.
-    pub embed: Mutex<Option<Arc<EmbedEngine>>>,
+    pub embed: Mutex<Option<Arc<Mutex<EmbedEngine>>>>,
 }
 
 pub enum AuthState {
@@ -97,7 +97,7 @@ impl AppState {
 
     /// Return a cloned Arc to the embed engine if it has been initialised.
     /// Returns `None` if `process_file` has not yet populated the engine.
-    pub fn try_get_embed(&self) -> Option<Arc<EmbedEngine>> {
+    pub fn try_get_embed(&self) -> Option<Arc<Mutex<EmbedEngine>>> {
         self.embed
             .lock()
             .ok()
@@ -111,7 +111,7 @@ impl AppState {
             .lock()
             .map_err(|_| crate::error::AppError::Llm("Embed mutex poisoned".to_string()))?;
         if guard.is_none() {
-            *guard = Some(Arc::new(engine));
+            *guard = Some(Arc::new(Mutex::new(engine)));
         }
         Ok(())
     }

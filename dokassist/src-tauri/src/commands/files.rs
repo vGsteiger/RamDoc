@@ -214,7 +214,7 @@ pub async fn process_file(
     let (vector, engine) =
         tokio::task::spawn_blocking(move || -> Result<(Vec<f32>, EmbedEngine), AppError> {
             std::fs::create_dir_all(&embed_cache_dir)?;
-            let engine = EmbedEngine::new(&embed_cache_dir)?;
+            let mut engine = EmbedEngine::new(&embed_cache_dir)?;
             let vector = engine.embed_one(&text_for_embed)?;
             Ok((vector, engine))
         })
