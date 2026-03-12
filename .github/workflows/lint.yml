@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Setup Node.js
       uses: actions/setup-node@v6
@@ -43,7 +43,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Setup Node.js
       uses: actions/setup-node@v6
@@ -74,7 +74,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Check for typos
       # CRIT-7: Pinned to commit SHA for supply-chain security (tag: v1.44.0)
