@@ -20,7 +20,7 @@ jobs:
         rust: [stable, 1.88.0]
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Install Rust toolchain
       # CRIT-7: Pinned to commit SHA for supply-chain security (tag: v1)
