@@ -31,8 +31,10 @@ jobs:
             echo "has_prs=false" >> $GITHUB_OUTPUT
           else
             echo "Found open Dependabot PRs: $PR_NUMBERS"
+            # Convert newline-separated PR numbers to space-separated for proper GitHub Actions output format
+            PR_NUMBERS_SINGLE_LINE=$(echo "$PR_NUMBERS" | tr '\n' ' ')
             echo "has_prs=true" >> $GITHUB_OUTPUT
-            echo "pr_numbers=$PR_NUMBERS" >> $GITHUB_OUTPUT
+            echo "pr_numbers=$PR_NUMBERS_SINGLE_LINE" >> $GITHUB_OUTPUT
           fi
 
       - name: Trigger rebase for Dependabot PRs
