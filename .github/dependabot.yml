@@ -10,6 +10,7 @@ updates:
     assignees:
       - vGsteiger
     open-pull-requests-limit: 5
+    rebase-strategy: auto
 
   - package-ecosystem: npm
     directory: /dokassist
@@ -21,6 +22,7 @@ updates:
     assignees:
       - vGsteiger
     open-pull-requests-limit: 5
+    rebase-strategy: auto
 
   - package-ecosystem: github-actions
     directory: /
@@ -32,3 +34,4 @@ updates:
     assignees:
       - vGsteiger
     open-pull-requests-limit: 5
+    rebase-strategy: auto

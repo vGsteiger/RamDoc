@@ -23,13 +23,18 @@ jobs:
           PR_NUMBER="${{ github.event.pull_request.number }}"
           PR_INFO=$(gh pr view "$PR_NUMBER" \
             --repo ${{ github.repository }} \
-            --json mergeable,reviewDecision)
+            --json mergeable,reviewDecision,isDraft)
           MERGEABLE=$(echo "$PR_INFO" | jq -r '.mergeable')
           REVIEW=$(echo "$PR_INFO"   | jq -r '.reviewDecision')
+          IS_DRAFT=$(echo "$PR_INFO"  | jq -r '.isDraft')
           echo "Mergeable:       $MERGEABLE"
           echo "Review decision: $REVIEW"
+          echo "Is draft:        $IS_DRAFT"
           # MED-6: block on review rejections regardless of branch protection config.
-          if [ "$REVIEW" = "CHANGES_REQUESTED" ]; then
+          if [ "$IS_DRAFT" = "true" ]; then
+            echo "blocked=true"  >> $GITHUB_OUTPUT
+            echo "reason=PR is in draft state" >> $GITHUB_OUTPUT
+          elif [ "$REVIEW" = "CHANGES_REQUESTED" ]; then
             echo "blocked=true"  >> $GITHUB_OUTPUT
             echo "reason=Changes were requested by a reviewer" >> $GITHUB_OUTPUT
           elif [ "$REVIEW" = "REVIEW_REQUIRED" ]; then
