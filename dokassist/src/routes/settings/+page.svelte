@@ -14,12 +14,16 @@
     installUpdate,
     getAppVersion,
     exportAllPatientData,
+    createVaultBackup,
+    restoreVaultBackup,
+    validateBackupArchive,
     getEmbedStatus,
     initializeEmbedEngine,
     type LlmEngineStatus,
     type ModelChoice,
     type UpdateInfo,
     type EmbedStatus,
+    type BackupInfo,
   } from "$lib/api";
   import { themePreference, type ThemeMode } from "$lib/stores/theme";
   import { language } from "$lib/stores/language";
@@ -173,6 +177,16 @@
   let exporting = $state(false);
   let exportError = $state("");
 
+  // Backup & Restore state
+  let creatingBackup = $state(false);
+  let backupError = $state("");
+  let restoring = $state(false);
+  let showRestoreConfirm = $state(false);
+  let restoreInput = $state("");
+  let restoreError = $state("");
+  let selectedBackupFile: File | null = null;
+  let validatedBackupInfo: BackupInfo | null = null;
+
   async function handleReset() {
     resetting = true;
     resetError = "";
@@ -213,6 +227,81 @@
       exportError = parseError(e).message;
     } finally {
       exporting = false;
+    }
+  }
+
+  async function handleCreateBackup() {
+    creatingBackup = true;
+    backupError = "";
+    try {
+      const backupData = await createVaultBackup();
+
+      // Convert number array to Uint8Array and create download
+      const blob = new Blob([new Uint8Array(backupData)], {
+        type: "application/octet-stream",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `RamDoc_Backup_${new Date().toISOString().split('T')[0]}.dokassist`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      backupError = parseError(e).message;
+    } finally {
+      creatingBackup = false;
+    }
+  }
+
+  async function handleSelectRestoreFile(
+    event: Event & { currentTarget: HTMLInputElement },
+  ) {
+    const file = event.currentTarget.files?.[0];
+    if (!file) {
+      selectedBackupFile = null;
+      validatedBackupInfo = null;
+      return;
+    }
+
+    selectedBackupFile = file;
+    restoreError = "";
+
+    // Validate the backup file
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const backupArray = Array.from(new Uint8Array(arrayBuffer));
+      validatedBackupInfo = await validateBackupArchive(backupArray);
+    } catch (e) {
+      restoreError = parseError(e).message;
+      selectedBackupFile = null;
+      validatedBackupInfo = null;
+    }
+  }
+
+  async function handleRestoreBackup() {
+    if (!selectedBackupFile || !validatedBackupInfo) return;
+
+    restoring = true;
+    restoreError = "";
+    try {
+      const arrayBuffer = await selectedBackupFile.arrayBuffer();
+      const backupArray = Array.from(new Uint8Array(arrayBuffer));
+      await restoreVaultBackup(backupArray);
+
+      // Reset state
+      showRestoreConfirm = false;
+      restoreInput = "";
+      selectedBackupFile = null;
+      validatedBackupInfo = null;
+
+      // Redirect to unlock page since database was replaced
+      goto("/");
+    } catch (e) {
+      restoreError = parseError(e).message;
+    } finally {
+      restoring = false;
     }
   }
 </script>
@@ -584,6 +673,137 @@
     {#if embedPhase === "error"}
       <p class="text-xs text-red-400">{embedError}</p>
     {/if}
+  </section>
+
+  <section class="mt-10">
+    <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-200 mb-4">
+      Encrypted Backup & Restore
+    </h2>
+
+    <!-- Create Backup -->
+    <div class="bg-gray-100 dark:bg-gray-800 rounded-lg p-4 mb-4">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <p class="text-sm font-medium text-gray-900 dark:text-gray-100">
+            Create Encrypted Backup
+          </p>
+          <p class="text-xs text-gray-600 dark:text-gray-400 mt-1">
+            Export your entire vault (database + encrypted files) as a single
+            encrypted .dokassist archive. The backup is encrypted with your master
+            password and includes checksums for verification.
+          </p>
+        </div>
+        <button
+          onclick={handleCreateBackup}
+          disabled={creatingBackup}
+          class="px-4 py-2 text-sm rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors shrink-0"
+        >
+          {creatingBackup ? "Creating…" : "Export Backup"}
+        </button>
+      </div>
+      {#if backupError}
+        <p class="text-xs text-red-400 mt-2">{backupError}</p>
+      {/if}
+    </div>
+
+    <!-- Restore Backup -->
+    <div class="bg-gray-100 dark:bg-gray-800 rounded-lg p-4">
+      <div class="mb-3">
+        <p class="text-sm font-medium text-gray-900 dark:text-gray-100 mb-1">
+          Restore from Backup
+        </p>
+        <p class="text-xs text-gray-600 dark:text-gray-400">
+          Restore your vault from a .dokassist backup archive. This will replace
+          ALL current data with the backup contents.
+        </p>
+      </div>
+
+      <div class="mb-3">
+        <label
+          class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2"
+        >
+          Select Backup File (.dokassist)
+        </label>
+        <input
+          type="file"
+          accept=".dokassist"
+          onchange={handleSelectRestoreFile}
+          class="block w-full text-sm text-gray-900 dark:text-gray-100 border border-gray-400 dark:border-gray-600 rounded-lg cursor-pointer bg-gray-200 dark:bg-gray-900 focus:outline-none"
+        />
+      </div>
+
+      {#if validatedBackupInfo}
+        <div
+          class="mb-3 p-3 bg-green-900/20 border border-green-700 rounded-lg"
+        >
+          <p class="text-xs font-medium text-green-400 mb-2">
+            ✓ Backup validated successfully
+          </p>
+          <div class="text-xs text-gray-300 space-y-1">
+            <p>
+              Created: {new Date(validatedBackupInfo.created_at).toLocaleString()}
+            </p>
+            <p>Files: {validatedBackupInfo.file_count}</p>
+            <p>DB Schema: v{validatedBackupInfo.db_schema_version}</p>
+          </div>
+        </div>
+
+        {#if !showRestoreConfirm}
+          <button
+            onclick={() => {
+              showRestoreConfirm = true;
+              restoreInput = "";
+              restoreError = "";
+            }}
+            class="px-4 py-2 text-sm rounded-lg bg-amber-700 hover:bg-amber-600 text-white transition-colors"
+          >
+            Restore from This Backup
+          </button>
+        {/if}
+
+        {#if showRestoreConfirm}
+          <div class="mt-3 border-t border-amber-700 pt-3">
+            <p class="text-sm text-amber-300 mb-3">
+              <strong>⚠️ WARNING:</strong> This will replace ALL current data with
+              the backup. Type <strong>RESTORE</strong> to confirm.
+            </p>
+            <div class="flex gap-2">
+              <input
+                type="text"
+                bind:value={restoreInput}
+                placeholder="RESTORE"
+                class="flex-1 px-3 py-2 text-sm rounded-lg bg-gray-200 dark:bg-gray-900 border border-gray-400 dark:border-gray-600 text-gray-900 dark:text-gray-100 placeholder-gray-500 focus:outline-none focus:border-amber-500"
+                onkeydown={(e) => {
+                  if (e.key === "Enter" && restoreInput === "RESTORE")
+                    handleRestoreBackup();
+                }}
+              />
+              <button
+                onclick={handleRestoreBackup}
+                disabled={restoring || restoreInput !== "RESTORE"}
+                class="px-4 py-2 text-sm rounded-lg bg-amber-700 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors shrink-0"
+              >
+                {restoring ? "Restoring…" : "Confirm Restore"}
+              </button>
+              <button
+                onclick={() => {
+                  showRestoreConfirm = false;
+                  restoreInput = "";
+                  restoreError = "";
+                }}
+                class="px-4 py-2 text-sm rounded-lg bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 transition-colors shrink-0"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        {/if}
+      {/if}
+
+      {#if restoreError}
+        <p class="text-xs text-red-400 mt-2">{restoreError}</p>
+      {/if}
+    </div>
   </section>
 
   <section class="mt-10">
