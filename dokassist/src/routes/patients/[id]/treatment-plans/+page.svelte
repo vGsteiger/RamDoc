@@ -52,6 +52,7 @@
   let goalDescription = $state('');
   let goalTargetDate = $state('');
   let goalStatus = $state('in_progress');
+  let goalSortOrder = $state(0);
   let editingGoalId = $state<string | null>(null);
 
   // Form state for interventions
@@ -104,6 +105,12 @@
     try {
       loadingDetails = true;
       selectedPlanId = planId;
+      // Clear stale data immediately
+      goals = [];
+      interventions = [];
+      resetGoalForm();
+      resetInterventionForm();
+
       const [loadedGoals, loadedInterventions] = await Promise.all([
         listTreatmentGoalsForPlan(planId),
         listTreatmentInterventionsForPlan(planId)
@@ -195,7 +202,7 @@
     editingId = null;
     title = '';
     description = '';
-    startDate = new Date().toISOString().split('T')[0]);
+    startDate = new Date().toISOString().split('T')[0];
     endDate = '';
     status = 'active';
   }
@@ -206,6 +213,7 @@
     goalDescription = goal.description;
     goalTargetDate = goal.target_date || '';
     goalStatus = goal.status;
+    goalSortOrder = goal.sort_order;
     showAddGoalForm = true;
   }
 
@@ -240,7 +248,8 @@
         const update: UpdateTreatmentGoal = {
           description: goalDescription,
           target_date: goalTargetDate || undefined,
-          status: goalStatus
+          status: goalStatus,
+          sort_order: goalSortOrder
         };
         await updateTreatmentGoal(editingGoalId, update);
       } else {
@@ -248,7 +257,8 @@
           treatment_plan_id: selectedPlanId,
           description: goalDescription,
           target_date: goalTargetDate || undefined,
-          status: goalStatus
+          status: goalStatus,
+          sort_order: goalSortOrder
         };
         await createTreatmentGoal(input);
       }
@@ -267,6 +277,7 @@
     goalDescription = '';
     goalTargetDate = '';
     goalStatus = 'in_progress';
+    goalSortOrder = goals.length > 0 ? Math.max(...goals.map(g => g.sort_order)) + 1 : 0;
   }
 
   // Intervention handlers
@@ -553,7 +564,14 @@
                   <div class="flex justify-between items-center mb-3">
                     <h4 class="text-md font-semibold text-gray-900 dark:text-gray-100">Goals</h4>
                     <button
-                      onclick={() => showAddGoalForm = !showAddGoalForm}
+                      onclick={() => {
+                        if (showAddGoalForm) {
+                          resetGoalForm();
+                        } else {
+                          resetGoalForm();
+                          showAddGoalForm = true;
+                        }
+                      }}
                       class="text-sm px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
                     >
                       {showAddGoalForm ? 'Cancel' : '+ Add Goal'}
@@ -573,7 +591,7 @@
                           class="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         ></textarea>
                       </div>
-                      <div class="grid grid-cols-2 gap-3">
+                      <div class="grid grid-cols-3 gap-3">
                         <div>
                           <label class="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">
                             Target Date
@@ -596,6 +614,17 @@
                               <option value={option.value}>{option.label}</option>
                             {/each}
                           </select>
+                        </div>
+                        <div>
+                          <label class="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">
+                            Priority
+                          </label>
+                          <input
+                            type="number"
+                            bind:value={goalSortOrder}
+                            min="0"
+                            class="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
                         </div>
                       </div>
                       <div class="flex justify-end gap-2">
@@ -664,7 +693,14 @@
                   <div class="flex justify-between items-center mb-3">
                     <h4 class="text-md font-semibold text-gray-900 dark:text-gray-100">Interventions</h4>
                     <button
-                      onclick={() => showAddInterventionForm = !showAddInterventionForm}
+                      onclick={() => {
+                        if (showAddInterventionForm) {
+                          resetInterventionForm();
+                        } else {
+                          resetInterventionForm();
+                          showAddInterventionForm = true;
+                        }
+                      }}
                       class="text-sm px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
                     >
                       {showAddInterventionForm ? 'Cancel' : '+ Add Intervention'}

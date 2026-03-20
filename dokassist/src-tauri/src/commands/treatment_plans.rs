@@ -1,9 +1,9 @@
 use crate::audit::{self, AuditAction};
 use crate::error::AppError;
 use crate::models::treatment_plan::{
-    self, CreateTreatmentGoal, CreateTreatmentIntervention, CreateTreatmentPlan,
-    TreatmentGoal, TreatmentIntervention, TreatmentPlan, UpdateTreatmentGoal,
-    UpdateTreatmentIntervention, UpdateTreatmentPlan,
+    self, CreateTreatmentGoal, CreateTreatmentIntervention, CreateTreatmentPlan, TreatmentGoal,
+    TreatmentIntervention, TreatmentPlan, UpdateTreatmentGoal, UpdateTreatmentIntervention,
+    UpdateTreatmentPlan,
 };
 use crate::search;
 use crate::state::AppState;
@@ -47,13 +47,7 @@ pub async fn get_treatment_plan(
     let conn = pool.conn()?;
     let plan = treatment_plan::get_treatment_plan(&conn, &id)?;
 
-    audit::log(
-        &conn,
-        AuditAction::View,
-        "treatment_plan",
-        Some(&id),
-        None,
-    )?;
+    audit::log(&conn, AuditAction::View, "treatment_plan", Some(&id), None)?;
 
     Ok(plan)
 }
@@ -100,13 +94,7 @@ pub async fn update_treatment_plan(
 
     let plan = treatment_plan::update_treatment_plan(&tx, &id, input)?;
 
-    audit::log(
-        &tx,
-        AuditAction::Update,
-        "treatment_plan",
-        Some(&id),
-        None,
-    )?;
+    audit::log(&tx, AuditAction::Update, "treatment_plan", Some(&id), None)?;
 
     tx.commit()?;
 
@@ -116,26 +104,28 @@ pub async fn update_treatment_plan(
 }
 
 #[tauri::command]
-pub async fn delete_treatment_plan(
-    state: State<'_, AppState>,
-    id: String,
-) -> Result<(), AppError> {
+pub async fn delete_treatment_plan(state: State<'_, AppState>, id: String) -> Result<(), AppError> {
     let pool = state.get_db()?;
     let conn = pool.conn()?;
 
     let tx = conn.unchecked_transaction()?;
 
+    // Get all goals and interventions before deleting the plan
+    let goals = treatment_plan::list_treatment_goals_for_plan(&tx, &id, 1000, 0)?;
+    let interventions = treatment_plan::list_treatment_interventions_for_plan(&tx, &id, 1000, 0)?;
+
+    // Remove all search index entries (plan, goals, interventions)
     search::remove_from_index(&tx, "treatment_plan", &id)?;
+    for goal in goals {
+        search::remove_from_index(&tx, "treatment_goal", &goal.id)?;
+    }
+    for intervention in interventions {
+        search::remove_from_index(&tx, "treatment_intervention", &intervention.id)?;
+    }
 
     treatment_plan::delete_treatment_plan(&tx, &id)?;
 
-    audit::log(
-        &tx,
-        AuditAction::Delete,
-        "treatment_plan",
-        Some(&id),
-        None,
-    )?;
+    audit::log(&tx, AuditAction::Delete, "treatment_plan", Some(&id), None)?;
 
     tx.commit()?;
 
@@ -226,13 +216,7 @@ pub async fn update_treatment_goal(
 
     let goal = treatment_plan::update_treatment_goal(&tx, &id, input)?;
 
-    audit::log(
-        &tx,
-        AuditAction::Update,
-        "treatment_goal",
-        Some(&id),
-        None,
-    )?;
+    audit::log(&tx, AuditAction::Update, "treatment_goal", Some(&id), None)?;
 
     tx.commit()?;
 
@@ -242,10 +226,7 @@ pub async fn update_treatment_goal(
 }
 
 #[tauri::command]
-pub async fn delete_treatment_goal(
-    state: State<'_, AppState>,
-    id: String,
-) -> Result<(), AppError> {
+pub async fn delete_treatment_goal(state: State<'_, AppState>, id: String) -> Result<(), AppError> {
     let pool = state.get_db()?;
     let conn = pool.conn()?;
 
@@ -255,13 +236,7 @@ pub async fn delete_treatment_goal(
 
     treatment_plan::delete_treatment_goal(&tx, &id)?;
 
-    audit::log(
-        &tx,
-        AuditAction::Delete,
-        "treatment_goal",
-        Some(&id),
-        None,
-    )?;
+    audit::log(&tx, AuditAction::Delete, "treatment_goal", Some(&id), None)?;
 
     tx.commit()?;
 
