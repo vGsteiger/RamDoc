@@ -52,6 +52,7 @@ pub fn run() {
             commands::auth::recover_app,
             commands::auth::lock_app,
             commands::auth::reset_app,
+            commands::dashboard::get_dashboard_data,
             commands::patients::create_patient,
             commands::patients::get_patient,
             commands::patients::list_patients,

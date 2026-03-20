@@ -1,6 +1,7 @@
 pub mod audit;
 pub mod auth;
 pub mod chat;
+pub mod dashboard;
 pub mod diagnoses;
 pub mod emails;
 pub mod export;

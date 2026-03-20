@@ -36,7 +36,7 @@
         return;
       }
       authStatus.set('unlocked');
-      goto('/patients');
+      goto('/dashboard');
     } catch (err) {
       error = friendlyError(err);
     } finally {
