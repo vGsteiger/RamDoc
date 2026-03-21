@@ -120,6 +120,13 @@ fn run_migrations(conn: &Connection) -> Result<(), AppError> {
         conn.execute("PRAGMA user_version = 7;", [])?;
     }
 
+    // Migration 8: Outcome scores table for standardized questionnaires
+    if version < 8 {
+        log::info!("Running migration 008: Outcome scores");
+        conn.execute_batch(include_str!("migrations/008_outcome_scores.sql"))?;
+        conn.execute("PRAGMA user_version = 8;", [])?;
+    }
+
     log::info!("Database migrations complete");
     Ok(())
 }
@@ -178,6 +185,6 @@ mod tests {
         let version: i32 = conn
             .query_row("PRAGMA user_version;", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 7);
+        assert_eq!(version, 8);
     }
 }

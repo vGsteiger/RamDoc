@@ -258,6 +258,28 @@
     "notes": "Notes",
     "confirmDelete": "Are you sure you want to delete this medication?"
   },
+  "outcomeScores": {
+    "title": "Outcome Scores",
+    "newScore": "New Score",
+    "noScores": "No outcome scores yet",
+    "questionnaire": "Questionnaire",
+    "score": "Score",
+    "interpretation": "Interpretation",
+    "administeredOn": "Administered On",
+    "notes": "Notes",
+    "scales": {
+      "phq9": "PHQ-9 (Depression)",
+      "gad7": "GAD-7 (Anxiety)",
+      "bdiii": "BDI-II (Depression)"
+    },
+    "interpretations": {
+      "minimal": "Minimal",
+      "mild": "Mild",
+      "moderate": "Moderate",
+      "moderatelySevere": "Moderately Severe",
+      "severe": "Severe"
+    }
+  },
   "reports": {
     "title": "Reports",
     "newReport": "New Report",

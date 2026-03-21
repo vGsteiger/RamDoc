@@ -9,6 +9,7 @@ pub mod files;
 pub mod literature;
 pub mod llm;
 pub mod medications;
+pub mod outcome_scores;
 pub mod patients;
 pub mod reports;
 pub mod search;
