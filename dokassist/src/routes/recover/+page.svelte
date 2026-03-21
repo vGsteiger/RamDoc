@@ -32,7 +32,7 @@
       }
 
       authStatus.set('unlocked');
-      goto('/patients');
+      goto('/dashboard');
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to recover account';
     } finally {

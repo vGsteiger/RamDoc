@@ -47,7 +47,7 @@
       }
     }
     authStatus.set('unlocked');
-    goto('/patients');
+    goto('/dashboard');
   }
 </script>
 

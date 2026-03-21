@@ -3,6 +3,7 @@
     "name": "RamDoc"
   },
   "nav": {
+    "dashboard": "Dashboard",
     "patients": "Patients",
     "calendar": "Calendar",
     "literature": "Literature",
@@ -202,6 +203,20 @@
     "fileName": "File Name",
     "uploadedOn": "Uploaded On",
     "delete": "Delete"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "todaysSessions": "Today's Sessions",
+    "noSessionsToday": "No sessions scheduled for today",
+    "recentPatients": "Recent Patients",
+    "noRecentPatients": "No recent activity",
+    "incompleteNotes": "Sessions with Incomplete Notes",
+    "noIncompleteNotes": "All notes are complete",
+    "newPatient": "New Patient",
+    "viewAllPatients": "View All Patients",
+    "viewCalendar": "View Calendar",
+    "minutes": "min",
+    "loadError": "Failed to load dashboard"
   },
   "common": {
     "save": "Save",

@@ -3,10 +3,11 @@
   import { lockApp } from '$lib/api';
   import { authStatus } from '$lib/stores/auth';
   import { goto } from '$app/navigation';
-  import { Users, Calendar, BookOpen, MessageSquare, Settings, Lock } from 'lucide-svelte';
+  import { Users, Calendar, BookOpen, MessageSquare, Settings, Lock, LayoutDashboard } from 'lucide-svelte';
   import { t } from '$lib/translations';
 
   const navItems = [
+    { path: '/dashboard', labelKey: 'nav.dashboard', icon: LayoutDashboard },
     { path: '/patients', labelKey: 'nav.patients', icon: Users },
     { path: '/calendar', labelKey: 'nav.calendar', icon: Calendar },
     { path: '/literature', labelKey: 'nav.literature', icon: BookOpen },

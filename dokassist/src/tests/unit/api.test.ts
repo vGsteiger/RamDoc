@@ -70,6 +70,7 @@ import {
   getLiteratureDocumentChunks,
   exportReportToPdf,
   exportReportToDocx,
+  getDashboardData,
   type ModelChoice,
   type AppError,
 } from '$lib/api';
@@ -1008,5 +1009,19 @@ describe('getLiteratureDocumentChunks', () => {
     const result = await getLiteratureDocumentChunks('lit1');
     expect(mockInvoke).toHaveBeenCalledWith('get_literature_document_chunks', { id: 'lit1' });
     expect(result).toEqual(chunks);
+  });
+});
+
+describe('getDashboardData', () => {
+  it('calls get_dashboard_data and returns dashboard data', async () => {
+    const dashboardData = {
+      todays_sessions: [],
+      recent_patients: [],
+      sessions_with_incomplete_notes: [],
+    };
+    mockInvoke.mockResolvedValueOnce(dashboardData);
+    const result = await getDashboardData();
+    expect(mockInvoke).toHaveBeenCalledWith('get_dashboard_data');
+    expect(result).toEqual(dashboardData);
   });
 });
