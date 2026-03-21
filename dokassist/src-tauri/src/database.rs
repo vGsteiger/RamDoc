@@ -134,6 +134,13 @@ fn run_migrations(conn: &Connection) -> Result<(), AppError> {
         conn.execute("PRAGMA user_version = 9;", [])?;
     }
 
+    // Migration 9: Clinical summary column on sessions
+    if version < 10 {
+        log::info!("Running migration 010: Clinical summary");
+        conn.execute_batch(include_str!("migrations/010_clinical_summary.sql"))?;
+        conn.execute("PRAGMA user_version = 10;", [])?;
+    }
+
     log::info!("Database migrations complete");
     Ok(())
 }
