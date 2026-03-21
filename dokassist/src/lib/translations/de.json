@@ -258,6 +258,28 @@
     "notes": "Notizen",
     "confirmDelete": "Möchten Sie dieses Medikament wirklich löschen?"
   },
+  "outcomeScores": {
+    "title": "Outcome-Scores",
+    "newScore": "Neuer Score",
+    "noScores": "Noch keine Outcome-Scores erfasst",
+    "questionnaire": "Fragebogen",
+    "score": "Punktzahl",
+    "interpretation": "Interpretation",
+    "administeredOn": "Durchgeführt am",
+    "notes": "Notizen",
+    "scales": {
+      "phq9": "PHQ-9 (Depression)",
+      "gad7": "GAD-7 (Angst)",
+      "bdiii": "BDI-II (Depression)"
+    },
+    "interpretations": {
+      "minimal": "Minimal",
+      "mild": "Leicht",
+      "moderate": "Mittel",
+      "moderatelySevere": "Mittelschwer",
+      "severe": "Schwer"
+    }
+  },
   "reports": {
     "title": "Berichte",
     "newReport": "Neuer Bericht",

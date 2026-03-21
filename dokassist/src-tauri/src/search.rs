@@ -2,6 +2,7 @@ use crate::error::AppError;
 use crate::llm::embed::{blob_to_vec, cosine_similarity, vec_to_blob};
 use crate::models::diagnosis::Diagnosis;
 use crate::models::medication::Medication;
+use crate::models::outcome_score::OutcomeScore;
 use crate::models::patient::Patient;
 use crate::models::session::Session;
 use crate::models::treatment_plan::{TreatmentGoal, TreatmentIntervention, TreatmentPlan};
@@ -794,6 +795,65 @@ pub fn search_literature_chunks(
     }
 
     Ok(results)
+}
+
+pub fn index_outcome_score(conn: &Connection, score: &OutcomeScore) -> Result<(), AppError> {
+    // Get session and patient info
+    let (patient_id, patient_name, _session_date): (String, String, String) = conn
+        .query_row(
+            "SELECT s.patient_id, p.first_name || ' ' || p.last_name, s.session_date
+             FROM sessions s
+             JOIN patients p ON s.patient_id = p.id
+             WHERE s.id = ?",
+            [&score.session_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .unwrap_or_else(|_| {
+            (
+                "unknown".to_string(),
+                "Unknown Patient".to_string(),
+                "".to_string(),
+            )
+        });
+
+    // Remove existing index entry
+    remove_from_index(conn, "outcome_score", &score.id)?;
+
+    let interpretation = score.interpretation.as_deref().unwrap_or("Uninterpreted");
+    let title = format!(
+        "{} - Score: {} ({})",
+        score.scale_type, score.score, interpretation
+    );
+    let content = format!(
+        "{} questionnaire. Total score: {}. Severity: {}. Notes: {}",
+        score.scale_type,
+        score.score,
+        interpretation,
+        score.notes.as_deref().unwrap_or("")
+    );
+
+    conn.execute(
+        r#"
+        INSERT INTO search_index (entity_type, entity_id, patient_id, patient_name, title, content, date)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+        "#,
+        (
+            "outcome_score",
+            &score.id,
+            &patient_id,
+            &patient_name,
+            &title,
+            &content,
+            &score.administered_at,
+        ),
+    )?;
+
+    Ok(())
+}
+
+pub fn update_outcome_score(conn: &Connection, score: &OutcomeScore) -> Result<(), AppError> {
+    // Re-index the score (remove old, insert new)
+    index_outcome_score(conn, score)
 }
 
 /// Normalize AHV queries: "7561234567897" and "756.1234.5678.97" both match

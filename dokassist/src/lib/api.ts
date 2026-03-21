@@ -671,6 +671,83 @@ export async function deleteTreatmentIntervention(id: string): Promise<void> {
   return await invoke<void>("delete_treatment_intervention", { id });
 }
 
+// === Outcome Score Types ===
+
+export interface OutcomeScore {
+  id: string;
+  session_id: string;
+  scale_type: string;
+  score: number;
+  interpretation: string | null;
+  subscores: string | null;
+  administered_at: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateOutcomeScore {
+  session_id: string;
+  scale_type: string;
+  score: number;
+  subscores?: string;
+  administered_at: string;
+  notes?: string;
+}
+
+export interface UpdateOutcomeScore {
+  scale_type?: string;
+  score?: number;
+  subscores?: string;
+  administered_at?: string;
+  notes?: string;
+}
+
+export async function createOutcomeScore(
+  input: CreateOutcomeScore,
+): Promise<OutcomeScore> {
+  return await invoke<OutcomeScore>("create_outcome_score", { input });
+}
+
+export async function getOutcomeScore(id: string): Promise<OutcomeScore> {
+  return await invoke<OutcomeScore>("get_outcome_score", { id });
+}
+
+export async function listScoresForSession(
+  sessionId: string,
+  limit?: number,
+  offset?: number,
+): Promise<OutcomeScore[]> {
+  return await invoke<OutcomeScore[]>("list_scores_for_session", {
+    sessionId,
+    limit,
+    offset,
+  });
+}
+
+export async function listScoresByScale(
+  scaleType: string,
+  limit?: number,
+  offset?: number,
+): Promise<OutcomeScore[]> {
+  return await invoke<OutcomeScore[]>("list_scores_by_scale", {
+    scaleType,
+    limit,
+    offset,
+  });
+}
+
+export async function updateOutcomeScore(
+  id: string,
+  input: UpdateOutcomeScore,
+): Promise<OutcomeScore> {
+  return await invoke<OutcomeScore>("update_outcome_score", { id, input });
+}
+
+export async function deleteOutcomeScore(id: string): Promise<void> {
+  return await invoke<void>("delete_outcome_score", { id });
+}
+
 // === Report Types ===
 
 export interface Report {
