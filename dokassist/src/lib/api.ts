@@ -928,6 +928,47 @@ export async function exportAllPatientData(): Promise<number[]> {
   return await invoke<number[]>('export_all_patient_data');
 }
 
+// ---------------------------------------------------------------------------
+// Backup & Restore
+// ---------------------------------------------------------------------------
+
+export interface BackupInfo {
+  schema_version: number;
+  created_at: string;
+  db_schema_version: number;
+  file_count: number;
+}
+
+/**
+ * Create an encrypted full-vault backup.
+ * Returns the encrypted backup archive as a byte array.
+ */
+export async function createVaultBackup(): Promise<number[]> {
+  return await invoke<number[]>("create_vault_backup");
+}
+
+/**
+ * Restore a full-vault backup from an encrypted archive.
+ * WARNING: This replaces ALL current data with the backup contents.
+ */
+export async function restoreVaultBackup(
+  encryptedBackup: number[],
+): Promise<BackupInfo> {
+  return await invoke<BackupInfo>("restore_vault_backup", { encryptedBackup });
+}
+
+/**
+ * Validate a backup archive without restoring it.
+ * Returns metadata about the backup if validation succeeds.
+ */
+export async function validateBackupArchive(
+  encryptedBackup: number[],
+): Promise<BackupInfo> {
+  return await invoke<BackupInfo>("validate_backup_archive", {
+    encryptedBackup,
+  });
+}
+
 // Chat / Agent API
 // ---------------------------------------------------------------------------
 

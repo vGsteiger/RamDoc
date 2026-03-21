@@ -11,6 +11,8 @@ use zeroize::Zeroize;
 
 /// App-specific KDF salt — not secret, prevents cross-app key reuse.
 const KDF_SALT: &[u8; 16] = b"dokassist-v1-key";
+
+type RecoveryKeys = (Vec<String>, [u8; 32], [u8; 32]);
 /// Vault file format version byte.
 const VAULT_VERSION: u8 = 1;
 
@@ -114,7 +116,7 @@ fn derive_keys_from_entropy(entropy: &[u8; 32]) -> Result<([u8; 32], [u8; 32]), 
 /// Returns `(mnemonic_words, db_key, fs_key)` and writes a 1-byte vault marker
 /// to `vault_path`. The marker's existence signals "app initialized" to `state.rs`;
 /// its version byte enables future vault-format migrations.
-pub fn create_recovery(vault_path: &Path) -> Result<(Vec<String>, [u8; 32], [u8; 32]), AppError> {
+pub fn create_recovery(vault_path: &Path) -> Result<RecoveryKeys, AppError> {
     // Generate 256 bits of entropy for a 24-word mnemonic
     let mut entropy = [0u8; 32];
     rand::rng().fill(&mut entropy);

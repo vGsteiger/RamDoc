@@ -1,10 +1,14 @@
 use crate::crypto;
 use crate::error::AppError;
 use crate::spotlight;
+use serde::{Deserialize, Serialize};
 use std::fs;
+use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use std::time::{Duration, SystemTime};
 use uuid::Uuid;
+use zip::write::SimpleFileOptions;
+use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
 const VAULT_DIR: &str = "vault";
 const TEMP_DIR: &str = "temp";
@@ -503,6 +507,415 @@ fn sanitize_filename(filename: &str) -> String {
         .collect()
 }
 
+/// Backup manifest metadata — stored in the .dokassist archive as manifest.json
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct BackupManifest {
+    /// Format version for future compatibility
+    pub schema_version: u32,
+    /// Timestamp when backup was created (RFC3339)
+    pub created_at: String,
+    /// Database schema version (from PRAGMA user_version)
+    pub db_schema_version: i32,
+    /// SHA-256 checksums for verification: file path -> hex-encoded checksum
+    pub checksums: std::collections::HashMap<String, String>,
+}
+
+/// Compute SHA-256 checksum of data
+fn sha256_checksum(data: &[u8]) -> String {
+    use ring::digest::{digest, SHA256};
+    let hash = digest(&SHA256, data);
+    hex::encode(hash.as_ref())
+}
+
+/// Create an encrypted full-vault backup archive (.dokassist)
+///
+/// Archives:
+/// - SQLCipher database file (dokassist.db)
+/// - Entire vault/ directory (encrypted files)
+/// - manifest.json with schema version, timestamp, and SHA-256 checksums
+///
+/// The archive itself is AES-256-GCM encrypted using a key derived from the
+/// backup passphrase (which can be the user's master password or a separate one).
+///
+/// Returns the encrypted backup archive as a byte vector.
+pub fn create_backup(
+    base_dir: &Path,
+    backup_key: &[u8; 32],
+    db_schema_version: i32,
+) -> Result<Vec<u8>, AppError> {
+    // Create in-memory ZIP archive with all vault contents
+    let mut zip_buffer = Vec::new();
+    let mut checksums = std::collections::HashMap::new();
+
+    {
+        let mut zip = ZipWriter::new(std::io::Cursor::new(&mut zip_buffer));
+        let options = SimpleFileOptions::default()
+            .compression_method(CompressionMethod::Deflated)
+            .compression_level(Some(6));
+
+        // Add database file
+        let db_path = base_dir.join("dokassist.db");
+        if db_path.exists() {
+            let db_data = fs::read(&db_path)?;
+            checksums.insert("dokassist.db".to_string(), sha256_checksum(&db_data));
+            zip.start_file("dokassist.db", options)
+                .map_err(|e| AppError::Validation(format!("ZIP error: {}", e)))?;
+            zip.write_all(&db_data)?;
+        } else {
+            return Err(AppError::NotFound("Database file not found".to_string()));
+        }
+
+        // Add entire vault directory recursively
+        let vault_path = base_dir.join(VAULT_DIR);
+        if vault_path.exists() {
+            add_directory_to_zip(&mut zip, &vault_path, VAULT_DIR, &mut checksums, options)?;
+        }
+
+        zip.finish()
+            .map_err(|e| AppError::Validation(format!("ZIP finalize error: {}", e)))?;
+    }
+
+    // Create manifest
+    let manifest = BackupManifest {
+        schema_version: 1,
+        created_at: chrono::Utc::now().to_rfc3339(),
+        db_schema_version,
+        checksums,
+    };
+
+    // Add manifest to a new ZIP
+    let mut final_buffer = Vec::new();
+    {
+        let mut zip = ZipWriter::new(std::io::Cursor::new(&mut final_buffer));
+        let options = SimpleFileOptions::default()
+            .compression_method(CompressionMethod::Deflated)
+            .compression_level(Some(6));
+
+        // Add manifest.json
+        let manifest_json = serde_json::to_string_pretty(&manifest)
+            .map_err(|e| AppError::Validation(format!("Manifest serialization failed: {}", e)))?;
+        zip.start_file("manifest.json", options)
+            .map_err(|e| AppError::Validation(format!("ZIP error: {}", e)))?;
+        zip.write_all(manifest_json.as_bytes())?;
+
+        // Add vault.zip (the inner archive)
+        zip.start_file("vault.zip", options)
+            .map_err(|e| AppError::Validation(format!("ZIP error: {}", e)))?;
+        zip.write_all(&zip_buffer)?;
+
+        zip.finish()
+            .map_err(|e| AppError::Validation(format!("ZIP finalize error: {}", e)))?;
+    }
+
+    // Encrypt the entire archive with AES-256-GCM
+    let encrypted_backup = crypto::encrypt(backup_key, &final_buffer)?;
+
+    Ok(encrypted_backup)
+}
+
+/// Recursively add a directory to a ZIP archive
+fn add_directory_to_zip(
+    zip: &mut ZipWriter<std::io::Cursor<&mut Vec<u8>>>,
+    dir_path: &Path,
+    archive_prefix: &str,
+    checksums: &mut std::collections::HashMap<String, String>,
+    options: SimpleFileOptions,
+) -> Result<(), AppError> {
+    for entry in fs::read_dir(dir_path)? {
+        let entry = entry?;
+        let path = entry.path();
+        let file_name = entry.file_name();
+        let relative_path = format!("{}/{}", archive_prefix, file_name.to_string_lossy());
+
+        if path.is_dir() {
+            // Create directory entry in ZIP
+            let dir_path_with_slash = format!("{}/", relative_path);
+            zip.add_directory(&dir_path_with_slash, options)
+                .map_err(|e| AppError::Validation(format!("ZIP error: {}", e)))?;
+
+            // Recursively add subdirectory contents
+            add_directory_to_zip(zip, &path, &relative_path, checksums, options)?;
+        } else if path.is_file() {
+            // Skip hidden files (like .metadata_never_index)
+            if file_name.to_string_lossy().starts_with('.') {
+                continue;
+            }
+
+            // Read file and compute checksum
+            let file_data = fs::read(&path)?;
+            checksums.insert(relative_path.clone(), sha256_checksum(&file_data));
+
+            // Add to ZIP
+            zip.start_file(&relative_path, options)
+                .map_err(|e| AppError::Validation(format!("ZIP error: {}", e)))?;
+            zip.write_all(&file_data)?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Validate and restore a backup archive
+///
+/// Steps:
+/// 1. Decrypt the archive using backup_key
+/// 2. Extract and validate manifest.json
+/// 3. Check schema version compatibility
+/// 4. Verify SHA-256 checksums of all files
+/// 5. Extract vault.zip
+/// 6. Replace local database and vault directory
+///
+/// WARNING: This replaces all current data. The caller must ensure the user
+/// has confirmed this destructive operation.
+pub fn restore_backup(
+    base_dir: &Path,
+    encrypted_backup: &[u8],
+    backup_key: &[u8; 32],
+) -> Result<BackupManifest, AppError> {
+    // Decrypt the archive
+    let decrypted_backup = crypto::decrypt(backup_key, encrypted_backup)?;
+
+    // Open outer ZIP (contains manifest.json and vault.zip)
+    let cursor = std::io::Cursor::new(decrypted_backup);
+    let mut archive = ZipArchive::new(cursor)
+        .map_err(|e| AppError::Validation(format!("Invalid backup archive: {}", e)))?;
+
+    // Extract and parse manifest
+    let manifest: BackupManifest = {
+        let mut manifest_file = archive
+            .by_name("manifest.json")
+            .map_err(|e| AppError::Validation(format!("Manifest not found: {}", e)))?;
+
+        let mut manifest_data = Vec::new();
+        std::io::copy(&mut manifest_file, &mut manifest_data)?;
+
+        serde_json::from_slice(&manifest_data)
+            .map_err(|e| AppError::Validation(format!("Invalid manifest: {}", e)))?
+    };
+
+    // Check schema version compatibility (v1 is current)
+    if manifest.schema_version != 1 {
+        return Err(AppError::Validation(format!(
+            "Unsupported backup schema version: {}",
+            manifest.schema_version
+        )));
+    }
+
+    // Check database schema version compatibility
+    // We can restore backups from the same or older DB schema versions
+    // The database migration system will upgrade if needed
+    if manifest.db_schema_version > 6 {
+        return Err(AppError::Validation(format!(
+            "Backup database schema version {} is newer than supported version 6",
+            manifest.db_schema_version
+        )));
+    }
+
+    // Extract vault.zip to a temporary location
+    let temp_restore_dir = base_dir.join("temp_restore");
+    if temp_restore_dir.exists() {
+        fs::remove_dir_all(&temp_restore_dir)?;
+    }
+    fs::create_dir_all(&temp_restore_dir)?;
+
+    // Extract vault.zip
+    let mut vault_zip_data = Vec::new();
+    {
+        let mut vault_zip_file = archive
+            .by_name("vault.zip")
+            .map_err(|e| AppError::Validation(format!("vault.zip not found: {}", e)))?;
+        std::io::copy(&mut vault_zip_file, &mut vault_zip_data)?;
+    }
+
+    // Open and extract inner ZIP (vault contents)
+    let vault_cursor = std::io::Cursor::new(vault_zip_data);
+    let mut vault_archive = ZipArchive::new(vault_cursor)
+        .map_err(|e| AppError::Validation(format!("Invalid vault.zip: {}", e)))?;
+
+    // Verify checksums while extracting
+    for i in 0..vault_archive.len() {
+        let mut file = vault_archive.by_index(i).map_err(|e| {
+            AppError::Validation(format!("Failed to read archive entry {}: {}", i, e))
+        })?;
+
+        if file.is_dir() {
+            continue;
+        }
+
+        let file_path = file.name().to_string();
+
+        // Validate file path to prevent Zip Slip attack
+        let file_path_obj = Path::new(&file_path);
+        for component in file_path_obj.components() {
+            if !matches!(component, Component::Normal(_)) {
+                let _ = fs::remove_dir_all(&temp_restore_dir);
+                return Err(AppError::Validation(format!(
+                    "Invalid path component in archive: {}",
+                    file_path
+                )));
+            }
+        }
+
+        let mut file_data = Vec::new();
+        std::io::copy(&mut file, &mut file_data)?;
+
+        // Verify checksum - fail if missing to prevent restoring unverified content
+        let computed_checksum = sha256_checksum(&file_data);
+        let expected_checksum = manifest.checksums.get(&file_path).ok_or_else(|| {
+            let _ = fs::remove_dir_all(&temp_restore_dir);
+            AppError::Validation(format!("Missing checksum for {} in manifest", file_path))
+        })?;
+
+        if &computed_checksum != expected_checksum {
+            // Clean up temp directory on checksum failure
+            let _ = fs::remove_dir_all(&temp_restore_dir);
+            return Err(AppError::Validation(format!(
+                "Checksum mismatch for {}: expected {}, got {}",
+                file_path, expected_checksum, computed_checksum
+            )));
+        }
+
+        // Extract file to temp location - verify it's within temp_restore_dir
+        let extract_path = temp_restore_dir.join(&file_path);
+        let canonical_temp = temp_restore_dir
+            .canonicalize()
+            .map_err(AppError::Filesystem)?;
+        if let Some(parent) = extract_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        // Verify extracted path is within temp directory (after parent dirs created)
+        let canonical_extract = extract_path.canonicalize().or_else(|_| {
+            // If path doesn't exist yet, check its parent
+            extract_path
+                .parent()
+                .ok_or_else(|| AppError::Validation("Invalid extract path".to_string()))?
+                .canonicalize()
+                .map_err(AppError::Filesystem)
+        })?;
+        if !canonical_extract.starts_with(&canonical_temp) {
+            let _ = fs::remove_dir_all(&temp_restore_dir);
+            return Err(AppError::Validation(format!(
+                "Archive path escapes temp directory: {}",
+                file_path
+            )));
+        }
+        fs::write(&extract_path, &file_data)?;
+    }
+
+    // All checksums verified — now perform the destructive replacement
+    // This is the point of no return
+
+    // 1. Replace database atomically
+    let db_path = base_dir.join("dokassist.db");
+    let temp_db_path = temp_restore_dir.join("dokassist.db");
+    if temp_db_path.exists() {
+        // Use atomic rename/swap to avoid data loss
+        let db_backup_path = base_dir.join("dokassist.db.backup");
+
+        // Move existing database to backup location if it exists
+        if db_path.exists() {
+            if db_backup_path.exists() {
+                fs::remove_file(&db_backup_path)?;
+            }
+            fs::rename(&db_path, &db_backup_path)?;
+        }
+
+        // Move restored database into place
+        match fs::rename(&temp_db_path, &db_path) {
+            Ok(_) => {
+                // Success - clean up backup
+                if db_backup_path.exists() {
+                    let _ = fs::remove_file(&db_backup_path);
+                }
+            }
+            Err(e) => {
+                // Rollback - restore original database
+                if db_backup_path.exists() {
+                    let _ = fs::rename(&db_backup_path, &db_path);
+                }
+                let _ = fs::remove_dir_all(&temp_restore_dir);
+                return Err(AppError::Filesystem(e));
+            }
+        }
+    } else {
+        // Clean up and return error
+        let _ = fs::remove_dir_all(&temp_restore_dir);
+        return Err(AppError::Validation(
+            "Database file not found in backup".to_string(),
+        ));
+    }
+
+    // 2. Replace vault directory atomically
+    let vault_path = base_dir.join(VAULT_DIR);
+    let temp_vault_path = temp_restore_dir.join(VAULT_DIR);
+    if temp_vault_path.exists() {
+        // Use atomic swap strategy
+        let vault_backup_path = base_dir.join(format!("{}.backup", VAULT_DIR));
+
+        // Move existing vault to backup location if it exists
+        if vault_path.exists() {
+            if vault_backup_path.exists() {
+                fs::remove_dir_all(&vault_backup_path)?;
+            }
+            fs::rename(&vault_path, &vault_backup_path)?;
+        }
+
+        // Move restored vault into place
+        match fs::rename(&temp_vault_path, &vault_path) {
+            Ok(_) => {
+                // Success - clean up backup
+                if vault_backup_path.exists() {
+                    let _ = fs::remove_dir_all(&vault_backup_path);
+                }
+            }
+            Err(e) => {
+                // Rollback - restore original vault
+                if vault_backup_path.exists() {
+                    let _ = fs::rename(&vault_backup_path, &vault_path);
+                }
+                let _ = fs::remove_dir_all(&temp_restore_dir);
+                return Err(AppError::Filesystem(e));
+            }
+        }
+
+        // Re-apply Spotlight exclusion after restore
+        let vault_marker = vault_path.join(".metadata_never_index");
+        if !vault_marker.exists() {
+            if let Err(e) = crate::spotlight::exclude_from_spotlight(&vault_path) {
+                log::warn!(
+                    "Failed to re-apply Spotlight exclusion after restore: {}",
+                    e
+                );
+            }
+        }
+    }
+
+    // Clean up temp directory
+    let _ = fs::remove_dir_all(&temp_restore_dir);
+
+    Ok(manifest)
+}
+
+/// Recursively copy a directory
+fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), AppError> {
+    fs::create_dir_all(dst)?;
+
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let path = entry.path();
+        let file_name = entry.file_name();
+        let dst_path = dst.join(&file_name);
+
+        if path.is_dir() {
+            copy_dir_recursive(&path, &dst_path)?;
+        } else {
+            fs::copy(&path, &dst_path)?;
+        }
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -817,5 +1230,166 @@ mod tests {
         let content2 = read_file(base_dir, &fs_key, &path2).unwrap();
         assert_eq!(content1.as_slice(), b"content1");
         assert_eq!(content2.as_slice(), b"content2");
+    }
+
+    #[test]
+    fn test_create_and_restore_backup() {
+        let temp_dir = TempDir::new().unwrap();
+        let base_dir = temp_dir.path();
+        init_vault(base_dir).unwrap();
+
+        // Create a test database file
+        let db_path = base_dir.join("dokassist.db");
+        fs::write(&db_path, b"test database content").unwrap();
+
+        // Create some test files in the vault
+        let fs_key = crypto::generate_key();
+        let patient_id = uuid::Uuid::now_v7().to_string();
+        let file1_content = b"Patient file 1 content";
+        let file2_content = b"Patient file 2 content";
+
+        let vault_path1 = store_file(base_dir, &fs_key, &patient_id, file1_content).unwrap();
+        let vault_path2 = store_file(base_dir, &fs_key, &patient_id, file2_content).unwrap();
+
+        // Create backup
+        let backup_key = crypto::generate_key();
+        let encrypted_backup = create_backup(base_dir, &backup_key, 6).unwrap();
+
+        // Verify backup is encrypted (not readable as plain text)
+        assert!(!String::from_utf8_lossy(&encrypted_backup).contains("dokassist.db"));
+
+        // Modify the original data
+        fs::write(&db_path, b"modified database").unwrap();
+        delete_file(base_dir, &vault_path1).unwrap();
+
+        // Restore from backup
+        let manifest = restore_backup(base_dir, &encrypted_backup, &backup_key).unwrap();
+
+        // Verify manifest
+        assert_eq!(manifest.schema_version, 1);
+        assert_eq!(manifest.db_schema_version, 6);
+        assert!(!manifest.checksums.is_empty());
+
+        // Verify database was restored
+        let restored_db = fs::read(&db_path).unwrap();
+        assert_eq!(restored_db, b"test database content");
+
+        // Verify vault files were restored
+        let restored_file1 = read_file(base_dir, &fs_key, &vault_path1).unwrap();
+        let restored_file2 = read_file(base_dir, &fs_key, &vault_path2).unwrap();
+        assert_eq!(restored_file1.as_slice(), file1_content);
+        assert_eq!(restored_file2.as_slice(), file2_content);
+    }
+
+    #[test]
+    fn test_backup_with_wrong_key_fails() {
+        let temp_dir = TempDir::new().unwrap();
+        let base_dir = temp_dir.path();
+        init_vault(base_dir).unwrap();
+
+        // Create a test database
+        let db_path = base_dir.join("dokassist.db");
+        fs::write(&db_path, b"test database").unwrap();
+
+        // Create backup with one key
+        let backup_key1 = crypto::generate_key();
+        let encrypted_backup = create_backup(base_dir, &backup_key1, 6).unwrap();
+
+        // Try to restore with a different key
+        let backup_key2 = crypto::generate_key();
+        let result = restore_backup(base_dir, &encrypted_backup, &backup_key2);
+
+        // Should fail with decryption error
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_backup_checksums_validated() {
+        let temp_dir = TempDir::new().unwrap();
+        let base_dir = temp_dir.path();
+        init_vault(base_dir).unwrap();
+
+        // Create a test database
+        let db_path = base_dir.join("dokassist.db");
+        fs::write(&db_path, b"test database").unwrap();
+
+        // Create backup
+        let backup_key = crypto::generate_key();
+        let mut encrypted_backup = create_backup(base_dir, &backup_key, 6).unwrap();
+
+        // Corrupt the backup (flip some bits in the middle)
+        if encrypted_backup.len() > 100 {
+            encrypted_backup[50] ^= 0xFF;
+            encrypted_backup[51] ^= 0xFF;
+        }
+
+        // Try to restore corrupted backup
+        let result = restore_backup(base_dir, &encrypted_backup, &backup_key);
+
+        // Should fail (either at decryption or checksum verification)
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_backup_preserves_directory_structure() {
+        let temp_dir = TempDir::new().unwrap();
+        let base_dir = temp_dir.path();
+        init_vault(base_dir).unwrap();
+
+        // Create database
+        let db_path = base_dir.join("dokassist.db");
+        fs::write(&db_path, b"test db").unwrap();
+
+        // Create files for multiple patients
+        let fs_key = crypto::generate_key();
+        let patient1 = uuid::Uuid::now_v7().to_string();
+        let patient2 = uuid::Uuid::now_v7().to_string();
+
+        store_file(base_dir, &fs_key, &patient1, b"patient1 file1").unwrap();
+        store_file(base_dir, &fs_key, &patient1, b"patient1 file2").unwrap();
+        store_file(base_dir, &fs_key, &patient2, b"patient2 file1").unwrap();
+
+        // Create and restore backup
+        let backup_key = crypto::generate_key();
+        let backup = create_backup(base_dir, &backup_key, 6).unwrap();
+
+        // Clear vault
+        fs::remove_dir_all(base_dir.join(VAULT_DIR)).unwrap();
+        init_vault(base_dir).unwrap();
+
+        // Restore
+        restore_backup(base_dir, &backup, &backup_key).unwrap();
+
+        // Verify directory structure
+        let patient1_dir = base_dir.join(VAULT_DIR).join(&patient1);
+        let patient2_dir = base_dir.join(VAULT_DIR).join(&patient2);
+        assert!(patient1_dir.exists());
+        assert!(patient2_dir.exists());
+
+        // Verify file counts
+        let patient1_files: Vec<_> = fs::read_dir(&patient1_dir).unwrap().collect();
+        let patient2_files: Vec<_> = fs::read_dir(&patient2_dir).unwrap().collect();
+        assert_eq!(patient1_files.len(), 2);
+        assert_eq!(patient2_files.len(), 1);
+    }
+
+    #[test]
+    fn test_empty_vault_backup() {
+        let temp_dir = TempDir::new().unwrap();
+        let base_dir = temp_dir.path();
+        init_vault(base_dir).unwrap();
+
+        // Create only a database (no vault files)
+        let db_path = base_dir.join("dokassist.db");
+        fs::write(&db_path, b"empty vault db").unwrap();
+
+        // Create and restore backup
+        let backup_key = crypto::generate_key();
+        let backup = create_backup(base_dir, &backup_key, 6).unwrap();
+        let manifest = restore_backup(base_dir, &backup, &backup_key).unwrap();
+
+        // Should succeed with just the database
+        assert_eq!(manifest.db_schema_version, 6);
+        assert!(db_path.exists());
     }
 }
