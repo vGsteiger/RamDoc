@@ -503,6 +503,201 @@ export async function deleteMedication(id: string): Promise<void> {
   return await invoke<void>("delete_medication", { id });
 }
 
+// === Treatment Plan Types ===
+
+export interface TreatmentPlan {
+  id: string;
+  patient_id: string;
+  title: string;
+  description: string | null;
+  start_date: string;
+  end_date: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateTreatmentPlan {
+  patient_id: string;
+  title: string;
+  description?: string;
+  start_date: string;
+  end_date?: string;
+  status?: string;
+}
+
+export interface UpdateTreatmentPlan {
+  title?: string;
+  description?: string;
+  start_date?: string;
+  end_date?: string;
+  status?: string;
+}
+
+export async function createTreatmentPlan(
+  input: CreateTreatmentPlan,
+): Promise<TreatmentPlan> {
+  return await invoke<TreatmentPlan>("create_treatment_plan", { input });
+}
+
+export async function getTreatmentPlan(id: string): Promise<TreatmentPlan> {
+  return await invoke<TreatmentPlan>("get_treatment_plan", { id });
+}
+
+export async function listTreatmentPlansForPatient(
+  patientId: string,
+  limit?: number,
+  offset?: number,
+): Promise<TreatmentPlan[]> {
+  return await invoke<TreatmentPlan[]>("list_treatment_plans_for_patient", {
+    patientId,
+    limit,
+    offset,
+  });
+}
+
+export async function updateTreatmentPlan(
+  id: string,
+  input: UpdateTreatmentPlan,
+): Promise<TreatmentPlan> {
+  return await invoke<TreatmentPlan>("update_treatment_plan", { id, input });
+}
+
+export async function deleteTreatmentPlan(id: string): Promise<void> {
+  return await invoke<void>("delete_treatment_plan", { id });
+}
+
+// === Treatment Goal Types ===
+
+export interface TreatmentGoal {
+  id: string;
+  treatment_plan_id: string;
+  description: string;
+  target_date: string | null;
+  status: string;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateTreatmentGoal {
+  treatment_plan_id: string;
+  description: string;
+  target_date?: string;
+  status?: string;
+  sort_order?: number;
+}
+
+export interface UpdateTreatmentGoal {
+  description?: string;
+  target_date?: string;
+  status?: string;
+  sort_order?: number;
+}
+
+export async function createTreatmentGoal(
+  input: CreateTreatmentGoal,
+): Promise<TreatmentGoal> {
+  return await invoke<TreatmentGoal>("create_treatment_goal", { input });
+}
+
+export async function getTreatmentGoal(id: string): Promise<TreatmentGoal> {
+  return await invoke<TreatmentGoal>("get_treatment_goal", { id });
+}
+
+export async function listTreatmentGoalsForPlan(
+  planId: string,
+  limit?: number,
+  offset?: number,
+): Promise<TreatmentGoal[]> {
+  return await invoke<TreatmentGoal[]>("list_treatment_goals_for_plan", {
+    planId,
+    limit,
+    offset,
+  });
+}
+
+export async function updateTreatmentGoal(
+  id: string,
+  input: UpdateTreatmentGoal,
+): Promise<TreatmentGoal> {
+  return await invoke<TreatmentGoal>("update_treatment_goal", { id, input });
+}
+
+export async function deleteTreatmentGoal(id: string): Promise<void> {
+  return await invoke<void>("delete_treatment_goal", { id });
+}
+
+// === Treatment Intervention Types ===
+
+export interface TreatmentIntervention {
+  id: string;
+  treatment_plan_id: string;
+  type: string;
+  description: string;
+  frequency: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateTreatmentIntervention {
+  treatment_plan_id: string;
+  type: string;
+  description: string;
+  frequency?: string;
+}
+
+export interface UpdateTreatmentIntervention {
+  type?: string;
+  description?: string;
+  frequency?: string;
+}
+
+export async function createTreatmentIntervention(
+  input: CreateTreatmentIntervention,
+): Promise<TreatmentIntervention> {
+  return await invoke<TreatmentIntervention>("create_treatment_intervention", {
+    input,
+  });
+}
+
+export async function getTreatmentIntervention(
+  id: string,
+): Promise<TreatmentIntervention> {
+  return await invoke<TreatmentIntervention>("get_treatment_intervention", {
+    id,
+  });
+}
+
+export async function listTreatmentInterventionsForPlan(
+  planId: string,
+  limit?: number,
+  offset?: number,
+): Promise<TreatmentIntervention[]> {
+  return await invoke<TreatmentIntervention[]>(
+    "list_treatment_interventions_for_plan",
+    {
+      planId,
+      limit,
+      offset,
+    },
+  );
+}
+
+export async function updateTreatmentIntervention(
+  id: string,
+  input: UpdateTreatmentIntervention,
+): Promise<TreatmentIntervention> {
+  return await invoke<TreatmentIntervention>("update_treatment_intervention", {
+    id,
+    input,
+  });
+}
+
+export async function deleteTreatmentIntervention(id: string): Promise<void> {
+  return await invoke<void>("delete_treatment_intervention", { id });
+}
+
 // === Report Types ===
 
 export interface Report {

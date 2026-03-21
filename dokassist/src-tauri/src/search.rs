@@ -4,6 +4,7 @@ use crate::models::diagnosis::Diagnosis;
 use crate::models::medication::Medication;
 use crate::models::patient::Patient;
 use crate::models::session::Session;
+use crate::models::treatment_plan::{TreatmentGoal, TreatmentIntervention, TreatmentPlan};
 use rusqlite::Connection;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -378,6 +379,135 @@ pub fn index_medication_from_model(
             &title,
             &content,
             &medication.start_date,
+        ),
+    )?;
+
+    Ok(())
+}
+
+pub fn index_treatment_plan_from_model(
+    conn: &Connection,
+    plan: &TreatmentPlan,
+) -> Result<(), AppError> {
+    // Get patient name from database
+    let patient_name: String = conn
+        .query_row(
+            "SELECT first_name || ' ' || last_name FROM patients WHERE id = ?",
+            [&plan.patient_id],
+            |row| row.get(0),
+        )
+        .unwrap_or_else(|_| "Unknown Patient".to_string());
+
+    // Remove existing treatment plan index entry
+    remove_from_index(conn, "treatment_plan", &plan.id)?;
+
+    let title = plan.title.clone();
+    let content = format!(
+        "{} {}",
+        plan.title,
+        plan.description.as_deref().unwrap_or("")
+    );
+
+    conn.execute(
+        r#"
+        INSERT INTO search_index (entity_type, entity_id, patient_id, patient_name, title, content, date)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+        "#,
+        (
+            "treatment_plan",
+            &plan.id,
+            &plan.patient_id,
+            &patient_name,
+            &title,
+            &content,
+            &plan.start_date,
+        ),
+    )?;
+
+    Ok(())
+}
+
+pub fn index_treatment_goal_from_model(
+    conn: &Connection,
+    goal: &TreatmentGoal,
+) -> Result<(), AppError> {
+    // Get patient_id and patient name from the treatment plan
+    let (patient_id, patient_name): (String, String) = conn
+        .query_row(
+            "SELECT tp.patient_id, p.first_name || ' ' || p.last_name
+             FROM treatment_plans tp
+             JOIN patients p ON tp.patient_id = p.id
+             WHERE tp.id = ?",
+            [&goal.treatment_plan_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap_or_else(|_| ("".to_string(), "Unknown Patient".to_string()));
+
+    // Remove existing treatment goal index entry
+    remove_from_index(conn, "treatment_goal", &goal.id)?;
+
+    let title = format!("Goal: {}", goal.description);
+    let content = goal.description.clone();
+
+    conn.execute(
+        r#"
+        INSERT INTO search_index (entity_type, entity_id, patient_id, patient_name, title, content, date)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+        "#,
+        (
+            "treatment_goal",
+            &goal.id,
+            &patient_id,
+            &patient_name,
+            &title,
+            &content,
+            goal.target_date.as_deref(),
+        ),
+    )?;
+
+    Ok(())
+}
+
+pub fn index_treatment_intervention_from_model(
+    conn: &Connection,
+    intervention: &TreatmentIntervention,
+) -> Result<(), AppError> {
+    // Get patient_id and patient name from the treatment plan
+    let (patient_id, patient_name): (String, String) = conn
+        .query_row(
+            "SELECT tp.patient_id, p.first_name || ' ' || p.last_name
+             FROM treatment_plans tp
+             JOIN patients p ON tp.patient_id = p.id
+             WHERE tp.id = ?",
+            [&intervention.treatment_plan_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap_or_else(|_| ("".to_string(), "Unknown Patient".to_string()));
+
+    // Remove existing treatment intervention index entry
+    remove_from_index(conn, "treatment_intervention", &intervention.id)?;
+
+    let title = format!("{}: {}", intervention.r#type, intervention.description);
+    let content = format!(
+        "{} {} {}",
+        intervention.r#type,
+        intervention.description,
+        intervention.frequency.as_deref().unwrap_or("")
+    );
+
+    conn.execute(
+        r#"
+        INSERT INTO search_index (entity_type, entity_id, patient_id, patient_name, title, content, date)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+        "#,
+        (
+            "treatment_intervention",
+            &intervention.id,
+            &patient_id,
+            &patient_name,
+            &title,
+            &content,
+            None::<String>,
         ),
     )?;
 

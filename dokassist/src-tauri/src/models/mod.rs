@@ -7,3 +7,4 @@ pub mod medication;
 pub mod patient;
 pub mod report;
 pub mod session;
+pub mod treatment_plan;
