@@ -3,8 +3,8 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import { invoke } from '@tauri-apps/api/core';
 import ReportView from '../../routes/patients/[id]/reports/[reportId]/+page.svelte';
 
-vi.mock('$app/stores', () => {
-  const { readable } = require('svelte/store');
+vi.mock('$app/stores', async () => {
+  const { readable } = await vi.importActual<typeof import('svelte/store')>('svelte/store');
   return {
     page: readable({
       params: { id: 'patient-1', reportId: 'report-1' },
@@ -111,7 +111,7 @@ describe('ReportView — export buttons', () => {
 describe('ReportView — Export PDF', () => {
   it('calls export_report_to_pdf with the correct reportId', async () => {
     mockInvoke
-      .mockResolvedValueOnce(REPORT)           // get_report
+      .mockResolvedValueOnce(REPORT) // get_report
       .mockResolvedValueOnce([37, 80, 68, 70]); // export_report_to_pdf
 
     render(ReportView);
@@ -124,9 +124,7 @@ describe('ReportView — Export PDF', () => {
   });
 
   it('triggers a file download after a successful PDF export', async () => {
-    mockInvoke
-      .mockResolvedValueOnce(REPORT)
-      .mockResolvedValueOnce([37, 80, 68, 70]);
+    mockInvoke.mockResolvedValueOnce(REPORT).mockResolvedValueOnce([37, 80, 68, 70]);
 
     render(ReportView);
     await waitFor(() => screen.getByRole('button', { name: /export pdf/i }));
@@ -159,9 +157,7 @@ describe('ReportView — Export PDF', () => {
 
 describe('ReportView — Export DOCX', () => {
   it('calls export_report_to_docx with the correct reportId', async () => {
-    mockInvoke
-      .mockResolvedValueOnce(REPORT)
-      .mockResolvedValueOnce([80, 75, 3, 4]); // export_report_to_docx
+    mockInvoke.mockResolvedValueOnce(REPORT).mockResolvedValueOnce([80, 75, 3, 4]); // export_report_to_docx
 
     render(ReportView);
     await waitFor(() => screen.getByRole('button', { name: /export docx/i }));
@@ -173,9 +169,7 @@ describe('ReportView — Export DOCX', () => {
   });
 
   it('triggers a file download after a successful DOCX export', async () => {
-    mockInvoke
-      .mockResolvedValueOnce(REPORT)
-      .mockResolvedValueOnce([80, 75, 3, 4]);
+    mockInvoke.mockResolvedValueOnce(REPORT).mockResolvedValueOnce([80, 75, 3, 4]);
 
     render(ReportView);
     await waitFor(() => screen.getByRole('button', { name: /export docx/i }));

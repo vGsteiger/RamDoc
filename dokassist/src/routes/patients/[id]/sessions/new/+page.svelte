@@ -4,6 +4,8 @@
   import { createSession, type CreateSession } from '$lib/api';
   import { AMDP_CATEGORIES, serializeAMDP, type AMDPCategory } from '$lib/amdp';
   import AMDPForm from '$lib/components/AMDPForm.svelte';
+  import { get } from 'svelte/store';
+  import { t } from '$lib/translations';
 
   const patientId = $derived($page.params.id);
 
@@ -23,16 +25,14 @@
     'Krisenintervention',
     'Psychotherapie',
     'Medikamentenanpassung',
-    'Andere'
+    'Andere',
   ];
 
   function handleAMDPScoreChange(code: string, score: 0 | 1 | 2 | 3) {
     // Find and update the score for the specific item
-    amdpCategories = amdpCategories.map(category => ({
+    amdpCategories = amdpCategories.map((category) => ({
       ...category,
-      items: category.items.map(item =>
-        item.code === code ? { ...item, score } : item
-      )
+      items: category.items.map((item) => (item.code === code ? { ...item, score } : item)),
     }));
   }
 
@@ -40,7 +40,7 @@
     event.preventDefault();
 
     if (!sessionType.trim() || !notes.trim()) {
-      error = 'Bitte füllen Sie alle Pflichtfelder aus.';
+      error = get(t)('sessions.requiredFields');
       return;
     }
 
@@ -54,7 +54,7 @@
         session_type: sessionType,
         duration_minutes: durationMinutes || undefined,
         notes,
-        amdp_data: showAMDP ? serializeAMDP(amdpCategories) : undefined
+        amdp_data: showAMDP ? serializeAMDP(amdpCategories) : undefined,
       };
 
       await createSession(input);
@@ -129,9 +129,7 @@
     </div>
 
     <div>
-      <label for="notes" class="block text-sm font-medium text-gray-300 mb-1">
-        Notizen *
-      </label>
+      <label for="notes" class="block text-sm font-medium text-gray-300 mb-1"> Notizen * </label>
       <textarea
         id="notes"
         bind:value={notes}
@@ -139,7 +137,7 @@
         rows="8"
         placeholder="Gesprächsnotizen, Beobachtungen, Interventionen..."
         class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-      />
+      ></textarea>
     </div>
 
     <div>
@@ -149,7 +147,9 @@
           bind:checked={showAMDP}
           class="w-4 h-4 bg-gray-700 border-gray-600 rounded text-blue-600 focus:ring-2 focus:ring-blue-500"
         />
-        <span class="text-sm font-medium text-gray-300">AMDP psychopathologische Befunde erfassen</span>
+        <span class="text-sm font-medium text-gray-300"
+          >AMDP psychopathologische Befunde erfassen</span
+        >
       </label>
     </div>
 

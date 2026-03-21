@@ -8,9 +8,11 @@
     deleteMedication,
     type Medication,
     type CreateMedication,
-    type UpdateMedication
+    type UpdateMedication,
   } from '$lib/api';
   import MedicationForm from '$lib/components/MedicationForm.svelte';
+  import { get } from 'svelte/store';
+  import { t } from '$lib/translations';
 
   const patientId = $derived($page.params.id);
 
@@ -30,7 +32,8 @@
       error = null;
       medications = await listMedicationsForPatient(patientId);
     } catch (err) {
-      error = 'Fehler beim Laden der Medikamente: ' + (err instanceof Error ? err.message : String(err));
+      error =
+        'Fehler beim Laden der Medikamente: ' + (err instanceof Error ? err.message : String(err));
       console.error('Failed to load medications:', err);
     } finally {
       loading = false;
@@ -43,7 +46,7 @@
   }
 
   async function handleDelete(medicationId: string) {
-    if (!confirm('Möchten Sie dieses Medikament wirklich löschen?')) {
+    if (!confirm(get(t)('medications.confirmDelete'))) {
       return;
     }
 
@@ -56,9 +59,7 @@
     }
   }
 
-  async function handleSave(
-    input: CreateMedication | { id: string; update: UpdateMedication }
-  ) {
+  async function handleSave(input: CreateMedication | { id: string; update: UpdateMedication }) {
     try {
       error = null;
 
@@ -92,7 +93,7 @@
       return date.toLocaleDateString('de-CH', {
         year: 'numeric',
         month: '2-digit',
-        day: '2-digit'
+        day: '2-digit',
       });
     } catch {
       return dateStr;
@@ -127,7 +128,9 @@
   {/if}
 
   {#if showAddForm}
-    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 mb-6">
+    <div
+      class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 mb-6"
+    >
       <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
         {editingMedication ? 'Medikament bearbeiten' : 'Neues Medikament hinzufügen'}
       </h2>
@@ -159,17 +162,25 @@
   {:else}
     <div class="grid gap-4">
       {#each medications as medication (medication.id)}
-        <div class="p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+        <div
+          class="p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
+        >
           <div class="flex justify-between items-start mb-2">
             <div class="flex-1">
               <div class="flex items-center gap-2 mb-1">
-                <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{medication.substance}</h3>
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                  {medication.substance}
+                </h3>
                 {#if isActive(medication)}
-                  <span class="px-2 py-0.5 rounded-full text-xs bg-green-500/20 text-green-400 border border-green-500/30">
+                  <span
+                    class="px-2 py-0.5 rounded-full text-xs bg-green-500/20 text-green-400 border border-green-500/30"
+                  >
                     Aktiv
                   </span>
                 {:else}
-                  <span class="px-2 py-0.5 rounded-full text-xs bg-gray-500/20 text-gray-400 border border-gray-500/30">
+                  <span
+                    class="px-2 py-0.5 rounded-full text-xs bg-gray-500/20 text-gray-400 border border-gray-500/30"
+                  >
                     Beendet
                   </span>
                 {/if}
@@ -194,12 +205,7 @@
                 onclick={() => handleEdit(medication)}
                 title="Bearbeiten"
               >
-                <svg
-                  class="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
                     stroke-linecap="round"
                     stroke-linejoin="round"
@@ -214,12 +220,7 @@
                 onclick={() => handleDelete(medication.id)}
                 title="Löschen"
               >
-                <svg
-                  class="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
                     stroke-linecap="round"
                     stroke-linejoin="round"

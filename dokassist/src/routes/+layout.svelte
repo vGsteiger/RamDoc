@@ -7,7 +7,10 @@
   import { resolvedTheme } from '$lib/stores/theme';
   import Sidebar from '$lib/components/Sidebar.svelte';
   import TopBar from '$lib/components/TopBar.svelte';
+  import type { Snippet } from 'svelte';
   import '../app.css';
+
+  let { children }: { children: Snippet } = $props();
 
   let currentPath = $derived($page.url.pathname);
 
@@ -63,10 +66,10 @@
     <div class="flex-1 flex flex-col overflow-hidden">
       <TopBar />
       <main class="flex-1 overflow-auto">
-        <slot />
+        {@render children()}
       </main>
     </div>
   </div>
 {:else}
-  <slot />
+  {@render children()}
 {/if}

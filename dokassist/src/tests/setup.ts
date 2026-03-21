@@ -12,10 +12,18 @@ vi.mock('@tauri-apps/api/core', () => ({
 const _localStorageStore: Record<string, string> = {};
 const localStorageMock: Storage = {
   getItem: (key: string) => _localStorageStore[key] ?? null,
-  setItem: (key: string, value: string) => { _localStorageStore[key] = String(value); },
-  removeItem: (key: string) => { delete _localStorageStore[key]; },
-  clear: () => { Object.keys(_localStorageStore).forEach(k => delete _localStorageStore[k]); },
+  setItem: (key: string, value: string) => {
+    _localStorageStore[key] = String(value);
+  },
+  removeItem: (key: string) => {
+    delete _localStorageStore[key];
+  },
+  clear: () => {
+    Object.keys(_localStorageStore).forEach((k) => delete _localStorageStore[k]);
+  },
   key: (index: number) => Object.keys(_localStorageStore)[index] ?? null,
-  get length() { return Object.keys(_localStorageStore).length; },
+  get length() {
+    return Object.keys(_localStorageStore).length;
+  },
 };
 Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, writable: true });

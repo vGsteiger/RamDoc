@@ -8,7 +8,7 @@
 
   let { patientId }: Props = $props();
 
-  const tabs = [
+  const tabs = $derived([
     { path: `/patients/${patientId}`, label: 'Overview', icon: ClipboardList },
     { path: `/patients/${patientId}/sessions`, label: 'Sessions', icon: CalendarDays },
     { path: `/patients/${patientId}/files`, label: 'Files', icon: FolderOpen },
@@ -27,7 +27,8 @@
       {@const Icon = tab.icon}
       <a
         href={tab.path}
-        class="flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap {currentPath === tab.path
+        class="flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap {currentPath ===
+        tab.path
           ? 'text-blue-400 border-b-2 border-blue-400'
           : 'text-gray-400 hover:text-gray-300'}"
       >

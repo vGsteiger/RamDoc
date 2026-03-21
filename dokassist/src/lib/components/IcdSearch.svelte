@@ -38,8 +38,7 @@
     const query = searchQuery.toLowerCase();
     const results = icd10Data.filter(
       (entry) =>
-        entry.code.toLowerCase().includes(query) ||
-        entry.description.toLowerCase().includes(query)
+        entry.code.toLowerCase().includes(query) || entry.description.toLowerCase().includes(query)
     );
 
     filteredResults = results.slice(0, 20); // Limit to 20 results
@@ -111,7 +110,9 @@
           class:dark:bg-gray-700={index === selectedIndex}
           onclick={() => handleSelect(entry)}
         >
-          <span class="font-mono text-sm text-blue-600 dark:text-blue-400 shrink-0">{entry.code}</span>
+          <span class="font-mono text-sm text-blue-600 dark:text-blue-400 shrink-0"
+            >{entry.code}</span
+          >
           <span class="text-sm text-gray-700 dark:text-gray-300">{entry.description}</span>
         </button>
       {/each}

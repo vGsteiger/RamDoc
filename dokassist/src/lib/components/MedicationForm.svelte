@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import type { CreateMedication, UpdateMedication, Medication } from '$lib/api';
 
   interface Props {
@@ -10,12 +11,25 @@
 
   let { medication, patientId, onSave, onCancel }: Props = $props();
 
-  let substance = $state(medication?.substance || '');
-  let dosage = $state(medication?.dosage || '');
-  let frequency = $state(medication?.frequency || '');
-  let startDate = $state(medication?.start_date || new Date().toISOString().split('T')[0]);
-  let endDate = $state(medication?.end_date || '');
-  let notes = $state(medication?.notes || '');
+  let substance = $state(untrack(() => medication?.substance || ''));
+  let dosage = $state(untrack(() => medication?.dosage || ''));
+  let frequency = $state(untrack(() => medication?.frequency || ''));
+  let startDate = $state(
+    untrack(() => medication?.start_date || new Date().toISOString().split('T')[0])
+  );
+  let endDate = $state(untrack(() => medication?.end_date || ''));
+  let notes = $state(untrack(() => medication?.notes || ''));
+
+  $effect(() => {
+    if (medication) {
+      substance = medication.substance || '';
+      dosage = medication.dosage || '';
+      frequency = medication.frequency || '';
+      startDate = medication.start_date || new Date().toISOString().split('T')[0];
+      endDate = medication.end_date || '';
+      notes = medication.notes || '';
+    }
+  });
 
   function handleSubmit(event: Event) {
     event.preventDefault();
@@ -31,8 +45,8 @@
         dosage: dosage !== medication.dosage ? dosage : undefined,
         frequency: frequency !== medication.frequency ? frequency : undefined,
         start_date: startDate !== medication.start_date ? startDate : undefined,
-        end_date: endDate !== (medication.end_date || '') ? (endDate || undefined) : undefined,
-        notes: notes !== (medication.notes || '') ? (notes || undefined) : undefined
+        end_date: endDate !== (medication.end_date || '') ? endDate || undefined : undefined,
+        notes: notes !== (medication.notes || '') ? notes || undefined : undefined,
       };
       onSave({ id: medication.id, update });
     } else if (patientId) {
@@ -44,7 +58,7 @@
         frequency,
         start_date: startDate,
         end_date: endDate || undefined,
-        notes: notes || undefined
+        notes: notes || undefined,
       };
       onSave(input);
     }
@@ -67,9 +81,7 @@
   </div>
 
   <div>
-    <label for="dosage" class="block text-sm font-medium text-gray-300 mb-1">
-      Dosierung *
-    </label>
+    <label for="dosage" class="block text-sm font-medium text-gray-300 mb-1"> Dosierung * </label>
     <input
       id="dosage"
       type="text"
@@ -109,9 +121,7 @@
     </div>
 
     <div>
-      <label for="end-date" class="block text-sm font-medium text-gray-300 mb-1">
-        Enddatum
-      </label>
+      <label for="end-date" class="block text-sm font-medium text-gray-300 mb-1"> Enddatum </label>
       <input
         id="end-date"
         type="date"
@@ -122,16 +132,14 @@
   </div>
 
   <div>
-    <label for="notes" class="block text-sm font-medium text-gray-300 mb-1">
-      Notizen
-    </label>
+    <label for="notes" class="block text-sm font-medium text-gray-300 mb-1"> Notizen </label>
     <textarea
       id="notes"
       bind:value={notes}
       rows="3"
       placeholder="Zusätzliche Informationen..."
       class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-    />
+    ></textarea>
   </div>
 
   <div class="flex justify-end gap-3 pt-4">

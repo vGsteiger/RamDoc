@@ -47,7 +47,7 @@
       }
     }
     authStatus.set('unlocked');
-    goto('/patients');
+    goto('/dashboard');
   }
 </script>
 
@@ -106,10 +106,11 @@
         <div class="space-y-4 max-w-md mx-auto">
           {#each confirmIndices as index}
             <div>
-              <label class="block text-gray-400 mb-2">
+              <label for={`confirm-word-${index}`} class="block text-gray-400 mb-2">
                 Word #{index + 1}
               </label>
               <input
+                id={`confirm-word-${index}`}
                 type="text"
                 bind:value={userInputs[index]}
                 class="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"

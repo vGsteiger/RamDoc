@@ -32,7 +32,7 @@
       }
 
       authStatus.set('unlocked');
-      goto('/patients');
+      goto('/dashboard');
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to recover account';
     } finally {
@@ -57,8 +57,9 @@
     <div class="grid grid-cols-4 gap-3">
       {#each Array(24) as _, i}
         <div class="flex flex-col">
-          <label class="text-gray-400 text-xs mb-1">{i + 1}.</label>
+          <label for={`word-${i}`} class="text-gray-400 text-xs mb-1">{i + 1}.</label>
           <input
+            id={`word-${i}`}
             type="text"
             value={words[i]}
             oninput={(e) => handleInput(i, (e.target as HTMLInputElement).value)}

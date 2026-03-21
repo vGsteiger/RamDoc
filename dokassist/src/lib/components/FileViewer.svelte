@@ -1,6 +1,6 @@
 <script lang="ts">
   import { downloadFile, type FileRecord } from '$lib/api';
-  import { onMount, onDestroy } from 'svelte';
+  import { onDestroy } from 'svelte';
   import { Hourglass, FileText } from 'lucide-svelte';
 
   interface Props {
@@ -72,9 +72,24 @@
 </script>
 
 {#if file}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onclick={handleClose}>
-    <div class="relative w-full h-full max-w-6xl max-h-[90vh] m-4" onclick={(e) => e.stopPropagation()}>
-      <div class="absolute top-0 left-0 right-0 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 p-4 flex items-center justify-between rounded-t-lg">
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
+    role="presentation"
+    onclick={handleClose}
+    onkeydown={(e) => e.key === 'Escape' && handleClose()}
+  >
+    <div
+      class="relative w-full h-full max-w-6xl max-h-[90vh] m-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={file.filename}
+      tabindex="-1"
+      onclick={(e) => e.stopPropagation()}
+      onkeydown={(e) => e.stopPropagation()}
+    >
+      <div
+        class="absolute top-0 left-0 right-0 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 p-4 flex items-center justify-between rounded-t-lg"
+      >
         <div class="flex-1 min-w-0">
           <h2 class="text-gray-900 dark:text-gray-100 font-medium truncate" title={file.filename}>
             {file.filename}
@@ -99,7 +114,9 @@
         </div>
       </div>
 
-      <div class="absolute top-16 bottom-0 left-0 right-0 bg-gray-100 dark:bg-gray-950 rounded-b-lg overflow-hidden">
+      <div
+        class="absolute top-16 bottom-0 left-0 right-0 bg-gray-100 dark:bg-gray-950 rounded-b-lg overflow-hidden"
+      >
         {#if isLoading}
           <div class="flex items-center justify-center h-full">
             <div class="text-center">
@@ -111,24 +128,18 @@
           </div>
         {:else if errorMessage}
           <div class="flex items-center justify-center h-full">
-            <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6 max-w-md">
+            <div
+              class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6 max-w-md"
+            >
               <p class="text-red-600 dark:text-red-400">{errorMessage}</p>
             </div>
           </div>
         {:else if blobUrl}
           {#if file.mime_type === 'application/pdf'}
-            <iframe
-              src={blobUrl}
-              title={file.filename}
-              class="w-full h-full"
-            ></iframe>
+            <iframe src={blobUrl} title={file.filename} class="w-full h-full"></iframe>
           {:else if file.mime_type.startsWith('image/')}
             <div class="flex items-center justify-center h-full p-4 overflow-auto">
-              <img
-                src={blobUrl}
-                alt={file.filename}
-                class="max-w-full max-h-full object-contain"
-              />
+              <img src={blobUrl} alt={file.filename} class="max-w-full max-h-full object-contain" />
             </div>
           {:else}
             <div class="flex items-center justify-center h-full">
@@ -136,7 +147,9 @@
                 <div class="mb-4 flex justify-center text-gray-400">
                   <FileText size={48} />
                 </div>
-                <p class="text-gray-500 dark:text-gray-400 mb-4">Preview not available for this file type</p>
+                <p class="text-gray-500 dark:text-gray-400 mb-4">
+                  Preview not available for this file type
+                </p>
                 <button
                   onclick={handleDownload}
                   class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"

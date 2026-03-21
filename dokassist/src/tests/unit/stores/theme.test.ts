@@ -15,12 +15,12 @@ const localStorageMock = (() => {
     },
     clear: () => {
       store = {};
-    }
+    },
   };
 })();
 
 Object.defineProperty(window, 'localStorage', {
-  value: localStorageMock
+  value: localStorageMock,
 });
 
 // Mock matchMedia
@@ -43,18 +43,16 @@ const createMatchMediaMock = (matches: boolean) => {
     }),
     dispatchEvent: vi.fn(),
     triggerChange: (newMatches: boolean) => {
-      listeners.forEach(listener => {
+      listeners.forEach((listener) => {
         listener({ matches: newMatches } as MediaQueryListEvent);
       });
     },
-    getListeners: () => listeners
+    getListeners: () => listeners,
   };
 };
 
-let matchMediaMock: ReturnType<typeof createMatchMediaMock>;
-
 // Setup matchMedia mock before importing the store
-matchMediaMock = createMatchMediaMock(true);
+const matchMediaMock = createMatchMediaMock(true);
 window.matchMedia = vi.fn(() => matchMediaMock as unknown as MediaQueryList);
 
 // NOW import the store after mocks are set up
@@ -152,7 +150,7 @@ describe('resolvedTheme store', () => {
     matchMediaMock.triggerChange(false);
 
     // Wait a tick
-    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
     // Should still be light because we're not in system mode
     expect(get(resolvedTheme)).toBe('light');

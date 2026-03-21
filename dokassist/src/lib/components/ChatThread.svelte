@@ -1,15 +1,11 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-  import {
-    getChatMessages,
-    runAgentTurn,
-    getEngineStatus,
-    type ChatMessageRow,
-  } from '$lib/api';
+  import { getChatMessages, runAgentTurn, getEngineStatus, type ChatMessageRow } from '$lib/api';
   import ChatMessage from './ChatMessage.svelte';
   import { goto } from '$app/navigation';
   import { AlertTriangle } from 'lucide-svelte';
+  import { t } from '$lib/translations';
 
   interface Props {
     sessionId: string;
@@ -17,7 +13,7 @@
     patientId?: string;
   }
 
-  let { sessionId, scope, patientId }: Props = $props();
+  let { sessionId, scope: _scope, patientId: _patientId }: Props = $props();
 
   let messages = $state<ChatMessageRow[]>([]);
   let streamingContent = $state('');
@@ -118,7 +114,7 @@
       async () => {
         await loadMessages();
         scrollToBottom();
-      },
+      }
     );
 
     unlistenError = await listen<{ message: string }>('agent-error', (event) => {
@@ -141,16 +137,18 @@
 
 <div class="flex flex-col h-full">
   {#if !isModelLoaded}
-    <div class="bg-amber-50 dark:bg-amber-900/30 border-b border-amber-300 dark:border-amber-700 px-4 py-3 flex items-center gap-3">
+    <div
+      class="bg-amber-50 dark:bg-amber-900/30 border-b border-amber-300 dark:border-amber-700 px-4 py-3 flex items-center gap-3"
+    >
       <AlertTriangle size={18} class="text-amber-600 dark:text-amber-400" />
       <p class="text-sm text-amber-700 dark:text-amber-300 flex-1">
-        Kein Modell geladen. Bitte laden Sie ein Modell in den Einstellungen.
+        {$t('chat.noModelDesc')}
       </p>
       <button
         onclick={() => goto('/settings')}
         class="text-xs text-amber-600 dark:text-amber-400 underline hover:text-amber-700 dark:hover:text-amber-300"
       >
-        Einstellungen öffnen
+        {$t('chat.openSettings')}
       </button>
     </div>
   {/if}
@@ -178,14 +176,18 @@
       />
     {:else if isStreaming && !streamingContent}
       <div class="flex justify-start mb-3">
-        <div class="bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl rounded-bl-sm px-4 py-2">
+        <div
+          class="bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl rounded-bl-sm px-4 py-2"
+        >
           <span class="animate-pulse text-gray-500 text-sm">●</span>
         </div>
       </div>
     {/if}
 
     {#if errorMessage}
-      <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-4 py-3 text-sm text-red-600 dark:text-red-400">
+      <div
+        class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-4 py-3 text-sm text-red-600 dark:text-red-400"
+      >
         {errorMessage}
       </div>
     {/if}
@@ -200,7 +202,7 @@
         bind:value={inputText}
         onkeydown={handleKeydown}
         disabled={!isModelLoaded || isStreaming}
-        placeholder={isModelLoaded ? 'Nachricht eingeben (Enter zum Senden)…' : 'Modell nicht geladen'}
+        placeholder={isModelLoaded ? $t('chat.typeMessageHint') : $t('settings.modelNotLoaded')}
         rows={2}
         class="flex-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-gray-100
                placeholder-gray-400 dark:placeholder-gray-500 resize-none focus:outline-none focus:border-blue-500

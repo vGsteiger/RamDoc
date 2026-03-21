@@ -45,7 +45,7 @@
       </div>
       {#if showDetails}
         <button
-          onclick={() => expanded = !expanded}
+          onclick={() => (expanded = !expanded)}
           class="text-gray-400 hover:text-gray-300 text-xs ml-4"
         >
           {expanded ? 'Hide Details' : 'Show Details'}

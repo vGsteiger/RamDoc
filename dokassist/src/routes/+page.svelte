@@ -3,6 +3,7 @@
   import { goto } from '$app/navigation';
   import { checkAuth } from '$lib/api';
   import { authStatus, isLoading } from '$lib/stores/auth';
+  import { t } from '$lib/translations';
 
   let error = $state<string | null>(null);
 
@@ -18,7 +19,7 @@
       } else if (status === 'recovery_required') {
         goto('/recover');
       } else if (status === 'unlocked') {
-        goto('/patients');
+        goto('/dashboard');
       }
     } catch (err) {
       console.error('Failed to check auth:', err);
@@ -43,7 +44,7 @@
         } else if (status === 'recovery_required') {
           goto('/recover');
         } else if (status === 'unlocked') {
-          goto('/patients');
+          goto('/dashboard');
         }
       } catch (err) {
         console.error('Failed to check auth:', err);
@@ -59,20 +60,20 @@
   {#if error}
     <div class="text-center space-y-4 max-w-md">
       <div class="bg-red-900/20 border border-red-500 rounded-lg p-6">
-        <h2 class="text-xl font-bold text-red-500 mb-2">Authentication Error</h2>
+        <h2 class="text-xl font-bold text-red-500 mb-2">{$t('auth.authError')}</h2>
         <p class="text-gray-300">{error}</p>
       </div>
       <button
         onclick={handleRetry}
         class="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
       >
-        Retry
+        {$t('auth.retry')}
       </button>
     </div>
   {:else}
     <div class="text-center">
       <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-      <p class="mt-4 text-gray-400">Loading...</p>
+      <p class="mt-4 text-gray-400">{$t('auth.loading')}</p>
     </div>
   {/if}
 </div>

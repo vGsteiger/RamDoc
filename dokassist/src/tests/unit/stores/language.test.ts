@@ -15,19 +15,19 @@ const localStorageMock = (() => {
     },
     clear: () => {
       store = {};
-    }
+    },
   };
 })();
 
 Object.defineProperty(window, 'localStorage', {
-  value: localStorageMock
+  value: localStorageMock,
 });
 
 // Mock navigator.language
 let navigatorLanguage = 'en-US';
 Object.defineProperty(window.navigator, 'language', {
   get: () => navigatorLanguage,
-  configurable: true
+  configurable: true,
 });
 
 // NOW import the store after mocks are set up
@@ -91,7 +91,7 @@ describe('language store', () => {
     expect(localStorageMock.getItem('language-preference')).toBe('en');
 
     // Use update to change the language
-    language.update((current) => current === 'en' ? 'de' : 'en');
+    language.update((current) => (current === 'en' ? 'de' : 'en'));
 
     expect(get(language)).toBe('de');
     expect(localStorageMock.getItem('language-preference')).toBe('de');
@@ -103,7 +103,7 @@ describe('language store', () => {
     const values: string[] = [];
     const unsubscribe = language.subscribe((v) => values.push(v));
 
-    language.update((current) => 'de');
+    language.update((_current) => 'de');
 
     unsubscribe();
 

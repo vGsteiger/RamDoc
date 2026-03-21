@@ -15,7 +15,7 @@
       return date.toLocaleDateString('de-CH', {
         year: 'numeric',
         month: '2-digit',
-        day: '2-digit'
+        day: '2-digit',
       });
     } catch {
       return dateStr;
@@ -53,12 +53,16 @@
   <div class="flex justify-between items-start mb-2">
     <div class="flex-1">
       <div class="flex items-center gap-2 mb-1">
-        <span class="font-mono text-sm text-blue-600 dark:text-blue-400">{diagnosis.icd10_code}</span>
+        <span class="font-mono text-sm text-blue-600 dark:text-blue-400"
+          >{diagnosis.icd10_code}</span
+        >
         <span class="px-2 py-0.5 rounded-full text-xs border {getStatusColor(diagnosis.status)}">
           {getStatusLabel(diagnosis.status)}
         </span>
       </div>
-      <h3 class="text-base font-medium text-gray-900 dark:text-gray-100">{diagnosis.description}</h3>
+      <h3 class="text-base font-medium text-gray-900 dark:text-gray-100">
+        {diagnosis.description}
+      </h3>
       <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
         Diagnostiziert: {formatDate(diagnosis.diagnosed_date)}
         {#if diagnosis.resolved_date}
@@ -74,12 +78,7 @@
           onclick={onEdit}
           title="Bearbeiten"
         >
-          <svg
-            class="w-4 h-4"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
@@ -96,12 +95,7 @@
           onclick={onDelete}
           title="Löschen"
         >
-          <svg
-            class="w-4 h-4"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               stroke-linecap="round"
               stroke-linejoin="round"

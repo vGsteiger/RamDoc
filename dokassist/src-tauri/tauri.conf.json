@@ -43,6 +43,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "createUpdaterArtifacts": true,
     "targets": ["dmg", "app"],
     "macOS": {
       "minimumSystemVersion": "13.0",
