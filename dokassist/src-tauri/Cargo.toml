@@ -1,6 +1,6 @@
 [package]
 name = "dokassist"
-version = "0.7.4"
+version = "0.7.5"
 edition = "2021"
 rust-version = "1.88"
 
@@ -58,7 +58,7 @@ pdf-extract = "0.10"
 fastembed = { version = "5", default-features = false, features = ["ort-download-binaries", "hf-hub"] }
 
 # Export
-zip = "2"
+zip = "4"
 printpdf = "0.9"
 docx-rs = "0.4"
 
