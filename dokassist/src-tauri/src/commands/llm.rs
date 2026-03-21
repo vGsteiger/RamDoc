@@ -306,3 +306,48 @@ pub async fn improve_text(
     let _ = app.emit("text-improvement-done", ());
     Ok(improved)
 }
+
+/// Generate a session summary with streaming output.
+/// Emits `"session-summary-chunk"` events for each token and `"session-summary-done"` on completion.
+/// `system_prompt`: optional override; falls back to the built-in German prompt.
+#[tauri::command]
+pub async fn generate_session_summary(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    patient_context: String,
+    session_notes: String,
+    system_prompt: Option<String>,
+) -> Result<String, AppError> {
+    // Check authentication before processing patient data
+    check_auth(&state)?;
+
+    // Acquire the engine handle under the mutex, but do not run inference while holding the lock.
+    let engine = {
+        let llm = state.llm.lock().unwrap();
+        let engine = llm
+            .as_ref()
+            .ok_or_else(|| AppError::Llm("Model not loaded".to_string()))?;
+        // Clone the Arc so we can release the lock before inference.
+        Arc::clone(engine)
+    };
+
+    // Resolve the system prompt into an owned String we can move into the blocking task.
+    let prompt: String = system_prompt.unwrap_or_else(|| SYSTEM_PROMPT_DE.to_string());
+
+    // Run the potentially long-running session summary generation on a blocking thread.
+    let app_clone = app.clone();
+    let summary = tokio::task::spawn_blocking(move || {
+        llm::generate_session_summary_streaming_with_prompt(
+            &app_clone,
+            &engine,
+            &patient_context,
+            &session_notes,
+            &prompt,
+        )
+    })
+    .await
+    .map_err(|e| AppError::Llm(format!("spawn_blocking error: {e}")))??;
+
+    let _ = app.emit("session-summary-done", ());
+    Ok(summary)
+}

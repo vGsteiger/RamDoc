@@ -94,3 +94,32 @@ pub fn report_generation_prompt(
     let delimited = build_delimited_prompt(type_instructions, &combined_data);
     format!("{delimited}\nBericht:")
 }
+
+/// Prompt for generating a structured clinical session summary.
+///
+/// # Security
+/// Both `patient_context` and `session_notes` are sanitized with `sanitize_for_prompt()`
+/// and enclosed in `===== CLINICAL DATA START/END =====` delimiter markers before insertion.
+pub fn session_summary_prompt(patient_context: &str, session_notes: &str) -> String {
+    use super::sanitize::{build_delimited_prompt, sanitize_for_prompt};
+
+    let safe_context = sanitize_for_prompt(patient_context);
+    let safe_notes = sanitize_for_prompt(session_notes);
+
+    let instructions = "Erstellen Sie eine strukturierte klinische Zusammenfassung der Sitzung mit folgenden Abschnitten:\n\
+        1. Vorstellungsgrund / Anliegen\n\
+        2. Psychischer Zustand (Stimmung, Antrieb, Affekt, formales und inhaltliches Denken)\n\
+        3. Interventionen und therapeutisches Vorgehen\n\
+        4. Weiteres Vorgehen und Plan\n\n\
+        Wichtig:\n\
+        - Verwenden Sie nur Informationen aus den bereitgestellten Notizen\n\
+        - Erfinden Sie keine Details, die nicht in den Notizen enthalten sind\n\
+        - Schreiben Sie in präziser medizinischer Fachsprache\n\
+        - Strukturieren Sie die Zusammenfassung mit klaren Überschriften\n\
+        - Halten Sie sich an professionelle psychiatrische Dokumentationsstandards";
+
+    let combined_data =
+        format!("Patientenkontext:\n{safe_context}\n\nSitzungsnotizen:\n{safe_notes}");
+    let delimited = build_delimited_prompt(instructions, &combined_data);
+    format!("{delimited}\nZusammenfassung:")
+}

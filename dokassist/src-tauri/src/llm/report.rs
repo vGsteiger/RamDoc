@@ -84,3 +84,42 @@ pub fn improve_text_streaming_with_prompt(
 
     Ok(improved_text)
 }
+
+/// Generate a session summary using the built-in system prompt.
+pub fn generate_session_summary_streaming(
+    app: &tauri::AppHandle,
+    engine: &LlmEngine,
+    patient_context: &str,
+    session_notes: &str,
+) -> Result<String, AppError> {
+    generate_session_summary_streaming_with_prompt(
+        app,
+        engine,
+        patient_context,
+        session_notes,
+        prompts::SYSTEM_PROMPT_DE,
+    )
+}
+
+/// Generate a session summary using a caller-supplied system prompt.
+/// Emits `"session-summary-chunk"` Tauri events for each token as it is produced.
+/// Returns the full completed session summary string.
+pub fn generate_session_summary_streaming_with_prompt(
+    app: &tauri::AppHandle,
+    engine: &LlmEngine,
+    patient_context: &str,
+    session_notes: &str,
+    system_prompt: &str,
+) -> Result<String, AppError> {
+    let user_message = prompts::session_summary_prompt(patient_context, session_notes);
+
+    let mut full_summary = String::new();
+
+    engine.generate_streaming(system_prompt, &user_message, 2048, 0.7, |token| {
+        full_summary.push_str(token);
+        let _ = app.emit("session-summary-chunk", token);
+        true
+    })?;
+
+    Ok(full_summary)
+}

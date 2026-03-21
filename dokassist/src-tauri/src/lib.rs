@@ -113,6 +113,7 @@ pub fn run() {
             commands::llm::extract_file_metadata,
             commands::llm::generate_report,
             commands::llm::improve_text,
+            commands::llm::generate_session_summary,
             commands::llm::get_embed_status,
             commands::llm::initialize_embed_engine,
             commands::reports::create_report,

@@ -222,8 +222,17 @@
     "noSessionsThisWeek": "No sessions this week",
     "date": "Date",
     "type": "Type",
-    "duration": "Duration",
+    "duration": "Duration (minutes)",
+    "sessionType": "Session Type",
     "notes": "Notes",
+    "noNotes": "No notes",
+    "notesPlaceholder": "Session notes...",
+    "clinicalSummary": "Clinical Summary",
+    "noSummary": "No clinical summary available. Click \"Generate Summary\" to create a structured summary.",
+    "clinicalSummaryPlaceholder": "Clinical summary...",
+    "generateSummary": "Generate Summary",
+    "confirmDelete": "Delete session?",
+    "confirmDeleteMessage": "Are you sure you want to delete this session? This action cannot be undone.",
     "requiredFields": "Please fill in all required fields.",
     "types": {
       "initial": "Initial Consultation",
@@ -441,8 +450,10 @@
   },
   "common": {
     "save": "Save",
+    "saving": "Saving...",
     "cancel": "Cancel",
     "delete": "Delete",
+    "deleting": "Deleting...",
     "edit": "Edit",
     "close": "Close",
     "back": "Back",
@@ -454,6 +465,10 @@
     "success": "Success",
     "confirm": "Confirm",
     "yes": "Yes",
-    "no": "No"
+    "no": "No",
+    "notFound": "Not found",
+    "patient": "Patient",
+    "createdAt": "Created",
+    "updatedAt": "Last updated"
   }
 }

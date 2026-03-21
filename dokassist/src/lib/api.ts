@@ -289,6 +289,7 @@ export interface Session {
   scheduled_time: string | null;
   notes: string | null;
   amdp_data: string | null;
+  clinical_summary: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -310,6 +311,7 @@ export interface UpdateSession {
   scheduled_time?: string;
   notes?: string;
   amdp_data?: string;
+  clinical_summary?: string;
 }
 
 export async function createSession(input: CreateSession): Promise<Session> {
@@ -821,6 +823,18 @@ export async function generateReport(
   return await invoke<string>('generate_report', {
     patientContext,
     reportType,
+    sessionNotes,
+    systemPrompt,
+  });
+}
+
+export async function generateSessionSummary(
+  patientContext: string,
+  sessionNotes: string,
+  systemPrompt?: string,
+): Promise<string> {
+  return await invoke<string>("generate_session_summary", {
+    patientContext,
     sessionNotes,
     systemPrompt,
   });

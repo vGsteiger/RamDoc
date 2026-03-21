@@ -222,8 +222,17 @@
     "noSessionsThisWeek": "Keine Sitzungen diese Woche",
     "date": "Datum",
     "type": "Typ",
-    "duration": "Dauer",
+    "duration": "Dauer (Minuten)",
+    "sessionType": "Sitzungstyp",
     "notes": "Notizen",
+    "noNotes": "Keine Notizen",
+    "notesPlaceholder": "Sitzungsnotizen...",
+    "clinicalSummary": "Klinische Zusammenfassung",
+    "noSummary": "Keine klinische Zusammenfassung vorhanden. Klicken Sie auf \"Zusammenfassung generieren\", um eine strukturierte Zusammenfassung zu erstellen.",
+    "clinicalSummaryPlaceholder": "Klinische Zusammenfassung...",
+    "generateSummary": "Zusammenfassung generieren",
+    "confirmDelete": "Sitzung löschen?",
+    "confirmDeleteMessage": "Möchten Sie diese Sitzung wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
     "requiredFields": "Bitte füllen Sie alle Pflichtfelder aus.",
     "types": {
       "initial": "Erstgespräch",
@@ -441,8 +450,10 @@
   },
   "common": {
     "save": "Speichern",
+    "saving": "Speichert...",
     "cancel": "Abbrechen",
     "delete": "Löschen",
+    "deleting": "Löscht...",
     "edit": "Bearbeiten",
     "close": "Schließen",
     "back": "Zurück",
@@ -454,6 +465,10 @@
     "success": "Erfolg",
     "confirm": "Bestätigen",
     "yes": "Ja",
-    "no": "Nein"
+    "no": "Nein",
+    "notFound": "Nicht gefunden",
+    "patient": "Patient",
+    "createdAt": "Erstellt",
+    "updatedAt": "Zuletzt aktualisiert"
   }
 }
