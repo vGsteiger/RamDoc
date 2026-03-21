@@ -166,7 +166,8 @@ pub async fn export_patient_pdf(
         let patient = patient::get_patient(&conn, &patient_id)?;
         let sessions = session::list_sessions_for_patient(&conn, &patient_id, u32::MAX, 0)?;
         let diagnoses = diagnosis::list_diagnoses_for_patient(&conn, &patient_id, u32::MAX, 0)?;
-        let medications = medication::list_medications_for_patient(&conn, &patient_id, u32::MAX, 0)?;
+        let medications =
+            medication::list_medications_for_patient(&conn, &patient_id, u32::MAX, 0)?;
         (patient, sessions, diagnoses, medications)
     };
 
@@ -198,7 +199,10 @@ fn generate_patient_summary_pdf(
     diagnoses: Vec<diagnosis::Diagnosis>,
     medications: Vec<medication::Medication>,
 ) -> Result<Vec<u8>, AppError> {
-    use printpdf::{BuiltinFont, Mm, Op, PdfDocument, PdfFontHandle, PdfPage, PdfSaveOptions, Point, Pt, TextItem};
+    use printpdf::{
+        BuiltinFont, Mm, Op, PdfDocument, PdfFontHandle, PdfPage, PdfSaveOptions, Point, Pt,
+        TextItem,
+    };
 
     // Format dates
     let dob = NaiveDate::parse_from_str(&patient.date_of_birth, "%Y-%m-%d")
@@ -288,35 +292,17 @@ fn generate_patient_summary_pdf(
     y -= lh;
 
     if let Some(gender) = &patient.gender {
-        all_ops.extend(text_op(
-            format!("Gender: {}", gender),
-            11.0,
-            left,
-            y,
-            &font,
-        ));
+        all_ops.extend(text_op(format!("Gender: {}", gender), 11.0, left, y, &font));
         y -= lh;
     }
 
     if let Some(phone) = &patient.phone {
-        all_ops.extend(text_op(
-            format!("Phone: {}", phone),
-            11.0,
-            left,
-            y,
-            &font,
-        ));
+        all_ops.extend(text_op(format!("Phone: {}", phone), 11.0, left, y, &font));
         y -= lh;
     }
 
     if let Some(email) = &patient.email {
-        all_ops.extend(text_op(
-            format!("Email: {}", email),
-            11.0,
-            left,
-            y,
-            &font,
-        ));
+        all_ops.extend(text_op(format!("Email: {}", email), 11.0, left, y, &font));
         y -= lh;
     }
 
@@ -396,7 +382,10 @@ fn generate_patient_summary_pdf(
                 .unwrap_or_else(|_| diagnosis.diagnosed_date.clone());
 
             all_ops.extend(text_op(
-                format!("{} - {} ({})", diagnosis.icd10_code, diagnosis.description, diagnosed_date),
+                format!(
+                    "{} - {} ({})",
+                    diagnosis.icd10_code, diagnosis.description, diagnosed_date
+                ),
                 10.0,
                 left,
                 y,
@@ -445,7 +434,10 @@ fn generate_patient_summary_pdf(
             }
 
             all_ops.extend(text_op(
-                format!("{} - {} {}", medication.substance, medication.dosage, medication.frequency),
+                format!(
+                    "{} - {} {}",
+                    medication.substance, medication.dosage, medication.frequency
+                ),
                 10.0,
                 left,
                 y,
