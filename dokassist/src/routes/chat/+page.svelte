@@ -3,6 +3,7 @@
   import { listChatSessions, createChatSession, type ChatSession } from '$lib/api';
   import ChatSessionList from '$lib/components/ChatSessionList.svelte';
   import ChatThread from '$lib/components/ChatThread.svelte';
+  import { t } from '$lib/translations';
 
   let sessions = $state<ChatSession[]>([]);
   let activeSessionId = $state<string | null>(null);
@@ -38,7 +39,7 @@
   <!-- Sidebar: session list -->
   <div class="w-64 border-r border-gray-200 dark:border-gray-700 flex flex-col shrink-0">
     <div class="p-4 border-b border-gray-200 dark:border-gray-700">
-      <h2 class="text-sm font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wide">Chats</h2>
+      <h2 class="text-sm font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wide">{$t('chat.chats')}</h2>
     </div>
     {#if !isLoading}
       <ChatSessionList

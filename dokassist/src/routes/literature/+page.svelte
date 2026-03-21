@@ -11,10 +11,10 @@
     type Literature,
     type AppError,
     parseError,
-    formatError
   } from '$lib/api';
   import ErrorDisplay from '$lib/components/ErrorDisplay.svelte';
   import { FileText, FileType, Check, AlertTriangle } from 'lucide-svelte';
+  import { t } from '$lib/translations';
 
   let literature: Literature[] = $state([]);
   let loading = $state(false);
@@ -30,7 +30,6 @@
   onMount(async () => {
     await loadLiterature();
 
-    // Listen for literature processing complete events
     unlisten = await listen<string>('literature-processed', (event) => {
       const litId = event.payload;
       processingFiles.delete(litId);
@@ -77,7 +76,6 @@
           null
         );
 
-        // Start processing in the background
         processingFiles.add(uploaded.id);
         processLiterature(uploaded.id).catch((err) => {
           console.error('Failed to process literature:', err);
@@ -92,7 +90,6 @@
       }
     }
 
-    // Reset input
     input.value = '';
   }
 
@@ -155,7 +152,7 @@
   function formatDate(dateStr: string): string {
     try {
       const date = new Date(dateStr);
-      return date.toLocaleDateString('en-US', {
+      return date.toLocaleDateString('de-CH', {
         year: 'numeric',
         month: 'short',
         day: 'numeric'
@@ -168,9 +165,9 @@
 
 <div class="h-full flex flex-col bg-white dark:bg-gray-950">
   <div class="border-b border-gray-200 dark:border-gray-800 p-6">
-    <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">Literature</h1>
+    <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">{$t('literature.title')}</h1>
     <p class="text-gray-500 dark:text-gray-400 mt-2">
-      Upload reference documents, medication guidelines, and treatment protocols for AI-powered search.
+      {$t('literature.description')}
     </p>
   </div>
 
@@ -201,9 +198,9 @@
             />
           </svg>
           <span class="text-sm text-gray-500 dark:text-gray-400">
-            Click to upload PDF or text files
+            {$t('literature.clickToUpload')}
           </span>
-          <span class="text-xs text-gray-400 dark:text-gray-500">Max 500 MB per file</span>
+          <span class="text-xs text-gray-400 dark:text-gray-500">{$t('literature.maxFileSize')}</span>
         </div>
         <input
           type="file"
@@ -219,7 +216,7 @@
     {#if loading}
       <div class="text-center py-8">
         <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-        <p class="text-gray-500 dark:text-gray-400 mt-2">Loading literature...</p>
+        <p class="text-gray-500 dark:text-gray-400 mt-2">{$t('literature.loading')}</p>
       </div>
     {:else if literature.length === 0}
       <!-- Empty State -->
@@ -237,9 +234,9 @@
             d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
           />
         </svg>
-        <h3 class="mt-2 text-sm font-medium text-gray-700 dark:text-gray-300">No literature documents</h3>
+        <h3 class="mt-2 text-sm font-medium text-gray-700 dark:text-gray-300">{$t('literature.noLiterature')}</h3>
         <p class="mt-1 text-sm text-gray-500">
-          Upload reference documents to enable AI-powered search in chat and reports.
+          {$t('literature.noLiteratureDesc')}
         </p>
       </div>
     {:else}
@@ -269,14 +266,14 @@
               {#if processingFiles.has(lit.id)}
                 <div
                   class="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"
-                  title="Processing…"
+                  title={$t('literature.processingTitle')}
                 ></div>
               {:else if lit.chunk_count > 0}
-                <span class="text-green-500" title="Extracted and embedded ({lit.chunk_count} chunks)">
+                <span class="text-green-500" title={$t('literature.processedTitle').replace('{count}', String(lit.chunk_count))}>
                   <Check size={16} />
                 </span>
               {:else}
-                <span class="text-yellow-500" title="Not yet processed">
+                <span class="text-yellow-500" title={$t('literature.notProcessedTitle')}>
                   <AlertTriangle size={16} />
                 </span>
               {/if}
@@ -290,27 +287,27 @@
                     bind:value={descriptionText}
                     class="w-full px-3 py-2 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded text-sm text-gray-900 dark:text-gray-100"
                     rows="3"
-                    placeholder="Add a description..."
+                    placeholder={$t('literature.addDescription')}
                   ></textarea>
                   <div class="flex gap-2">
                     <button
                       onclick={() => saveDescription(lit.id)}
                       class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded"
                     >
-                      Save
+                      {$t('common.save')}
                     </button>
                     <button
                       onclick={cancelEditingDescription}
                       class="px-3 py-1 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 text-xs rounded"
                     >
-                      Cancel
+                      {$t('common.cancel')}
                     </button>
                   </div>
                 </div>
               {:else if lit.description}
                 <p class="text-xs text-gray-500 dark:text-gray-400">{lit.description}</p>
               {:else}
-                <p class="text-xs text-gray-400 dark:text-gray-600 italic">No description</p>
+                <p class="text-xs text-gray-400 dark:text-gray-600 italic">{$t('literature.noDescription')}</p>
               {/if}
             </div>
 
@@ -320,14 +317,14 @@
                 onclick={() => handleDownload(lit)}
                 class="flex-1 px-3 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs rounded transition-colors"
               >
-                Download
+                {$t('files.download')}
               </button>
               {#if editingDescription !== lit.id}
                 <button
                   onclick={() => startEditingDescription(lit)}
                   class="flex-1 px-3 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs rounded transition-colors"
                 >
-                  Edit
+                  {$t('common.edit')}
                 </button>
               {/if}
               {#if confirmingDelete === lit.id}
@@ -335,20 +332,20 @@
                   onclick={() => handleDelete(lit.id)}
                   class="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs rounded transition-colors"
                 >
-                  Confirm
+                  {$t('common.confirm')}
                 </button>
                 <button
                   onclick={() => (confirmingDelete = null)}
                   class="px-3 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs rounded transition-colors"
                 >
-                  Cancel
+                  {$t('common.cancel')}
                 </button>
               {:else}
                 <button
                   onclick={() => (confirmingDelete = lit.id)}
                   class="px-3 py-1.5 bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 text-xs rounded transition-colors"
                 >
-                  Delete
+                  {$t('common.delete')}
                 </button>
               {/if}
             </div>

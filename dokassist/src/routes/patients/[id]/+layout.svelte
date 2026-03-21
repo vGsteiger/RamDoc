@@ -4,6 +4,7 @@
   import { getPatient, type Patient } from '$lib/api';
   import { Hourglass } from 'lucide-svelte';
   import type { Snippet } from 'svelte';
+  import { t } from '$lib/translations';
 
   let { children }: { children: Snippet } = $props();
 
@@ -15,11 +16,11 @@
   let currentPath = $derived($page.url.pathname);
 
   let tabs = $derived([
-    { path: `/patients/${patientId}`, label: 'Overview' },
-    { path: `/patients/${patientId}/files`, label: 'Files' },
-    { path: `/patients/${patientId}/reports`, label: 'Reports' },
-    { path: `/patients/${patientId}/email`, label: 'Email' },
-    { path: `/patients/${patientId}/chat`, label: 'Chat' },
+    { path: `/patients/${patientId}`, labelKey: 'patients.overview' },
+    { path: `/patients/${patientId}/files`, labelKey: 'patients.files' },
+    { path: `/patients/${patientId}/reports`, labelKey: 'patients.reports' },
+    { path: `/patients/${patientId}/email`, labelKey: 'patients.email' },
+    { path: `/patients/${patientId}/chat`, labelKey: 'patients.chat' },
   ]);
 
   onMount(async () => {
@@ -27,7 +28,7 @@
       patient = await getPatient(patientId);
     } catch (error) {
       console.error('Failed to load patient:', error);
-      errorMessage = 'Failed to load patient information';
+      errorMessage = 'error';
     } finally {
       isLoading = false;
     }
@@ -41,13 +42,13 @@
         <div class="mb-4 flex justify-center text-gray-400 dark:text-gray-400">
           <Hourglass size={48} />
         </div>
-        <p class="text-gray-500 dark:text-gray-400">Loading patient...</p>
+        <p class="text-gray-500 dark:text-gray-400">{$t('patients.loadingPatient')}</p>
       </div>
     </div>
   {:else if errorMessage}
     <div class="flex-1 flex items-center justify-center p-8">
       <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6 max-w-md">
-        <p class="text-red-600 dark:text-red-400">{errorMessage}</p>
+        <p class="text-red-600 dark:text-red-400">{$t('patients.loadError')}</p>
       </div>
     </div>
   {:else if patient}
@@ -56,7 +57,7 @@
         {patient.first_name} {patient.last_name}
       </h1>
       {#if patient.date_of_birth}
-        <p class="text-gray-500 dark:text-gray-400">Born {patient.date_of_birth}</p>
+        <p class="text-gray-500 dark:text-gray-400">{$t('patients.bornOn')} {patient.date_of_birth}</p>
       {/if}
     </div>
 
@@ -69,7 +70,7 @@
               ? 'text-blue-500 dark:text-blue-400 border-b-2 border-blue-500 dark:border-blue-400'
               : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'}"
           >
-            {tab.label}
+            {$t(tab.labelKey)}
           </a>
         {/each}
       </nav>

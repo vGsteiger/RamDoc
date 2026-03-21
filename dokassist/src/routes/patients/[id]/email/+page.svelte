@@ -3,6 +3,7 @@
   import { onMount } from 'svelte';
   import { listEmails, deleteEmail, parseError, type Email, type AppError } from '$lib/api';
   import ErrorDisplay from '$lib/components/ErrorDisplay.svelte';
+  import { t } from '$lib/translations';
 
   $: patientId = $page.params.id;
   let emails: Email[] = [];
@@ -23,8 +24,8 @@
 
   async function handleDeleteEmail(emailId: string, status: string) {
     const confirmMessage = status === 'draft'
-      ? 'Are you sure you want to delete this email draft?'
-      : 'Are you sure you want to delete this email?';
+      ? $t('email.confirmDeleteDraft')
+      : $t('email.confirmDelete');
 
     if (!confirm(confirmMessage)) {
       return;
@@ -48,14 +49,7 @@
   }
 
   function formatStatus(status: string): string {
-    switch (status) {
-      case 'draft':
-        return 'Draft';
-      case 'sent':
-        return 'Sent';
-      default:
-        return status;
-    }
+    return status === 'draft' ? $t('email.draft') : $t('email.sentStatus');
   }
 
   onMount(() => {
@@ -65,27 +59,27 @@
 
 <div class="p-8">
   <div class="flex justify-between items-center mb-6">
-    <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">Emails</h2>
+    <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">{$t('email.title')}</h2>
     <a
       href={`/patients/${patientId}/email/new`}
       class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
     >
-      Compose New Email
+      {$t('email.composeNew')}
     </a>
   </div>
 
   {#if loading}
-    <div class="text-gray-500 dark:text-gray-400">Loading emails...</div>
+    <div class="text-gray-500 dark:text-gray-400">{$t('email.loading')}</div>
   {:else if error}
     <ErrorDisplay {error} showDetails={true} />
   {:else if emails.length === 0}
     <div class="text-center py-12">
-      <p class="text-gray-500 dark:text-gray-400 mb-4">No emails yet.</p>
+      <p class="text-gray-500 dark:text-gray-400 mb-4">{$t('email.noEmails')}</p>
       <a
         href={`/patients/${patientId}/email/new`}
         class="inline-block px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
       >
-        Compose Your First Email
+        {$t('email.composeFirst')}
       </a>
     </div>
   {:else}
@@ -103,13 +97,13 @@
                 </span>
               </div>
               <p class="text-sm text-gray-500 dark:text-gray-400">
-                To: {email.recipient_email}
+                {$t('email.to')} {email.recipient_email}
               </p>
               <p class="text-xs text-gray-500 mt-1">
                 {#if email.status === 'sent' && email.sent_at}
-                  Sent: {formatDate(email.sent_at)}
+                  {$t('email.sent')} {formatDate(email.sent_at)}
                 {:else}
-                  Created: {formatDate(email.created_at)}
+                  {$t('email.created')} {formatDate(email.created_at)}
                 {/if}
               </p>
             </div>
@@ -118,14 +112,14 @@
                 href={`/patients/${patientId}/email/${email.id}`}
                 class="px-3 py-1 text-sm bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
               >
-                {email.status === 'draft' ? 'Edit' : 'View'}
+                {email.status === 'draft' ? $t('common.edit') : $t('email.view')}
               </a>
               {#if email.status === 'draft'}
                 <button
                   on:click={() => handleDeleteEmail(email.id, email.status)}
                   class="px-3 py-1 text-sm bg-red-900/20 text-red-400 rounded hover:bg-red-900/40 transition-colors"
                 >
-                  Delete
+                  {$t('common.delete')}
                 </button>
               {/if}
             </div>

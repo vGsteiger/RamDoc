@@ -1,6 +1,7 @@
 <script lang="ts">
   import { uploadFile, processFile, type FileRecord } from '$lib/api';
   import { Paperclip } from 'lucide-svelte';
+  import { t } from '$lib/translations';
 
   interface Props {
     patientId: string;
@@ -41,13 +42,13 @@
     if (!files || files.length === 0) return;
 
     await uploadFiles(files);
-    input.value = ''; // Reset input
+    input.value = '';
   }
 
   async function uploadFiles(files: FileList) {
     for (const file of Array.from(files)) {
       if (!supportedTypes.includes(file.type)) {
-        errorMessage = `File type ${file.type} not supported. Supported types: PDF, PNG, JPG, DOCX`;
+        errorMessage = $t('files.unsupportedType').replace('{type}', file.type);
         setTimeout(() => errorMessage = '', 5000);
         continue;
       }
@@ -60,7 +61,7 @@
         const buffer = await file.arrayBuffer();
         const data = Array.from(new Uint8Array(buffer));
 
-        uploadProgress = 50; // Simulate progress
+        uploadProgress = 50;
 
         const record = await uploadFile(patientId, file.name, data, file.type);
 
@@ -70,8 +71,6 @@
           onUpload(record);
         }
 
-        // Fire-and-forget: extract text + embed in the background.
-        // The backend emits "file-processed" when done; do not block the upload UI.
         processFile(record.id).catch((err) => {
           console.warn('process_file failed (non-fatal):', err);
         });
@@ -80,7 +79,7 @@
         uploadProgress = 0;
       } catch (error) {
         console.error('Upload failed:', error);
-        errorMessage = `Failed to upload ${file.name}: ${error}`;
+        errorMessage = $t('files.uploadFailed').replace('{name}', file.name).replace('{error}', String(error));
         isUploading = false;
         uploadProgress = 0;
         setTimeout(() => errorMessage = '', 5000);
@@ -113,10 +112,10 @@
         <Paperclip size={48} />
       </div>
       <p class="text-gray-600 dark:text-gray-300 font-medium mb-2">
-        Drop files here or click to browse
+        {$t('files.dropOrBrowse')}
       </p>
       <p class="text-sm text-gray-400 dark:text-gray-500">
-        Supports PDF, PNG, JPG, DOCX
+        {$t('files.supportedTypes')}
       </p>
     </div>
   </div>
@@ -124,7 +123,7 @@
   {#if isUploading}
     <div class="bg-gray-50 dark:bg-gray-900 rounded-lg p-4">
       <div class="flex items-center justify-between mb-2">
-        <span class="text-sm text-gray-600 dark:text-gray-300">Uploading...</span>
+        <span class="text-sm text-gray-600 dark:text-gray-300">{$t('files.uploading')}</span>
         <span class="text-sm text-gray-500 dark:text-gray-400">{uploadProgress}%</span>
       </div>
       <div class="w-full bg-gray-200 dark:bg-gray-800 rounded-full h-2">

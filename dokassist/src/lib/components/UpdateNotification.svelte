@@ -9,14 +9,13 @@
   } from '$lib/api';
 
   let updateInfo = $state<UpdateInfo | null>(null);
-  let checking = $state(false);
   let installing = $state(false);
   let downloadProgress = $state<number>(0);
   let errorMsg = $state('');
   let showNotification = $state(false);
   let unlisten: UnlistenFn | null = null;
 
-  export let autoCheck = true;
+  let { autoCheck = true }: { autoCheck?: boolean } = $props();
 
   onMount(async () => {
     if (autoCheck) {
@@ -29,7 +28,6 @@
   });
 
   async function handleCheckForUpdates() {
-    checking = true;
     errorMsg = '';
     try {
       updateInfo = await checkForUpdates();
@@ -38,8 +36,6 @@
       }
     } catch (e) {
       errorMsg = parseError(e).message;
-    } finally {
-      checking = false;
     }
   }
 

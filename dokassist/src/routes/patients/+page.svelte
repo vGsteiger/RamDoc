@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { listPatients, globalSearch, type Patient, type SearchResult } from '$lib/api';
+  import { listPatients, globalSearch, type Patient } from '$lib/api';
   import PatientCard from '$lib/components/PatientCard.svelte';
   import { t } from '$lib/translations';
 

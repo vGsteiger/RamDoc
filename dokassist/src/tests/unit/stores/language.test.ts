@@ -103,7 +103,7 @@ describe('language store', () => {
     const values: string[] = [];
     const unsubscribe = language.subscribe((v) => values.push(v));
 
-    language.update((current) => 'de');
+    language.update((_current) => 'de');
 
     unsubscribe();
 

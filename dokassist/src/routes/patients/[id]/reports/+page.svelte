@@ -3,6 +3,7 @@
   import { onMount } from 'svelte';
   import { listReports, deleteReport, parseError, type Report, type AppError } from '$lib/api';
   import ErrorDisplay from '$lib/components/ErrorDisplay.svelte';
+  import { t } from '$lib/translations';
 
   $: patientId = $page.params.id;
   let reports: Report[] = [];
@@ -22,7 +23,7 @@
   }
 
   async function handleDeleteReport(reportId: string) {
-    if (!confirm('Are you sure you want to delete this report?')) {
+    if (!confirm($t('reports.confirmDelete'))) {
       return;
     }
     try {
@@ -63,27 +64,27 @@
 
 <div class="p-8">
   <div class="flex justify-between items-center mb-6">
-    <h2 class="text-2xl font-bold text-gray-100">Reports</h2>
+    <h2 class="text-2xl font-bold text-gray-100">{$t('reports.title')}</h2>
     <a
       href={`/patients/${patientId}/reports/new`}
       class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
     >
-      Generate New Report
+      {$t('reports.generateNew')}
     </a>
   </div>
 
   {#if loading}
-    <div class="text-gray-400">Loading reports...</div>
+    <div class="text-gray-400">{$t('reports.loading')}</div>
   {:else if error}
     <ErrorDisplay {error} showDetails={true} />
   {:else if reports.length === 0}
     <div class="text-center py-12">
-      <p class="text-gray-400 mb-4">No reports yet.</p>
+      <p class="text-gray-400 mb-4">{$t('reports.noReportsYet')}</p>
       <a
         href={`/patients/${patientId}/reports/new`}
         class="inline-block px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
       >
-        Generate Your First Report
+        {$t('reports.generateFirst')}
       </a>
     </div>
   {:else}
@@ -96,10 +97,10 @@
                 {formatReportType(report.report_type)}
               </h3>
               <p class="text-sm text-gray-400 mt-1">
-                Generated: {formatDate(report.generated_at)}
+                {$t('reports.generated')} {formatDate(report.generated_at)}
               </p>
               {#if report.model_name}
-                <p class="text-xs text-gray-500 mt-1">Model: {report.model_name}</p>
+                <p class="text-xs text-gray-500 mt-1">{$t('reports.model')} {report.model_name}</p>
               {/if}
             </div>
             <div class="flex space-x-2">
@@ -107,13 +108,13 @@
                 href={`/patients/${patientId}/reports/${report.id}`}
                 class="px-3 py-1 text-sm bg-gray-700 text-gray-300 rounded hover:bg-gray-600 transition-colors"
               >
-                View
+                {$t('reports.view')}
               </a>
               <button
                 on:click={() => handleDeleteReport(report.id)}
                 class="px-3 py-1 text-sm bg-red-900/20 text-red-400 rounded hover:bg-red-900/40 transition-colors"
               >
-                Delete
+                {$t('common.delete')}
               </button>
             </div>
           </div>

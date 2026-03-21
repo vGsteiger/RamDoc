@@ -2,6 +2,7 @@
   import { createEventDispatcher, untrack } from 'svelte';
   import type { Patient, CreatePatient, UpdatePatient } from '$lib/api';
   import AhvInput from './AhvInput.svelte';
+  import { t } from '$lib/translations';
 
   interface Props {
     patient?: Patient | null;
@@ -15,7 +16,7 @@
     cancel: void;
   }>();
 
-  let formData = $state(untrack(() => ({
+  let formData = $state({
     ahv_number: patient?.ahv_number || '',
     first_name: patient?.first_name || '',
     last_name: patient?.last_name || '',
@@ -28,24 +29,26 @@
     gp_name: patient?.gp_name || '',
     gp_address: patient?.gp_address || '',
     notes: patient?.notes || ''
-  })));
+  });
 
   $effect(() => {
     if (patient) {
-      formData = {
-        ahv_number: patient.ahv_number || '',
-        first_name: patient.first_name || '',
-        last_name: patient.last_name || '',
-        date_of_birth: patient.date_of_birth || '',
-        gender: patient.gender || '',
-        address: patient.address || '',
-        phone: patient.phone || '',
-        email: patient.email || '',
-        insurance: patient.insurance || '',
-        gp_name: patient.gp_name || '',
-        gp_address: patient.gp_address || '',
-        notes: patient.notes || ''
-      };
+      untrack(() => {
+        formData = {
+          ahv_number: patient!.ahv_number || '',
+          first_name: patient!.first_name || '',
+          last_name: patient!.last_name || '',
+          date_of_birth: patient!.date_of_birth || '',
+          gender: patient!.gender || '',
+          address: patient!.address || '',
+          phone: patient!.phone || '',
+          email: patient!.email || '',
+          insurance: patient!.insurance || '',
+          gp_name: patient!.gp_name || '',
+          gp_address: patient!.gp_address || '',
+          notes: patient!.notes || ''
+        };
+      });
     }
   });
 
@@ -55,24 +58,24 @@
     errors = {};
 
     if (!formData.ahv_number) {
-      errors.ahv_number = 'AHV number is required';
+      errors.ahv_number = $t('patients.validation.ahvRequired');
     }
 
     if (!formData.first_name.trim()) {
-      errors.first_name = 'First name is required';
+      errors.first_name = $t('patients.validation.firstNameRequired');
     }
 
     if (!formData.last_name.trim()) {
-      errors.last_name = 'Last name is required';
+      errors.last_name = $t('patients.validation.lastNameRequired');
     }
 
     if (!formData.date_of_birth) {
-      errors.date_of_birth = 'Date of birth is required';
+      errors.date_of_birth = $t('patients.validation.dateOfBirthRequired');
     } else {
       const date = new Date(formData.date_of_birth);
       const today = new Date();
       if (date > today) {
-        errors.date_of_birth = 'Date of birth cannot be in the future';
+        errors.date_of_birth = $t('patients.validation.dateOfBirthFuture');
       }
     }
 
@@ -85,7 +88,6 @@
     }
 
     if (patient) {
-      // Update mode - only send changed fields
       const updates: UpdatePatient = {};
       if (formData.ahv_number !== patient.ahv_number) updates.ahv_number = formData.ahv_number;
       if (formData.first_name !== patient.first_name) updates.first_name = formData.first_name;
@@ -104,7 +106,6 @@
 
       dispatch('submit', { id: patient.id, data: updates });
     } else {
-      // Create mode
       const createData: CreatePatient = {
         ahv_number: formData.ahv_number,
         first_name: formData.first_name,
@@ -133,7 +134,7 @@
   <!-- AHV Number -->
   <div>
     <label for="ahv_number" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-      AHV Number <span class="text-red-400">*</span>
+      {$t('patients.ahvNumber')} <span class="text-red-400">*</span>
     </label>
     <AhvInput bind:value={formData.ahv_number} error={errors.ahv_number} />
   </div>
@@ -142,7 +143,7 @@
   <div class="grid grid-cols-2 gap-4">
     <div>
       <label for="first_name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-        First Name <span class="text-red-400">*</span>
+        {$t('patients.firstName')} <span class="text-red-400">*</span>
       </label>
       <input
         type="text"
@@ -159,7 +160,7 @@
 
     <div>
       <label for="last_name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-        Last Name <span class="text-red-400">*</span>
+        {$t('patients.lastName')} <span class="text-red-400">*</span>
       </label>
       <input
         type="text"
@@ -179,7 +180,7 @@
   <div class="grid grid-cols-2 gap-4">
     <div>
       <label for="date_of_birth" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-        Date of Birth <span class="text-red-400">*</span>
+        {$t('patients.dateOfBirth')} <span class="text-red-400">*</span>
       </label>
       <input
         type="date"
@@ -195,16 +196,16 @@
     </div>
 
     <div>
-      <label for="gender" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Gender</label>
+      <label for="gender" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{$t('patients.gender')}</label>
       <select
         id="gender"
         bind:value={formData.gender}
         class="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-gray-100 focus:outline-none focus:border-blue-500"
       >
-        <option value="">Select...</option>
-        <option value="male">Male</option>
-        <option value="female">Female</option>
-        <option value="other">Other</option>
+        <option value="">{$t('patients.genderSelect')}</option>
+        <option value="male">{$t('patients.male')}</option>
+        <option value="female">{$t('patients.female')}</option>
+        <option value="other">{$t('patients.other')}</option>
       </select>
     </div>
   </div>
@@ -212,7 +213,7 @@
   <!-- Contact Information -->
   <div class="grid grid-cols-2 gap-4">
     <div>
-      <label for="phone" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Phone</label>
+      <label for="phone" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{$t('patients.phone')}</label>
       <input
         type="tel"
         id="phone"
@@ -222,7 +223,7 @@
     </div>
 
     <div>
-      <label for="email" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Email</label>
+      <label for="email" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{$t('patients.email')}</label>
       <input
         type="email"
         id="email"
@@ -234,7 +235,7 @@
 
   <!-- Address -->
   <div>
-    <label for="address" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Address</label>
+    <label for="address" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{$t('patients.address')}</label>
     <textarea
       id="address"
       bind:value={formData.address}
@@ -245,7 +246,7 @@
 
   <!-- Insurance -->
   <div>
-    <label for="insurance" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Insurance</label>
+    <label for="insurance" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{$t('patients.insurance')}</label>
     <input
       type="text"
       id="insurance"
@@ -257,7 +258,7 @@
   <!-- GP Information -->
   <div class="grid grid-cols-2 gap-4">
     <div>
-      <label for="gp_name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">GP Name</label>
+      <label for="gp_name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{$t('patients.gpName')}</label>
       <input
         type="text"
         id="gp_name"
@@ -268,7 +269,7 @@
 
     <div>
       <label for="gp_address" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-        GP Address
+        {$t('patients.gpAddress')}
       </label>
       <input
         type="text"
@@ -281,7 +282,7 @@
 
   <!-- Notes -->
   <div>
-    <label for="notes" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Notes</label>
+    <label for="notes" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{$t('patients.notes')}</label>
     <textarea
       id="notes"
       bind:value={formData.notes}
@@ -298,14 +299,14 @@
       disabled={isSubmitting}
       class="px-6 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
     >
-      Cancel
+      {$t('common.cancel')}
     </button>
     <button
       type="submit"
       disabled={isSubmitting}
       class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
     >
-      {isSubmitting ? 'Saving...' : patient ? 'Update Patient' : 'Create Patient'}
+      {isSubmitting ? $t('patients.saving') : patient ? $t('patients.updatePatient') : $t('patients.createPatient')}
     </button>
   </div>
 </form>

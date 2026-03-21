@@ -3,6 +3,8 @@
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import { invoke } from '@tauri-apps/api/core';
   import { getEngineStatus, parseError, type LlmEngineStatus, type AppError } from '$lib/api';
+  import { get } from 'svelte/store';
+  import { t } from '$lib/translations';
 
   export let content: string = '';
   export let readonly: boolean = false;
@@ -10,7 +12,7 @@
   let showPreview = false;
   let showSuggestions = false;
   let selectedText = '';
-  let suggestionInstruction = 'Verbessern Sie diesen Text und machen Sie ihn präziser und professioneller.';
+  let suggestionInstruction = get(t)('reports.editor.defaultInstruction');
   let generatedSuggestion = '';
   let isGeneratingSuggestion = false;
   let error: AppError | null = null;
@@ -40,7 +42,7 @@
     if (!selectedText && !content) {
       error = {
         code: 'VALIDATION_ERROR',
-        message: 'Bitte wählen Sie Text aus oder fügen Sie Inhalt hinzu',
+        message: get(t)('reports.editor.noTextSelected'),
         ref: 'NO_TEXT'
       };
       return;
@@ -49,7 +51,7 @@
     if (!llmStatus?.is_loaded) {
       error = {
         code: 'LLM_ERROR',
-        message: 'LLM model nicht geladen. Bitte konfigurieren Sie das Modell in den Einstellungen.',
+        message: get(t)('reports.editor.modelNotLoaded'),
         ref: 'LLM_NOT_LOADED'
       };
       return;
@@ -194,11 +196,11 @@
             class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-sm"
             disabled={!llmStatus?.is_loaded}
           >
-            {showSuggestions ? 'Vorschläge ausblenden' : 'LLM-Vorschläge'}
+            {showSuggestions ? $t('common.close') : $t('reports.editor.suggestions')}
           </button>
           {#if selectedText}
             <span class="text-xs text-gray-500 dark:text-gray-400">
-              {selectedText.length} Zeichen ausgewählt
+              {$t('reports.editor.charsSelected').replace('{count}', String(selectedText.length))}
             </span>
           {/if}
         </div>
@@ -210,7 +212,7 @@
   {#if showSuggestions && !readonly}
     <div class="w-1/3 flex flex-col border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-800">
       <div class="p-4 border-b border-gray-200 dark:border-gray-700">
-        <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">LLM-Vorschläge</h3>
+        <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">{$t('reports.editor.suggestions')}</h3>
         {#if error}
           <div class="p-2 bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-500 rounded text-xs text-red-600 dark:text-red-400 mb-2">
             {error.message}
@@ -218,20 +220,20 @@
         {/if}
         {#if !llmStatus?.is_loaded}
           <div class="p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-500 rounded text-xs text-yellow-700 dark:text-yellow-400">
-            LLM nicht geladen. Bitte konfigurieren Sie das Modell in den Einstellungen.
+            {$t('reports.editor.modelNotLoaded')}
           </div>
         {:else}
           <textarea
             bind:value={suggestionInstruction}
             class="w-full h-16 px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded text-gray-900 dark:text-gray-100 text-xs focus:outline-none focus:border-blue-500"
-            placeholder="Anweisung für Textverbesserung..."
+            placeholder={$t('reports.editor.instructionPlaceholder')}
           ></textarea>
           <button
             on:click={generateSuggestion}
             disabled={isGeneratingSuggestion}
             class="w-full mt-2 px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors text-sm disabled:opacity-50"
           >
-            {isGeneratingSuggestion ? 'Generiere...' : 'Vorschlag generieren'}
+            {isGeneratingSuggestion ? $t('reports.editor.generating') : $t('reports.editor.generateSuggestion')}
           </button>
         {/if}
       </div>
@@ -241,7 +243,7 @@
           <div class="text-sm text-gray-500 dark:text-gray-400">
             <div class="flex items-center gap-2">
               <div class="animate-pulse h-2 w-2 bg-blue-500 rounded-full"></div>
-              <span>Generiere Vorschlag...</span>
+              <span>{$t('reports.editor.generatingSuggestion')}</span>
             </div>
             {#if generatedSuggestion}
               <pre class="mt-4 whitespace-pre-wrap font-sans text-gray-900 dark:text-gray-100 text-sm">{generatedSuggestion}</pre>
@@ -255,19 +257,19 @@
                 on:click={applySuggestion}
                 class="flex-1 px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-sm"
               >
-                Anwenden
+                {$t('reports.editor.apply')}
               </button>
               <button
                 on:click={clearSuggestion}
                 class="flex-1 px-3 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors text-sm"
               >
-                Verwerfen
+                {$t('reports.editor.discard')}
               </button>
             </div>
           </div>
         {:else}
           <p class="text-sm text-gray-400 dark:text-gray-500 italic">
-            Wählen Sie Text aus oder generieren Sie einen Vorschlag für den gesamten Inhalt.
+            {$t('reports.editor.suggestionHint')}
           </p>
         {/if}
       </div>

@@ -40,7 +40,7 @@
         {readonly}
         class="w-full h-full p-6 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-mono text-sm resize-none focus:outline-none"
         placeholder="Report content will appear here..."
-      />
+      ></textarea>
     {/if}
   </div>
 </div>

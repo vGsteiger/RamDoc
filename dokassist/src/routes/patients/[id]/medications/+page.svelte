@@ -11,6 +11,8 @@
     type UpdateMedication
   } from '$lib/api';
   import MedicationForm from '$lib/components/MedicationForm.svelte';
+  import { get } from 'svelte/store';
+  import { t } from '$lib/translations';
 
   const patientId = $derived($page.params.id);
 
@@ -43,7 +45,7 @@
   }
 
   async function handleDelete(medicationId: string) {
-    if (!confirm('Möchten Sie dieses Medikament wirklich löschen?')) {
+    if (!confirm(get(t)('medications.confirmDelete'))) {
       return;
     }
 

@@ -51,10 +51,8 @@ const createMatchMediaMock = (matches: boolean) => {
   };
 };
 
-let matchMediaMock: ReturnType<typeof createMatchMediaMock>;
-
 // Setup matchMedia mock before importing the store
-matchMediaMock = createMatchMediaMock(true);
+const matchMediaMock = createMatchMediaMock(true);
 window.matchMedia = vi.fn(() => matchMediaMock as unknown as MediaQueryList);
 
 // NOW import the store after mocks are set up

@@ -4,6 +4,8 @@
   import { createSession, type CreateSession } from '$lib/api';
   import { AMDP_CATEGORIES, serializeAMDP, type AMDPCategory } from '$lib/amdp';
   import AMDPForm from '$lib/components/AMDPForm.svelte';
+  import { get } from 'svelte/store';
+  import { t } from '$lib/translations';
 
   const patientId = $derived($page.params.id);
 
@@ -40,7 +42,7 @@
     event.preventDefault();
 
     if (!sessionType.trim() || !notes.trim()) {
-      error = 'Bitte füllen Sie alle Pflichtfelder aus.';
+      error = get(t)('sessions.requiredFields');
       return;
     }
 

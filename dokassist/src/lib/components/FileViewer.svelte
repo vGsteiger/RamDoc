@@ -1,6 +1,6 @@
 <script lang="ts">
   import { downloadFile, type FileRecord } from '$lib/api';
-  import { onMount, onDestroy } from 'svelte';
+  import { onDestroy } from 'svelte';
   import { Hourglass, FileText } from 'lucide-svelte';
 
   interface Props {

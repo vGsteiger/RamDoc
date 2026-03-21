@@ -2,6 +2,7 @@
   import type { FileRecord } from '$lib/api';
   import { ImageIcon, FileText, FileType, Paperclip } from 'lucide-svelte';
   import type { Component } from 'svelte';
+  import { t } from '$lib/translations';
 
   interface Props {
     file: FileRecord;
@@ -19,7 +20,6 @@
   }
 
   function formatDate(dateString: string): string {
-    // Normalize SQLite datetime('now') format "YYYY-MM-DD HH:MM:SS" to ISO-8601
     let normalized = dateString.replace(' ', 'T');
     if (!normalized.endsWith('Z')) {
       normalized += 'Z';
@@ -27,7 +27,6 @@
 
     const date = new Date(normalized);
     if (isNaN(date.getTime())) {
-      // Fallback: return the original string if parsing fails
       return dateString;
     }
 
@@ -81,7 +80,7 @@
             onclick={() => onView?.(file)}
             class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition-colors"
           >
-            View
+            {$t('files.view')}
           </button>
         {/if}
 
@@ -90,7 +89,7 @@
             onclick={() => onDownload?.(file)}
             class="px-3 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-sm rounded transition-colors"
           >
-            Download
+            {$t('files.download')}
           </button>
         {/if}
 
@@ -99,7 +98,7 @@
             onclick={() => onDelete?.(file)}
             class="px-3 py-1.5 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 text-sm rounded transition-colors ml-auto"
           >
-            Delete
+            {$t('common.delete')}
           </button>
         {/if}
       </div>

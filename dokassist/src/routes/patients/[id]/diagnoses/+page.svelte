@@ -12,6 +12,8 @@
   } from '$lib/api';
   import DiagnosisCard from '$lib/components/DiagnosisCard.svelte';
   import IcdSearch from '$lib/components/IcdSearch.svelte';
+  import { get } from 'svelte/store';
+  import { t } from '$lib/translations';
 
   const patientId = $derived($page.params.id);
 
@@ -70,7 +72,7 @@
   }
 
   async function handleDelete(diagnosisId: string) {
-    if (!confirm('Möchten Sie diese Diagnose wirklich löschen?')) {
+    if (!confirm(get(t)('diagnoses.confirmDelete'))) {
       return;
     }
 
@@ -87,7 +89,7 @@
     event.preventDefault();
 
     if (!selectedCode || !selectedDescription) {
-      error = 'Bitte wählen Sie eine ICD-10 Diagnose aus.';
+      error = get(t)('diagnoses.selectRequired');
       return;
     }
 

@@ -12,7 +12,6 @@
     parseError,
     checkForUpdates,
     installUpdate,
-    getAppVersion,
     exportAllPatientData,
     getEmbedStatus,
     initializeEmbedEngine,
@@ -21,7 +20,7 @@
     type UpdateInfo,
     type EmbedStatus,
   } from "$lib/api";
-  import { themePreference, type ThemeMode } from "$lib/stores/theme";
+  import { themePreference } from "$lib/stores/theme";
   import { language } from "$lib/stores/language";
   import { t } from "$lib/translations";
 
@@ -290,7 +289,7 @@
                 onclick={handleInstallUpdate}
                 class="px-4 py-2 text-sm rounded-lg bg-green-600 hover:bg-green-500 text-white transition-colors"
               >
-                Install Update
+                {$t('settings.installUpdate')}
               </button>
             {/if}
           </div>
@@ -413,7 +412,7 @@
   </section>
 
   <section>
-    <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-200 mb-4">LLM Model</h2>
+    <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-200 mb-4">{$t('settings.llmModelSection')}</h2>
 
     <!-- Current status -->
     <div class="bg-gray-100 dark:bg-gray-800 rounded-lg p-4 mb-6 flex items-center gap-3">
@@ -428,21 +427,20 @@
         {#if status?.is_loaded}
           <p class="text-sm text-gray-900 dark:text-gray-100 font-medium">{status.model_name}</p>
           <p class="text-xs text-gray-600 dark:text-gray-400">
-            Loaded · {formatBytes(status.total_ram_bytes)} system RAM
+            {$t('settings.modelLoadedInfo').replace('{ram}', formatBytes(status.total_ram_bytes))}
           </p>
         {:else if status?.is_downloaded}
           <p class="text-sm text-gray-900 dark:text-gray-100 font-medium">
-            Model downloaded, not loaded
+            {$t('settings.modelDownloadedNotLoaded')}
           </p>
           <p class="text-xs text-gray-600 dark:text-gray-400">
-            {status.downloaded_filename} · {formatBytes(status.total_ram_bytes)}
-            RAM available
+            {$t('settings.modelDownloadedInfo').replace('{name}', status.downloaded_filename ?? '').replace('{ram}', formatBytes(status.total_ram_bytes))}
           </p>
         {:else}
-          <p class="text-sm text-gray-900 dark:text-gray-100 font-medium">No model downloaded</p>
+          <p class="text-sm text-gray-900 dark:text-gray-100 font-medium">{$t('settings.noModelDownloaded')}</p>
           {#if status}
             <p class="text-xs text-gray-600 dark:text-gray-400">
-              {formatBytes(status.total_ram_bytes)} system RAM available
+              {$t('settings.ramAvailable').replace('{ram}', formatBytes(status.total_ram_bytes))}
             </p>
           {/if}
         {/if}
@@ -463,7 +461,7 @@
         {#if phase === "downloading"}
           <div class="mb-3">
             <div class="flex justify-between text-xs text-gray-600 dark:text-gray-400 mb-1">
-              <span>Downloading…</span>
+              <span>{$t('settings.downloadingLabel')}</span>
               <span>{downloadProgress ?? 0}%</span>
             </div>
             <div class="w-full bg-gray-300 dark:bg-gray-700 rounded-full h-2">
@@ -474,7 +472,7 @@
             </div>
           </div>
         {:else if phase === "loading"}
-          <p class="text-xs text-blue-400 mb-3">Loading model into memory…</p>
+          <p class="text-xs text-blue-400 mb-3">{$t('settings.loadingModelLabel')}</p>
         {/if}
 
         {#if phase === "error"}
@@ -488,14 +486,14 @@
               disabled={phase === "downloading" || phase === "loading"}
               class="px-4 py-2 text-sm rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors"
             >
-              {phase === "loading" ? "Loading…" : "Load model"}
+              {phase === "loading" ? $t('common.loading') : $t('settings.loadModel')}
             </button>
             <button
               onclick={handleDownload}
               disabled={phase === "downloading" || phase === "loading"}
               class="px-4 py-2 text-sm rounded-lg bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 dark:text-gray-100 transition-colors"
             >
-              {phase === "downloading" ? "Downloading…" : "Re-download"}
+              {phase === "downloading" ? $t('settings.downloadingLabel') : $t('settings.redownload')}
             </button>
           </div>
         {:else}
@@ -505,18 +503,18 @@
               disabled={phase === "downloading" || phase === "loading"}
               class="px-4 py-2 text-sm rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors"
             >
-              {phase === "downloading" ? "Downloading…" : "Download & Load"}
+              {phase === "downloading" ? $t('settings.downloadingLabel') : $t('settings.downloadAndLoad')}
             </button>
             <button
               onclick={handleLoad}
               disabled={phase === "downloading" || phase === "loading"}
               class="px-4 py-2 text-sm rounded-lg bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 dark:text-gray-100 transition-colors"
             >
-              {phase === "loading" ? "Loading…" : "Load existing"}
+              {phase === "loading" ? $t('common.loading') : $t('settings.loadExisting')}
             </button>
           </div>
           <p class="text-xs text-gray-600 dark:text-gray-400 mt-2">
-            "Load existing" if the model file is already downloaded.
+            {$t('settings.loadExistingHint')}
           </p>
         {/if}
       </div>
@@ -524,16 +522,15 @@
 
     {#if phase === "done" && status?.is_loaded}
       <p class="text-sm text-green-400">
-        Model ready. Reports and metadata extraction are available.
+        {$t('settings.modelReadyMsg')}
       </p>
     {/if}
   </section>
 
   <section class="mt-10">
-    <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-200 mb-4">Embedding Model</h2>
+    <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-200 mb-4">{$t('settings.embeddingModel')}</h2>
     <p class="text-xs text-gray-600 dark:text-gray-400 mb-4">
-      Required for literature semantic search (~130 MB, downloaded once and
-      cached locally).
+      {$t('settings.embeddingModelDesc')}
     </p>
 
     <div class="bg-gray-100 dark:bg-gray-800 rounded-lg p-4 mb-4 flex items-center gap-3">
@@ -549,18 +546,18 @@
           <p class="text-sm text-gray-900 dark:text-gray-100 font-medium">
             nomic-embed-text-v1.5
           </p>
-          <p class="text-xs text-gray-600 dark:text-gray-400">Loaded · literature search ready</p>
+          <p class="text-xs text-gray-600 dark:text-gray-400">{$t('settings.embeddingLoaded')}</p>
         {:else if embedStatus?.is_downloaded}
           <p class="text-sm text-gray-900 dark:text-gray-100 font-medium">
-            Model cached, not loaded
+            {$t('settings.embeddingCached')}
           </p>
           <p class="text-xs text-gray-600 dark:text-gray-400">
-            Will load automatically on first search
+            {$t('settings.embeddingCachedDesc')}
           </p>
         {:else}
-          <p class="text-sm text-gray-900 dark:text-gray-100 font-medium">Not downloaded</p>
+          <p class="text-sm text-gray-900 dark:text-gray-100 font-medium">{$t('settings.embeddingNotDownloaded')}</p>
           <p class="text-xs text-gray-600 dark:text-gray-400">
-            Will download automatically on first literature search
+            {$t('settings.embeddingNotDownloadedDesc')}
           </p>
         {/if}
       </div>
@@ -571,14 +568,14 @@
           disabled={embedPhase === "loading"}
           class="px-4 py-2 text-sm rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors shrink-0"
         >
-          {embedPhase === "loading" ? "Loading…" : "Load now"}
+          {embedPhase === "loading" ? $t('common.loading') : $t('settings.loadNow')}
         </button>
       {/if}
     </div>
 
     {#if embedPhase === "loading"}
       <p class="text-xs text-blue-400">
-        Downloading and initialising embedding model…
+        {$t('settings.embeddingInitializing')}
       </p>
     {/if}
     {#if embedPhase === "error"}
@@ -587,23 +584,22 @@
   </section>
 
   <section class="mt-10">
-    <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-200 mb-2">About</h2>
+    <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-200 mb-2">{$t('settings.about')}</h2>
     <p class="text-sm text-gray-600 dark:text-gray-400">
-      App Version: <span class="text-gray-900 dark:text-gray-100">{appVersion || "…"}</span>
+      {$t('settings.appVersion')}: <span class="text-gray-900 dark:text-gray-100">{appVersion || "…"}</span>
     </p>
   </section>
 
   <section class="mt-10">
-    <h2 class="text-lg font-semibold text-red-400 mb-4">Danger Zone</h2>
+    <h2 class="text-lg font-semibold text-red-400 mb-4">{$t('settings.dangerZone')}</h2>
 
     <!-- Emergency Export -->
     <div class="border border-amber-600 rounded-lg p-4 mb-4">
       <div class="flex items-start justify-between gap-4">
         <div>
-          <p class="text-sm font-medium text-gray-900 dark:text-gray-100">Emergency Export</p>
+          <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{$t('settings.emergencyExport')}</p>
           <p class="text-xs text-gray-600 dark:text-gray-400 mt-1">
-            Export all patient data to a ZIP file. Use this if you need to
-            migrate to another system or create a complete backup.
+            {$t('settings.emergencyExportDesc')}
           </p>
         </div>
         {#if !showExportConfirm}
@@ -615,7 +611,7 @@
             }}
             class="px-4 py-2 text-sm rounded-lg bg-amber-700 hover:bg-amber-600 text-white transition-colors shrink-0"
           >
-            Export All Data
+            {$t('settings.exportData')}
           </button>
         {/if}
       </div>
@@ -623,26 +619,25 @@
       {#if showExportConfirm}
         <div class="mt-4 border-t border-amber-700 pt-4">
           <p class="text-sm text-amber-300 mb-3">
-            Type <strong>EXPORT</strong> to confirm. This will create a ZIP file
-            with all patient data including decrypted files.
+            {$t('settings.exportConfirmHint')}
           </p>
           <div class="flex gap-2">
             <input
               type="text"
               bind:value={exportInput}
-              placeholder="EXPORT"
+              placeholder={$t('settings.exportConfirmWord')}
               class="flex-1 px-3 py-2 text-sm rounded-lg bg-gray-200 dark:bg-gray-900 border border-gray-400 dark:border-gray-600 text-gray-900 dark:text-gray-100 placeholder-gray-500 focus:outline-none focus:border-amber-500"
               onkeydown={(e) => {
-                if (e.key === "Enter" && exportInput === "EXPORT")
+                if (e.key === "Enter" && exportInput === $t('settings.exportConfirmWord'))
                   handleExport();
               }}
             />
             <button
               onclick={handleExport}
-              disabled={exporting || exportInput !== "EXPORT"}
+              disabled={exporting || exportInput !== $t('settings.exportConfirmWord')}
               class="px-4 py-2 text-sm rounded-lg bg-amber-700 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors shrink-0"
             >
-              {exporting ? "Exporting…" : "Confirm Export"}
+              {exporting ? $t('settings.exporting') : $t('settings.confirmExport')}
             </button>
             <button
               onclick={() => {
@@ -652,7 +647,7 @@
               }}
               class="px-4 py-2 text-sm rounded-lg bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 transition-colors shrink-0"
             >
-              Cancel
+              {$t('common.cancel')}
             </button>
           </div>
           {#if exportError}
@@ -666,10 +661,9 @@
     <div class="border border-red-800 rounded-lg p-4">
       <div class="flex items-start justify-between gap-4">
         <div>
-          <p class="text-sm font-medium text-gray-900 dark:text-gray-100">Factory Reset</p>
+          <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{$t('settings.factoryReset')}</p>
           <p class="text-xs text-gray-600 dark:text-gray-400 mt-1">
-            Deletes all patient data, encryption keys, and model files. This
-            cannot be undone.
+            {$t('settings.factoryResetShortDesc')}
           </p>
         </div>
         {#if !showResetConfirm}
@@ -681,7 +675,7 @@
             }}
             class="px-4 py-2 text-sm rounded-lg bg-red-700 hover:bg-red-600 text-white transition-colors shrink-0"
           >
-            Factory Reset
+            {$t('settings.factoryReset')}
           </button>
         {/if}
       </div>
@@ -689,17 +683,16 @@
       {#if showResetConfirm}
         <div class="mt-4 border-t border-red-800 pt-4">
           <p class="text-sm text-red-300 mb-3">
-            Type <strong>RESET</strong> to confirm, or click the button. This action
-            is irreversible.
+            {$t('settings.resetConfirmHint')}
           </p>
           <div class="flex gap-2">
             <input
               type="text"
               bind:value={resetInput}
-              placeholder="RESET"
+              placeholder={$t('settings.resetConfirmWord')}
               class="flex-1 px-3 py-2 text-sm rounded-lg bg-gray-200 dark:bg-gray-900 border border-gray-400 dark:border-gray-600 text-gray-900 dark:text-gray-100 placeholder-gray-500 focus:outline-none focus:border-red-500"
               onkeydown={(e) => {
-                if (e.key === "Enter" && resetInput === "RESET") handleReset();
+                if (e.key === "Enter" && resetInput === $t('settings.resetConfirmWord')) handleReset();
               }}
             />
             <button
@@ -707,7 +700,7 @@
               disabled={resetting}
               class="px-4 py-2 text-sm rounded-lg bg-red-700 hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors shrink-0"
             >
-              {resetting ? "Resetting…" : "Confirm Reset"}
+              {resetting ? $t('settings.resetting') : $t('settings.confirmResetAction')}
             </button>
             <button
               onclick={() => {
@@ -717,7 +710,7 @@
               }}
               class="px-4 py-2 text-sm rounded-lg bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 transition-colors shrink-0"
             >
-              Cancel
+              {$t('common.cancel')}
             </button>
           </div>
           {#if resetError}

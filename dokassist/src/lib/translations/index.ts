@@ -12,7 +12,7 @@ const translations: Record<LanguageCode, Translations> = {
 };
 
 // Helper function to get nested translation value
-function getNestedValue(obj: any, path: string): string {
+function getNestedValue(obj: Record<string, unknown>, path: string): string {
   const keys = path.split('.');
   let current = obj;
 

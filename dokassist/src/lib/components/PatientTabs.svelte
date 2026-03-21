@@ -8,14 +8,14 @@
 
   let { patientId }: Props = $props();
 
-  const tabs = [
+  const tabs = $derived([
     { path: `/patients/${patientId}`, label: 'Overview', icon: ClipboardList },
     { path: `/patients/${patientId}/sessions`, label: 'Sessions', icon: CalendarDays },
     { path: `/patients/${patientId}/files`, label: 'Files', icon: FolderOpen },
     { path: `/patients/${patientId}/diagnoses`, label: 'Diagnoses', icon: Hospital },
     { path: `/patients/${patientId}/medications`, label: 'Medications', icon: Pill },
-    { path: `/patients/${patientId}/reports`, label: 'Reports', icon: FileText }
-  ];
+    { path: `/patients/${patientId}/reports`, label: 'Reports', icon: FileText },
+  ]);
 
   let currentPath = $derived($page.url.pathname);
 </script>

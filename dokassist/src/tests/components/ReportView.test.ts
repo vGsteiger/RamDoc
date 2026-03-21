@@ -3,8 +3,8 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import { invoke } from '@tauri-apps/api/core';
 import ReportView from '../../routes/patients/[id]/reports/[reportId]/+page.svelte';
 
-vi.mock('$app/stores', () => {
-  const { readable } = require('svelte/store');
+vi.mock('$app/stores', async () => {
+  const { readable } = await vi.importActual<typeof import('svelte/store')>('svelte/store');
   return {
     page: readable({
       params: { id: 'patient-1', reportId: 'report-1' },

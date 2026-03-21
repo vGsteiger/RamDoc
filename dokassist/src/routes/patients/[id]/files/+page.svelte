@@ -6,13 +6,14 @@
   import FileCard from '$lib/components/FileCard.svelte';
   import FileViewer from '$lib/components/FileViewer.svelte';
   import { Hourglass, FolderOpen } from 'lucide-svelte';
+  import { t } from '$lib/translations';
 
   let patientId = $derived($page.params.id);
   let files = $state<FileRecord[]>([]);
   let isLoading = $state(true);
   let errorMessage = $state('');
   let viewingFile = $state<FileRecord | null>(null);
-  let deletingFileId = $state<string | null>(null);
+  let _deletingFileId = $state<string | null>(null);
 
   async function loadFiles() {
     try {
@@ -21,7 +22,7 @@
       files = await listFiles(patientId);
     } catch (error) {
       console.error('Failed to load files:', error);
-      errorMessage = 'Failed to load files';
+      errorMessage = $t('files.failedToLoad');
     } finally {
       isLoading = false;
     }
@@ -51,26 +52,26 @@
       URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Failed to download file:', error);
-      errorMessage = `Failed to download ${file.filename}: ${error}`;
+      errorMessage = $t('files.failedToDownload').replace('{filename}', file.filename).replace('{error}', String(error));
       setTimeout(() => errorMessage = '', 5000);
     }
   }
 
   async function handleDelete(file: FileRecord) {
-    if (!confirm(`Are you sure you want to delete ${file.filename}?`)) {
+    if (!confirm($t('files.confirmDelete').replace('{filename}', file.filename))) {
       return;
     }
 
     try {
-      deletingFileId = file.id;
+      _deletingFileId = file.id;
       await deleteFile(file.id);
       files = files.filter(f => f.id !== file.id);
     } catch (error) {
       console.error('Failed to delete file:', error);
-      errorMessage = `Failed to delete ${file.filename}: ${error}`;
+      errorMessage = $t('files.failedToDelete').replace('{filename}', file.filename).replace('{error}', String(error));
       setTimeout(() => errorMessage = '', 5000);
     } finally {
-      deletingFileId = null;
+      _deletingFileId = null;
     }
   }
 
@@ -84,7 +85,7 @@
 </script>
 
 <div class="p-8">
-  <h2 class="text-xl font-bold text-gray-900 dark:text-gray-100 mb-6">Files</h2>
+  <h2 class="text-xl font-bold text-gray-900 dark:text-gray-100 mb-6">{$t('files.title')}</h2>
 
   <div class="mb-8">
     <FileUploader patientId={patientId} onUpload={handleUpload} />
@@ -102,7 +103,7 @@
         <div class="mb-4 flex justify-center text-gray-400">
           <Hourglass size={48} />
         </div>
-        <p class="text-gray-500 dark:text-gray-400">Loading files...</p>
+        <p class="text-gray-500 dark:text-gray-400">{$t('files.loading')}</p>
       </div>
     </div>
   {:else if files.length === 0}
@@ -110,8 +111,8 @@
       <div class="mb-4 flex justify-center text-gray-400">
         <FolderOpen size={48} />
       </div>
-      <p class="text-gray-500 dark:text-gray-400">No files uploaded yet</p>
-      <p class="text-sm text-gray-400 dark:text-gray-500 mt-2">Upload files using the area above</p>
+      <p class="text-gray-500 dark:text-gray-400">{$t('files.noFilesUploaded')}</p>
+      <p class="text-sm text-gray-400 dark:text-gray-500 mt-2">{$t('files.uploadHint')}</p>
     </div>
   {:else}
     <div class="space-y-4">

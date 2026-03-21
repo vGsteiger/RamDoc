@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Patient } from '$lib/api';
+  import { t } from '$lib/translations';
 
   interface Props {
     patient: Patient;
@@ -51,7 +52,7 @@
         {formatDate(patient.date_of_birth)}
       </p>
       <p class="text-xs text-gray-400 dark:text-gray-500">
-        Age: {calculateAge(patient.date_of_birth)}
+        {$t('patients.age')}: {calculateAge(patient.date_of_birth)}
       </p>
     </div>
   </div>
@@ -66,7 +67,7 @@
 
   {#if patient.insurance}
     <div class="mt-2 text-sm text-gray-500 dark:text-gray-400">
-      Insurance: {patient.insurance}
+      {$t('patients.insurance')}: {patient.insurance}
     </div>
   {/if}
 </button>

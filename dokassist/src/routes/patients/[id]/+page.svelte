@@ -10,6 +10,7 @@
     type UpdatePatient,
   } from "$lib/api";
   import PatientForm from "$lib/components/PatientForm.svelte";
+  import { t } from "$lib/translations";
 
   let patient = $state<Patient | null>(null);
   let isLoading = $state(true);
@@ -98,7 +99,7 @@
   <div class="max-w-4xl mx-auto">
     {#if isLoading}
       <div class="flex justify-center items-center py-12">
-        <div class="text-gray-500 dark:text-gray-400">Loading patient details...</div>
+        <div class="text-gray-500 dark:text-gray-400">{$t('patients.loadingDetails')}</div>
       </div>
     {:else if error}
       <div
@@ -127,20 +128,20 @@
                 onclick={() => (isEditing = true)}
                 class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
-                Edit Patient
+                {$t('patients.editPatient')}
               </button>
               <a
                 href={`/patients/${patientId}/email/new`}
                 class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors inline-flex items-center"
               >
-                Send Email
+                {$t('patients.sendEmail')}
               </a>
             </div>
             <button
               onclick={() => (showDeleteConfirm = true)}
               class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
             >
-              Delete Patient
+              {$t('patients.deletePatient')}
             </button>
           </div>
 
@@ -150,13 +151,13 @@
             <div class="grid grid-cols-2 gap-6">
               <div>
                 <span class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
-                  >First Name</span
+                  >{$t('patients.firstName')}</span
                 >
                 <p class="text-gray-900 dark:text-gray-100">{patient.first_name}</p>
               </div>
               <div>
                 <span class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
-                  >Last Name</span
+                  >{$t('patients.lastName')}</span
                 >
                 <p class="text-gray-900 dark:text-gray-100">{patient.last_name}</p>
               </div>
@@ -165,13 +166,13 @@
             <div class="grid grid-cols-2 gap-6">
               <div>
                 <span class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
-                  >AHV Number</span
+                  >{$t('patients.ahvNumber')}</span
                 >
                 <p class="text-gray-900 dark:text-gray-100">{patient.ahv_number}</p>
               </div>
               <div>
                 <span class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
-                  >Date of Birth</span
+                  >{$t('patients.dateOfBirth')}</span
                 >
                 <p class="text-gray-900 dark:text-gray-100">{formatDate(patient.date_of_birth)}</p>
               </div>
@@ -180,7 +181,7 @@
             {#if patient.gender}
               <div>
                 <span class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
-                  >Gender</span
+                  >{$t('patients.gender')}</span
                 >
                 <p class="text-gray-900 dark:text-gray-100 capitalize">{patient.gender}</p>
               </div>
@@ -190,14 +191,14 @@
             {#if patient.phone || patient.email}
               <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
                 <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-                  Contact Information
+                  {$t('patients.contactInfo')}
                 </h3>
                 <div class="grid grid-cols-2 gap-6">
                   {#if patient.phone}
                     <div>
                       <span
                         class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
-                        >Phone</span
+                        >{$t('patients.phone')}</span
                       >
                       <p class="text-gray-900 dark:text-gray-100">{patient.phone}</p>
                     </div>
@@ -206,7 +207,7 @@
                     <div>
                       <span
                         class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
-                        >Email</span
+                        >{$t('patients.email')}</span
                       >
                       <p class="text-gray-900 dark:text-gray-100">{patient.email}</p>
                     </div>
@@ -218,7 +219,7 @@
             {#if patient.address}
               <div>
                 <span class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
-                  >Address</span
+                  >{$t('patients.address')}</span
                 >
                 <p class="text-gray-900 dark:text-gray-100 whitespace-pre-line">
                   {patient.address}
@@ -230,13 +231,13 @@
             {#if patient.insurance || patient.gp_name || patient.gp_address}
               <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
                 <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-                  Medical Information
+                  {$t('patients.medicalInfo')}
                 </h3>
 
                 {#if patient.insurance}
                   <div class="mb-4">
                     <span class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
-                      >Insurance</span
+                      >{$t('patients.insurance')}</span
                     >
                     <p class="text-gray-900 dark:text-gray-100">{patient.insurance}</p>
                   </div>
@@ -248,7 +249,7 @@
                       <div>
                         <span
                           class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
-                          >GP Name</span
+                          >{$t('patients.gpName')}</span
                         >
                         <p class="text-gray-900 dark:text-gray-100">{patient.gp_name}</p>
                       </div>
@@ -257,7 +258,7 @@
                       <div>
                         <span
                           class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
-                          >GP Address</span
+                          >{$t('patients.gpAddress')}</span
                         >
                         <p class="text-gray-900 dark:text-gray-100">{patient.gp_address}</p>
                       </div>
@@ -271,7 +272,7 @@
             {#if patient.notes}
               <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
                 <span class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
-                  >Notes</span
+                  >{$t('patients.notes')}</span
                 >
                 <p class="text-gray-900 dark:text-gray-100 whitespace-pre-line">{patient.notes}</p>
               </div>
@@ -280,8 +281,8 @@
             <!-- Metadata -->
             <div class="border-t border-gray-200 dark:border-gray-700 pt-6 text-sm text-gray-500">
               <div class="grid grid-cols-2 gap-4">
-                <div>Created: {formatDate(patient.created_at)}</div>
-                <div>Last Updated: {formatDate(patient.updated_at)}</div>
+                <div>{$t('patients.created')}: {formatDate(patient.created_at)}</div>
+                <div>{$t('patients.lastUpdated')}: {formatDate(patient.updated_at)}</div>
               </div>
             </div>
           </div>
@@ -303,14 +304,11 @@
             aria-labelledby="delete-dialog-title"
             tabindex="-1"
             onclick={(e) => e.stopPropagation()}
-            onkeydown={(e) => e.stopPropagation()}
+            onkeydown={(e) => e.key === 'Escape' && (showDeleteConfirm = false)}
           >
-            <h2 id="delete-dialog-title" class="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">Delete Patient</h2>
+            <h2 id="delete-dialog-title" class="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">{$t('patients.deletePatient')}</h2>
             <p class="text-gray-600 dark:text-gray-300 mb-6">
-              Are you sure you want to delete {patient.first_name}
-              {patient.last_name}? This action cannot be undone and will also
-              delete all associated sessions, files, diagnoses, medications, and
-              reports.
+              {$t('patients.confirmDeleteText').replace('{name}', `${patient.first_name} ${patient.last_name}`)}
             </p>
             <div class="flex gap-4 justify-end">
               <button
@@ -318,14 +316,14 @@
                 disabled={isDeleting}
                 class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Cancel
+                {$t('common.cancel')}
               </button>
               <button
                 onclick={handleDelete}
                 disabled={isDeleting}
                 class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isDeleting ? "Deleting..." : "Delete Patient"}
+                {isDeleting ? $t('patients.deleting') : $t('patients.deletePatient')}
               </button>
             </div>
           </div>

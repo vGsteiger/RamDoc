@@ -10,6 +10,7 @@
   import ChatMessage from './ChatMessage.svelte';
   import { goto } from '$app/navigation';
   import { AlertTriangle } from 'lucide-svelte';
+  import { t } from '$lib/translations';
 
   interface Props {
     sessionId: string;
@@ -17,7 +18,7 @@
     patientId?: string;
   }
 
-  let { sessionId, scope, patientId }: Props = $props();
+  let { sessionId, scope: _scope, patientId: _patientId }: Props = $props();
 
   let messages = $state<ChatMessageRow[]>([]);
   let streamingContent = $state('');
@@ -144,13 +145,13 @@
     <div class="bg-amber-50 dark:bg-amber-900/30 border-b border-amber-300 dark:border-amber-700 px-4 py-3 flex items-center gap-3">
       <AlertTriangle size={18} class="text-amber-600 dark:text-amber-400" />
       <p class="text-sm text-amber-700 dark:text-amber-300 flex-1">
-        Kein Modell geladen. Bitte laden Sie ein Modell in den Einstellungen.
+        {$t('chat.noModelDesc')}
       </p>
       <button
         onclick={() => goto('/settings')}
         class="text-xs text-amber-600 dark:text-amber-400 underline hover:text-amber-700 dark:hover:text-amber-300"
       >
-        Einstellungen öffnen
+        {$t('chat.openSettings')}
       </button>
     </div>
   {/if}
@@ -200,7 +201,7 @@
         bind:value={inputText}
         onkeydown={handleKeydown}
         disabled={!isModelLoaded || isStreaming}
-        placeholder={isModelLoaded ? 'Nachricht eingeben (Enter zum Senden)…' : 'Modell nicht geladen'}
+        placeholder={isModelLoaded ? $t('chat.typeMessageHint') : $t('settings.modelNotLoaded')}
         rows={2}
         class="flex-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-gray-100
                placeholder-gray-400 dark:placeholder-gray-500 resize-none focus:outline-none focus:border-blue-500
