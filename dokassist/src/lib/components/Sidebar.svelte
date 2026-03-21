@@ -12,7 +12,7 @@
     { path: '/calendar', labelKey: 'nav.calendar', icon: Calendar },
     { path: '/literature', labelKey: 'nav.literature', icon: BookOpen },
     { path: '/chat', labelKey: 'nav.chat', icon: MessageSquare },
-    { path: '/settings', labelKey: 'nav.settings', icon: Settings }
+    { path: '/settings', labelKey: 'nav.settings', icon: Settings },
   ];
 
   async function handleLock() {
@@ -28,7 +28,9 @@
   let currentPath = $derived($page.url.pathname);
 </script>
 
-<aside class="w-64 bg-gray-50 dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col h-screen">
+<aside
+  class="w-64 bg-gray-50 dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col h-screen"
+>
   <div class="p-6 border-b border-gray-200 dark:border-gray-800">
     <h1 class="text-xl font-bold text-gray-900 dark:text-gray-100">RamDoc</h1>
   </div>
@@ -40,7 +42,8 @@
         <li>
           <a
             href={item.path}
-            class="flex items-center gap-3 px-4 py-3 rounded-lg transition-colors {currentPath === item.path
+            class="flex items-center gap-3 px-4 py-3 rounded-lg transition-colors {currentPath ===
+            item.path
               ? 'bg-blue-600 text-white'
               : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800'}"
           >

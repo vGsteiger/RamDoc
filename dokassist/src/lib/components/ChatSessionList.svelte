@@ -10,10 +10,23 @@
     onlistchange?: () => void;
   }
 
-  let { sessions = $bindable(), activeSessionId, onsessionselect, onsessionnew, onlistchange }: Props = $props();
+  let {
+    sessions = $bindable(),
+    activeSessionId,
+    onsessionselect,
+    onsessionnew,
+    onlistchange,
+  }: Props = $props();
 
   let renamingId = $state<string | null>(null);
   let renameValue = $state('');
+  let renameInputEl = $state<HTMLInputElement | null>(null);
+
+  $effect(() => {
+    if (renamingId && renameInputEl) {
+      renameInputEl.focus();
+    }
+  });
 
   function startRename(session: ChatSession) {
     renamingId = session.id;
@@ -79,6 +92,7 @@
             {#if renamingId === session.id}
               <div class="flex gap-1">
                 <input
+                  bind:this={renameInputEl}
                   bind:value={renameValue}
                   onkeydown={(e) => {
                     if (e.key === 'Enter') confirmRename(session.id);
@@ -86,18 +100,17 @@
                   }}
                   class="flex-1 text-sm bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-2 py-0.5
                          text-gray-900 dark:text-gray-100 focus:outline-none focus:border-blue-500"
-                  autofocus
                 />
                 <button
                   onclick={() => confirmRename(session.id)}
                   class="text-xs text-green-400 hover:text-green-300 px-1"
-                  aria-label="Bestätigen"
-                ><Check size={14} /></button>
+                  aria-label="Bestätigen"><Check size={14} /></button
+                >
                 <button
                   onclick={() => (renamingId = null)}
                   class="text-xs text-gray-500 hover:text-gray-400 px-1"
-                  aria-label="Abbrechen"
-                ><X size={14} /></button>
+                  aria-label="Abbrechen"><X size={14} /></button
+                >
               </div>
             {:else}
               <div
@@ -109,19 +122,27 @@
               >
                 <div class="flex-1 min-w-0">
                   <p class="text-sm text-gray-800 dark:text-gray-200 truncate">{session.title}</p>
-                  <p class="text-xs text-gray-400 dark:text-gray-500">{formatDate(session.updated_at)}</p>
+                  <p class="text-xs text-gray-400 dark:text-gray-500">
+                    {formatDate(session.updated_at)}
+                  </p>
                 </div>
                 <div class="hidden group-hover:flex items-center gap-1 shrink-0">
                   <button
-                    onclick={(e) => { e.stopPropagation(); startRename(session); }}
+                    onclick={(e) => {
+                      e.stopPropagation();
+                      startRename(session);
+                    }}
                     class="text-xs text-gray-500 hover:text-gray-300 p-0.5"
-                    title="Umbenennen"
-                  ><Pencil size={14} /></button>
+                    title="Umbenennen"><Pencil size={14} /></button
+                  >
                   <button
-                    onclick={(e) => { e.stopPropagation(); handleDelete(session.id); }}
+                    onclick={(e) => {
+                      e.stopPropagation();
+                      handleDelete(session.id);
+                    }}
                     class="text-xs text-gray-500 hover:text-red-400 p-0.5"
-                    title="Löschen"
-                  ><Trash2 size={14} /></button>
+                    title="Löschen"><Trash2 size={14} /></button
+                  >
                 </div>
               </div>
             {/if}

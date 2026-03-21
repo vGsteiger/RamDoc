@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { page } from "$app/stores";
-  import { goto } from "$app/navigation";
-  import { onMount } from "svelte";
+  import { page } from '$app/stores';
+  import { goto } from '$app/navigation';
+  import { onMount } from 'svelte';
   import {
     getEmail,
     updateEmail,
@@ -10,16 +10,17 @@
     type Email,
     type UpdateEmail,
     type AppError,
-  } from "$lib/api";
-  import ErrorDisplay from "$lib/components/ErrorDisplay.svelte";
+  } from '$lib/api';
+  import ErrorDisplay from '$lib/components/ErrorDisplay.svelte';
+  import { t } from '$lib/translations';
 
   $: patientId = $page.params.id;
   $: emailId = $page.params.emailId;
 
   let email: Email | null = null;
-  let recipientEmail = "";
-  let subject = "";
-  let body = "";
+  let recipientEmail = '';
+  let subject = '';
+  let body = '';
   let error: AppError | null = null;
   let isLoading = true;
   let isSaving = false;
@@ -33,8 +34,7 @@
       recipientEmail = email.recipient_email;
       subject = email.subject;
       body = email.body;
-      // Only allow editing if status is draft
-      isEditing = email.status === "draft";
+      isEditing = email.status === 'draft';
     } catch (e) {
       error = parseError(e);
     } finally {
@@ -45,9 +45,9 @@
   async function handleSaveChanges() {
     if (!recipientEmail.trim() || !subject.trim() || !body.trim()) {
       error = {
-        code: "VALIDATION_ERROR",
-        message: "Please fill in all fields",
-        ref: "VALIDATION",
+        code: 'VALIDATION_ERROR',
+        message: $t('email.validationError'),
+        ref: 'VALIDATION',
       };
       return;
     }
@@ -63,8 +63,6 @@
       };
 
       email = await updateEmail(emailId, input);
-
-      // Navigate back to the email list
       await goto(`/patients/${patientId}/email`);
     } catch (e) {
       error = parseError(e);
@@ -80,7 +78,6 @@
       isSaving = true;
       error = null;
 
-      // Update the email if changes were made
       if (
         recipientEmail !== email.recipient_email ||
         subject !== email.subject ||
@@ -94,14 +91,13 @@
         email = await updateEmail(emailId, input);
       }
 
-      // Mark the email as sent before opening mail client
       await markEmailAsSent(emailId);
 
-      // Open the email in the local mail program using mailto: link
-      const mailtoLink = encodeURI(`mailto:${recipientEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
+      const mailtoLink = encodeURI(
+        `mailto:${recipientEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+      );
       window.location.href = mailtoLink;
 
-      // Navigate back to the email list after opening mail client
       setTimeout(() => {
         goto(`/patients/${patientId}/email`);
       }, 500);
@@ -113,12 +109,12 @@
   }
 
   function formatDate(dateStr: string): string {
-    return new Date(dateStr).toLocaleDateString("de-DE", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
+    return new Date(dateStr).toLocaleDateString('de-DE', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
     });
   }
 
@@ -129,28 +125,28 @@
 
 <div class="p-8 max-w-4xl mx-auto">
   {#if isLoading}
-    <div class="text-gray-500 dark:text-gray-400">Loading email...</div>
+    <div class="text-gray-500 dark:text-gray-400">{$t('email.loadingEmail')}</div>
   {:else if error}
     <ErrorDisplay {error} showDetails={true} />
   {:else if email}
     <div class="mb-6">
       <div class="flex justify-between items-start mb-2">
         <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
-          {email.status === "draft" ? "Edit Email Draft" : "View Email"}
+          {email.status === 'draft' ? $t('email.editDraft') : $t('email.viewEmail')}
         </h2>
         <span
           class="px-3 py-1 text-sm rounded {email.status === 'sent'
             ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
             : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'}"
         >
-          {email.status === "draft" ? "Draft" : "Sent"}
+          {email.status === 'draft' ? $t('email.draft') : $t('email.sentStatus')}
         </span>
       </div>
       <p class="text-gray-500 dark:text-gray-400 text-sm">
-        {#if email.status === "sent" && email.sent_at}
-          Sent: {formatDate(email.sent_at)}
+        {#if email.status === 'sent' && email.sent_at}
+          {$t('email.sent')} {formatDate(email.sent_at)}
         {:else}
-          Created: {formatDate(email.created_at)}
+          {$t('email.created')} {formatDate(email.created_at)}
         {/if}
       </p>
     </div>
@@ -161,10 +157,15 @@
       </div>
     {/if}
 
-    <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700 space-y-4">
+    <div
+      class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700 space-y-4"
+    >
       <div>
-        <label for="recipient" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          To:
+        <label
+          for="recipient"
+          class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+        >
+          {$t('email.to')}
         </label>
         <input
           id="recipient"
@@ -176,8 +177,11 @@
       </div>
 
       <div>
-        <label for="subject" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Subject:
+        <label
+          for="subject"
+          class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+        >
+          {$t('email.subject')}
         </label>
         <input
           id="subject"
@@ -190,7 +194,7 @@
 
       <div>
         <label for="body" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Message:
+          {$t('email.message')}
         </label>
         <textarea
           id="body"
@@ -201,12 +205,14 @@
         ></textarea>
       </div>
 
-      <div class="flex justify-between items-center pt-4 border-t border-gray-200 dark:border-gray-700">
+      <div
+        class="flex justify-between items-center pt-4 border-t border-gray-200 dark:border-gray-700"
+      >
         <a
           href={`/patients/${patientId}/email`}
           class="px-4 py-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
         >
-          Back to Emails
+          {$t('email.backToEmails')}
         </a>
         {#if isEditing}
           <div class="flex space-x-3">
@@ -215,25 +221,27 @@
               disabled={isSaving}
               class="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isSaving ? "Saving..." : "Save Changes"}
+              {isSaving ? $t('email.saving') : $t('email.saveChanges')}
             </button>
             <button
               on:click={handleSendEmail}
               disabled={isSaving}
               class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isSaving ? "Opening..." : "Open in Mail Client"}
+              {isSaving ? $t('email.opening') : $t('email.openMailClient')}
             </button>
           </div>
         {:else}
           <button
             on:click={() => {
-              const mailtoLink = encodeURI(`mailto:${recipientEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
+              const mailtoLink = encodeURI(
+                `mailto:${recipientEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+              );
               window.location.href = mailtoLink;
             }}
             class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
           >
-            Open in Mail Client
+            {$t('email.openMailClient')}
           </button>
         {/if}
       </div>
@@ -241,11 +249,7 @@
 
     {#if isEditing}
       <div class="mt-4 text-sm text-gray-400 dark:text-gray-500">
-        <p>
-          Clicking "Open in Mail Client" will save your changes and open your default
-          email application with the email pre-filled. You can then review and send it
-          from there.
-        </p>
+        <p>{$t('email.mailClientEditHint')}</p>
       </div>
     {/if}
   {/if}

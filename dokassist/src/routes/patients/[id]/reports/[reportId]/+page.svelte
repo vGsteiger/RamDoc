@@ -2,7 +2,17 @@
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
-  import { getReport, updateReport, deleteReport, exportReportToPdf, exportReportToDocx, parseError, type Report, type UpdateReport, type AppError } from '$lib/api';
+  import {
+    getReport,
+    updateReport,
+    deleteReport,
+    exportReportToPdf,
+    exportReportToDocx,
+    parseError,
+    type Report,
+    type UpdateReport,
+    type AppError,
+  } from '$lib/api';
   import EnhancedReportEditor from '$lib/components/EnhancedReportEditor.svelte';
   import ErrorDisplay from '$lib/components/ErrorDisplay.svelte';
 
@@ -60,7 +70,7 @@
       month: '2-digit',
       day: '2-digit',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
     });
   }
 
@@ -115,7 +125,9 @@
       const uint8Array = new Uint8Array(bytes);
 
       // Create a blob from the byte array
-      const blob = new Blob([uint8Array], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+      const blob = new Blob([uint8Array], {
+        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      });
 
       // Create a download link
       const url = URL.createObjectURL(blob);
@@ -219,9 +231,12 @@
           <EnhancedReportEditor bind:content={editableContent} />
         </div>
       {:else}
-        <div class="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
+        <div
+          class="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700"
+        >
           <div class="prose dark:prose-invert max-w-none">
-            <pre class="whitespace-pre-wrap font-sans text-gray-900 dark:text-gray-100">{report.content}</pre>
+            <pre
+              class="whitespace-pre-wrap font-sans text-gray-900 dark:text-gray-100">{report.content}</pre>
           </div>
         </div>
       {/if}

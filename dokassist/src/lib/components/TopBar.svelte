@@ -1,7 +1,15 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { getEngineStatus, loadModel, globalSearch, parseError, type LlmEngineStatus, type SearchResult } from '$lib/api';
+  import {
+    getEngineStatus,
+    loadModel,
+    globalSearch,
+    parseError,
+    type LlmEngineStatus,
+    type SearchResult,
+  } from '$lib/api';
+  import { t } from '$lib/translations';
 
   let searchInput = $state<HTMLInputElement | null>(null);
   let engineStatus = $state<LlmEngineStatus | null>(null);
@@ -88,7 +96,6 @@
   }
 
   function handleBlur() {
-    // Delay close so clicks on results register first
     setTimeout(() => {
       showDropdown = false;
     }, 150);
@@ -127,22 +134,24 @@
     }
   }
 
-  const typeLabel: Record<string, string> = {
-    patient: 'Patient',
-    file: 'File',
-    session: 'Session',
-    diagnosis: 'Diagnosis',
-    medication: 'Medication',
-    report: 'Report',
-  };
+  let typeLabel = $derived<Record<string, string>>({
+    patient: $t('topbar.typePatient'),
+    file: $t('topbar.typeFile'),
+    session: $t('topbar.typeSession'),
+    diagnosis: $t('topbar.typeDiagnosis'),
+    medication: $t('topbar.typeMedication'),
+    report: $t('topbar.typeReport'),
+  });
 </script>
 
-<header class="h-16 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center px-6 gap-4">
+<header
+  class="h-16 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center px-6 gap-4"
+>
   <div class="flex-1 max-w-2xl relative">
     <input
       bind:this={searchInput}
       type="text"
-      placeholder="Search patients, files... (⌘K)"
+      placeholder={$t('topbar.searchPlaceholder')}
       class="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
       value={searchQuery}
       oninput={handleSearch}
@@ -150,11 +159,17 @@
     />
 
     {#if showDropdown && searchQuery.trim()}
-      <div class="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-50 max-h-96 overflow-y-auto">
+      <div
+        class="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-50 max-h-96 overflow-y-auto"
+      >
         {#if isSearching}
-          <div class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">Searching...</div>
+          <div class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+            {$t('topbar.searching')}
+          </div>
         {:else if searchResults.length === 0}
-          <div class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">No results for "{searchQuery}"</div>
+          <div class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+            {$t('topbar.noResults').replace('{query}', searchQuery)}
+          </div>
         {:else}
           {#each searchResults as result (result.entity_id)}
             <button
@@ -165,11 +180,17 @@
                 <span class="text-xs font-medium text-blue-600 dark:text-blue-400 shrink-0">
                   {typeLabel[result.result_type] ?? result.result_type}
                 </span>
-                <span class="text-xs text-gray-400 dark:text-gray-500 shrink-0">{result.patient_name}</span>
+                <span class="text-xs text-gray-400 dark:text-gray-500 shrink-0"
+                  >{result.patient_name}</span
+                >
               </div>
-              <div class="text-sm text-gray-900 dark:text-gray-100 mt-0.5 truncate">{result.title}</div>
+              <div class="text-sm text-gray-900 dark:text-gray-100 mt-0.5 truncate">
+                {result.title}
+              </div>
               {#if result.snippet}
-                <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-1">{@html result.snippet}</div>
+                <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-1">
+                  {result.snippet}
+                </div>
               {/if}
             </button>
           {/each}
@@ -191,12 +212,12 @@
             ? 'bg-amber-400 cursor-pointer hover:bg-amber-300'
             : 'bg-red-500 cursor-pointer hover:bg-red-400'}"
       title={isLoadingModel
-        ? 'Loading model…'
+        ? $t('topbar.loadingModel')
         : isLoaded
-          ? 'Model loaded'
+          ? $t('topbar.modelLoaded')
           : isDownloaded
-            ? 'Model downloaded — click to load into memory'
-            : 'No model downloaded — click to go to Settings'}
+            ? $t('topbar.modelDownloaded')
+            : $t('topbar.noModelDownloaded')}
     ></button>
   </div>
 </header>

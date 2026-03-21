@@ -32,21 +32,29 @@
 
 {#if message.role === 'user'}
   <div class="flex justify-end mb-3">
-    <div class="max-w-[75%] bg-blue-600 text-white rounded-2xl rounded-br-sm px-4 py-2 text-sm whitespace-pre-wrap">
+    <div
+      class="max-w-[75%] bg-blue-600 text-white rounded-2xl rounded-br-sm px-4 py-2 text-sm whitespace-pre-wrap"
+    >
       {message.content}
     </div>
   </div>
-
 {:else if message.role === 'assistant'}
   <div class="flex justify-start mb-3">
     <div class="max-w-[80%] space-y-2">
       {#if thinkContent()}
-        <div class="bg-gray-100 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2">
-          <p class="text-xs text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1">Thinking</p>
-          <pre class="whitespace-pre-wrap font-sans text-xs text-gray-500 dark:text-gray-400 italic">{thinkContent()}</pre>
+        <div
+          class="bg-gray-100 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2"
+        >
+          <p class="text-xs text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1">
+            Thinking
+          </p>
+          <pre
+            class="whitespace-pre-wrap font-sans text-xs text-gray-500 dark:text-gray-400 italic">{thinkContent()}</pre>
         </div>
       {/if}
-      <div class="bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl rounded-bl-sm px-4 py-2 text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap">
+      <div
+        class="bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl rounded-bl-sm px-4 py-2 text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap"
+      >
         {#if mainContent()}
           {mainContent()}
         {:else if isStreaming}
@@ -55,7 +63,6 @@
       </div>
     </div>
   </div>
-
 {:else if message.role === 'tool_call'}
   <div class="flex justify-start mb-2">
     <div class="max-w-[80%]">
@@ -68,13 +75,16 @@
         <span>{toolCallCollapsed ? '▶' : '▼'}</span>
       </button>
       {#if !toolCallCollapsed}
-        <div class="mt-1 bg-gray-100 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2">
-          <pre class="text-xs text-gray-500 dark:text-gray-400 whitespace-pre-wrap overflow-x-auto">{message.tool_args_json ?? message.content}</pre>
+        <div
+          class="mt-1 bg-gray-100 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2"
+        >
+          <pre
+            class="text-xs text-gray-500 dark:text-gray-400 whitespace-pre-wrap overflow-x-auto">{message.tool_args_json ??
+              message.content}</pre>
         </div>
       {/if}
     </div>
   </div>
-
 {:else if message.role === 'tool_result'}
   <div class="flex justify-start mb-3">
     <div class="max-w-[80%]">
@@ -87,8 +97,11 @@
         <span>{toolResultCollapsed ? '▶' : '▼'}</span>
       </button>
       {#if !toolResultCollapsed}
-        <div class="mt-1 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800/50 rounded-lg px-3 py-2">
-          <pre class="text-xs text-gray-500 dark:text-gray-400 whitespace-pre-wrap overflow-x-auto">{message.content}</pre>
+        <div
+          class="mt-1 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800/50 rounded-lg px-3 py-2"
+        >
+          <pre
+            class="text-xs text-gray-500 dark:text-gray-400 whitespace-pre-wrap overflow-x-auto">{message.content}</pre>
         </div>
       {/if}
     </div>

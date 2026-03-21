@@ -12,7 +12,7 @@
     { value: 0, label: '0', title: 'Nicht vorhanden' },
     { value: 1, label: '1', title: 'Leicht' },
     { value: 2, label: '2', title: 'Mittel' },
-    { value: 3, label: '3', title: 'Schwer' }
+    { value: 3, label: '3', title: 'Schwer' },
   ] as const;
 
   function handleScoreClick(score: 0 | 1 | 2 | 3) {

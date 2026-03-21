@@ -90,10 +90,7 @@
         {/if}
       </button>
 
-      <a
-        href="/recover"
-        class="block text-sm text-blue-400 hover:text-blue-300 transition-colors"
-      >
+      <a href="/recover" class="block text-sm text-blue-400 hover:text-blue-300 transition-colors">
         I've lost access — use recovery phrase
       </a>
     </div>
@@ -102,7 +99,10 @@
     <div class="border-t border-gray-800 pt-6">
       {#if !resetConfirm}
         <button
-          onclick={() => { resetConfirm = true; error = null; }}
+          onclick={() => {
+            resetConfirm = true;
+            error = null;
+          }}
           class="text-xs text-gray-600 hover:text-red-500 transition-colors"
         >
           Factory Reset…
@@ -112,8 +112,8 @@
           <p class="text-red-400 text-sm font-semibold">⚠ Destructive — this cannot be undone</p>
           <p class="text-gray-400 text-xs leading-relaxed">
             All patient data, the encrypted vault, database, and stored keys will be
-            <strong class="text-gray-200">permanently deleted</strong>.
-            The app will restart from the initial setup screen.
+            <strong class="text-gray-200">permanently deleted</strong>. The app will restart from
+            the initial setup screen.
           </p>
           <div class="flex gap-2 pt-1">
             <button
@@ -124,7 +124,7 @@
               {isResetting ? 'Wiping…' : 'Yes, wipe everything'}
             </button>
             <button
-              onclick={() => resetConfirm = false}
+              onclick={() => (resetConfirm = false)}
               disabled={isResetting}
               class="flex-1 px-3 py-2 bg-gray-700 hover:bg-gray-600 disabled:cursor-not-allowed text-gray-300 text-xs font-medium rounded transition-colors"
             >

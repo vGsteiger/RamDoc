@@ -1,15 +1,16 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  import { page } from "$app/stores";
-  import { goto } from "$app/navigation";
+  import { onMount } from 'svelte';
+  import { page } from '$app/stores';
+  import { goto } from '$app/navigation';
   import {
     getPatient,
     updatePatient,
     deletePatient,
     type Patient,
     type UpdatePatient,
-  } from "$lib/api";
-  import PatientForm from "$lib/components/PatientForm.svelte";
+  } from '$lib/api';
+  import PatientForm from '$lib/components/PatientForm.svelte';
+  import { t } from '$lib/translations';
 
   let patient = $state<Patient | null>(null);
   let isLoading = $state(true);
@@ -17,7 +18,7 @@
   let isSubmitting = $state(false);
   let isDeleting = $state(false);
   let showDeleteConfirm = $state(false);
-  let error = $state("");
+  let error = $state('');
 
   let patientId = $derived($page.params.id);
 
@@ -27,34 +28,32 @@
 
   async function loadPatient() {
     if (!patientId) {
-      error = "No patient ID provided";
+      error = 'No patient ID provided';
       isLoading = false;
       return;
     }
 
     try {
       isLoading = true;
-      error = "";
+      error = '';
       patient = await getPatient(patientId);
     } catch (e) {
-      error = e instanceof Error ? e.message : "Failed to load patient";
-      console.error("Error loading patient:", e);
+      error = e instanceof Error ? e.message : 'Failed to load patient';
+      console.error('Error loading patient:', e);
     } finally {
       isLoading = false;
     }
   }
 
-  async function handleUpdate(
-    event: CustomEvent<{ id: string; data: UpdatePatient }>,
-  ) {
+  async function handleUpdate(event: CustomEvent<{ id: string; data: UpdatePatient }>) {
     try {
       isSubmitting = true;
-      error = "";
+      error = '';
       patient = await updatePatient(event.detail.id, event.detail.data);
       isEditing = false;
     } catch (e) {
-      error = e instanceof Error ? e.message : "Failed to update patient";
-      console.error("Error updating patient:", e);
+      error = e instanceof Error ? e.message : 'Failed to update patient';
+      console.error('Error updating patient:', e);
     } finally {
       isSubmitting = false;
     }
@@ -65,12 +64,12 @@
 
     try {
       isDeleting = true;
-      error = "";
+      error = '';
       await deletePatient(patientId);
-      goto("/patients");
+      goto('/patients');
     } catch (e) {
-      error = e instanceof Error ? e.message : "Failed to delete patient";
-      console.error("Error deleting patient:", e);
+      error = e instanceof Error ? e.message : 'Failed to delete patient';
+      console.error('Error deleting patient:', e);
       isDeleting = false;
       showDeleteConfirm = false;
     }
@@ -83,10 +82,10 @@
   function formatDate(dateStr: string): string {
     try {
       const date = new Date(dateStr);
-      return date.toLocaleDateString("de-CH", {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
+      return date.toLocaleDateString('de-CH', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
       });
     } catch {
       return dateStr;
@@ -98,7 +97,7 @@
   <div class="max-w-4xl mx-auto">
     {#if isLoading}
       <div class="flex justify-center items-center py-12">
-        <div class="text-gray-500 dark:text-gray-400">Loading patient details...</div>
+        <div class="text-gray-500 dark:text-gray-400">{$t('patients.loadingDetails')}</div>
       </div>
     {:else if error}
       <div
@@ -127,20 +126,20 @@
                 onclick={() => (isEditing = true)}
                 class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
-                Edit Patient
+                {$t('patients.editPatient')}
               </button>
               <a
                 href={`/patients/${patientId}/email/new`}
                 class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors inline-flex items-center"
               >
-                Send Email
+                {$t('patients.sendEmail')}
               </a>
             </div>
             <button
               onclick={() => (showDeleteConfirm = true)}
               class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
             >
-              Delete Patient
+              {$t('patients.deletePatient')}
             </button>
           </div>
 
@@ -149,14 +148,14 @@
             <!-- Basic Info -->
             <div class="grid grid-cols-2 gap-6">
               <div>
-                <label class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
-                  >First Name</label
+                <span class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
+                  >{$t('patients.firstName')}</span
                 >
                 <p class="text-gray-900 dark:text-gray-100">{patient.first_name}</p>
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
-                  >Last Name</label
+                <span class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
+                  >{$t('patients.lastName')}</span
                 >
                 <p class="text-gray-900 dark:text-gray-100">{patient.last_name}</p>
               </div>
@@ -164,14 +163,14 @@
 
             <div class="grid grid-cols-2 gap-6">
               <div>
-                <label class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
-                  >AHV Number</label
+                <span class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
+                  >{$t('patients.ahvNumber')}</span
                 >
                 <p class="text-gray-900 dark:text-gray-100">{patient.ahv_number}</p>
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
-                  >Date of Birth</label
+                <span class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
+                  >{$t('patients.dateOfBirth')}</span
                 >
                 <p class="text-gray-900 dark:text-gray-100">{formatDate(patient.date_of_birth)}</p>
               </div>
@@ -179,8 +178,8 @@
 
             {#if patient.gender}
               <div>
-                <label class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
-                  >Gender</label
+                <span class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
+                  >{$t('patients.gender')}</span
                 >
                 <p class="text-gray-900 dark:text-gray-100 capitalize">{patient.gender}</p>
               </div>
@@ -190,23 +189,21 @@
             {#if patient.phone || patient.email}
               <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
                 <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-                  Contact Information
+                  {$t('patients.contactInfo')}
                 </h3>
                 <div class="grid grid-cols-2 gap-6">
                   {#if patient.phone}
                     <div>
-                      <label
-                        class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
-                        >Phone</label
+                      <span class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
+                        >{$t('patients.phone')}</span
                       >
                       <p class="text-gray-900 dark:text-gray-100">{patient.phone}</p>
                     </div>
                   {/if}
                   {#if patient.email}
                     <div>
-                      <label
-                        class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
-                        >Email</label
+                      <span class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
+                        >{$t('patients.email')}</span
                       >
                       <p class="text-gray-900 dark:text-gray-100">{patient.email}</p>
                     </div>
@@ -217,8 +214,8 @@
 
             {#if patient.address}
               <div>
-                <label class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
-                  >Address</label
+                <span class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
+                  >{$t('patients.address')}</span
                 >
                 <p class="text-gray-900 dark:text-gray-100 whitespace-pre-line">
                   {patient.address}
@@ -230,13 +227,13 @@
             {#if patient.insurance || patient.gp_name || patient.gp_address}
               <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
                 <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-                  Medical Information
+                  {$t('patients.medicalInfo')}
                 </h3>
 
                 {#if patient.insurance}
                   <div class="mb-4">
-                    <label class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
-                      >Insurance</label
+                    <span class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
+                      >{$t('patients.insurance')}</span
                     >
                     <p class="text-gray-900 dark:text-gray-100">{patient.insurance}</p>
                   </div>
@@ -246,18 +243,18 @@
                   <div class="grid grid-cols-2 gap-6">
                     {#if patient.gp_name}
                       <div>
-                        <label
+                        <span
                           class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
-                          >GP Name</label
+                          >{$t('patients.gpName')}</span
                         >
                         <p class="text-gray-900 dark:text-gray-100">{patient.gp_name}</p>
                       </div>
                     {/if}
                     {#if patient.gp_address}
                       <div>
-                        <label
+                        <span
                           class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
-                          >GP Address</label
+                          >{$t('patients.gpAddress')}</span
                         >
                         <p class="text-gray-900 dark:text-gray-100">{patient.gp_address}</p>
                       </div>
@@ -270,8 +267,8 @@
             <!-- Notes -->
             {#if patient.notes}
               <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
-                <label class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
-                  >Notes</label
+                <span class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
+                  >{$t('patients.notes')}</span
                 >
                 <p class="text-gray-900 dark:text-gray-100 whitespace-pre-line">{patient.notes}</p>
               </div>
@@ -280,8 +277,8 @@
             <!-- Metadata -->
             <div class="border-t border-gray-200 dark:border-gray-700 pt-6 text-sm text-gray-500">
               <div class="grid grid-cols-2 gap-4">
-                <div>Created: {formatDate(patient.created_at)}</div>
-                <div>Last Updated: {formatDate(patient.updated_at)}</div>
+                <div>{$t('patients.created')}: {formatDate(patient.created_at)}</div>
+                <div>{$t('patients.lastUpdated')}: {formatDate(patient.updated_at)}</div>
               </div>
             </div>
           </div>
@@ -292,18 +289,30 @@
       {#if showDeleteConfirm}
         <div
           class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          role="presentation"
           onclick={() => (showDeleteConfirm = false)}
+          onkeydown={(e) => e.key === 'Escape' && (showDeleteConfirm = false)}
         >
           <div
             class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-dialog-title"
+            tabindex="-1"
             onclick={(e) => e.stopPropagation()}
+            onkeydown={(e) => e.key === 'Escape' && (showDeleteConfirm = false)}
           >
-            <h2 class="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">Delete Patient</h2>
+            <h2
+              id="delete-dialog-title"
+              class="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4"
+            >
+              {$t('patients.deletePatient')}
+            </h2>
             <p class="text-gray-600 dark:text-gray-300 mb-6">
-              Are you sure you want to delete {patient.first_name}
-              {patient.last_name}? This action cannot be undone and will also
-              delete all associated sessions, files, diagnoses, medications, and
-              reports.
+              {$t('patients.confirmDeleteText').replace(
+                '{name}',
+                `${patient.first_name} ${patient.last_name}`
+              )}
             </p>
             <div class="flex gap-4 justify-end">
               <button
@@ -311,14 +320,14 @@
                 disabled={isDeleting}
                 class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Cancel
+                {$t('common.cancel')}
               </button>
               <button
                 onclick={handleDelete}
                 disabled={isDeleting}
                 class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isDeleting ? "Deleting..." : "Delete Patient"}
+                {isDeleting ? $t('patients.deleting') : $t('patients.deletePatient')}
               </button>
             </div>
           </div>

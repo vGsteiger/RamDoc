@@ -51,8 +51,8 @@ const EMBED_NOT_LOADED = {
 // getVersion() is called via @tauri-apps/api/app (not invoke) and is mocked above.
 function setupNotLoaded() {
   mockInvoke
-    .mockResolvedValueOnce(NOT_LOADED)        // get_engine_status
-    .mockResolvedValueOnce(RECOMMENDED)       // get_recommended_model
+    .mockResolvedValueOnce(NOT_LOADED) // get_engine_status
+    .mockResolvedValueOnce(RECOMMENDED) // get_recommended_model
     .mockResolvedValueOnce(EMBED_NOT_LOADED); // get_embed_status
 }
 
@@ -95,7 +95,9 @@ describe('Settings — model not loaded', () => {
     render(Settings);
     await waitFor(() => {
       expect(screen.getByText('Phi-4 Mini Q4_K_M')).toBeInTheDocument();
-      expect(screen.getByText('Unter 16 GB RAM: Phi-4 Mini für minimale Ressourcen')).toBeInTheDocument();
+      expect(
+        screen.getByText('Unter 16 GB RAM: Phi-4 Mini für minimale Ressourcen')
+      ).toBeInTheDocument();
     });
   });
 
@@ -123,7 +125,10 @@ describe('Settings — model not loaded', () => {
 
 describe('Settings — model already loaded', () => {
   it('shows the loaded model name', async () => {
-    mockInvoke.mockResolvedValueOnce(LOADED).mockResolvedValueOnce(RECOMMENDED).mockResolvedValueOnce(EMBED_NOT_LOADED);
+    mockInvoke
+      .mockResolvedValueOnce(LOADED)
+      .mockResolvedValueOnce(RECOMMENDED)
+      .mockResolvedValueOnce(EMBED_NOT_LOADED);
     render(Settings);
     await waitFor(() => {
       expect(screen.getByText('Phi-4 Mini Q4_K_M')).toBeInTheDocument();
@@ -131,7 +136,10 @@ describe('Settings — model already loaded', () => {
   });
 
   it('shows "Loaded" in the status line', async () => {
-    mockInvoke.mockResolvedValueOnce(LOADED).mockResolvedValueOnce(RECOMMENDED).mockResolvedValueOnce(EMBED_NOT_LOADED);
+    mockInvoke
+      .mockResolvedValueOnce(LOADED)
+      .mockResolvedValueOnce(RECOMMENDED)
+      .mockResolvedValueOnce(EMBED_NOT_LOADED);
     render(Settings);
     await waitFor(() => {
       expect(screen.getByText(/Loaded/)).toBeInTheDocument();
@@ -139,7 +147,10 @@ describe('Settings — model already loaded', () => {
   });
 
   it('hides the download/load buttons', async () => {
-    mockInvoke.mockResolvedValueOnce(LOADED).mockResolvedValueOnce(RECOMMENDED).mockResolvedValueOnce(EMBED_NOT_LOADED);
+    mockInvoke
+      .mockResolvedValueOnce(LOADED)
+      .mockResolvedValueOnce(RECOMMENDED)
+      .mockResolvedValueOnce(EMBED_NOT_LOADED);
     render(Settings);
     await waitFor(() => screen.getByText(/Loaded/));
     expect(screen.queryByRole('button', { name: /download & load/i })).not.toBeInTheDocument();
@@ -147,7 +158,10 @@ describe('Settings — model already loaded', () => {
   });
 
   it('shows the "Model ready" success message', async () => {
-    mockInvoke.mockResolvedValueOnce(LOADED).mockResolvedValueOnce(RECOMMENDED).mockResolvedValueOnce(EMBED_NOT_LOADED);
+    mockInvoke
+      .mockResolvedValueOnce(LOADED)
+      .mockResolvedValueOnce(RECOMMENDED)
+      .mockResolvedValueOnce(EMBED_NOT_LOADED);
     render(Settings);
     await waitFor(() => {
       expect(screen.getByText(/Model ready/i)).toBeInTheDocument();
@@ -162,11 +176,11 @@ describe('Settings — model already loaded', () => {
 describe('Settings — "Load existing" button', () => {
   it('calls load_model with the recommended filename', async () => {
     mockInvoke
-      .mockResolvedValueOnce(NOT_LOADED)        // onMount: getEngineStatus
-      .mockResolvedValueOnce(RECOMMENDED)       // onMount: getRecommendedModel
-      .mockResolvedValueOnce(EMBED_NOT_LOADED)  // onMount: getEmbedStatus
-      .mockResolvedValueOnce(undefined)         // load_model
-      .mockResolvedValueOnce(LOADED);           // getEngineStatus after load
+      .mockResolvedValueOnce(NOT_LOADED) // onMount: getEngineStatus
+      .mockResolvedValueOnce(RECOMMENDED) // onMount: getRecommendedModel
+      .mockResolvedValueOnce(EMBED_NOT_LOADED) // onMount: getEmbedStatus
+      .mockResolvedValueOnce(undefined) // load_model
+      .mockResolvedValueOnce(LOADED); // getEngineStatus after load
 
     render(Settings);
     await waitFor(() => screen.getByRole('button', { name: /load existing/i }));
@@ -234,7 +248,11 @@ describe('Settings — "Load existing" button', () => {
       .mockResolvedValueOnce(NOT_LOADED)
       .mockResolvedValueOnce(RECOMMENDED)
       .mockResolvedValueOnce(EMBED_NOT_LOADED)
-      .mockReturnValueOnce(new Promise((res) => { resolveLoad = () => res(undefined); }));
+      .mockReturnValueOnce(
+        new Promise((res) => {
+          resolveLoad = () => res(undefined);
+        })
+      );
 
     render(Settings);
     await waitFor(() => screen.getByRole('button', { name: /load existing/i }));
@@ -259,9 +277,9 @@ describe('Settings — "Download & Load" button', () => {
       .mockResolvedValueOnce(NOT_LOADED)
       .mockResolvedValueOnce(RECOMMENDED)
       .mockResolvedValueOnce(EMBED_NOT_LOADED) // get_embed_status
-      .mockResolvedValueOnce(undefined)        // download_model
-      .mockResolvedValueOnce(undefined)        // load_model
-      .mockResolvedValueOnce(LOADED);          // getEngineStatus after load
+      .mockResolvedValueOnce(undefined) // download_model
+      .mockResolvedValueOnce(undefined) // load_model
+      .mockResolvedValueOnce(LOADED); // getEngineStatus after load
 
     render(Settings);
     await waitFor(() => screen.getByRole('button', { name: /download & load/i }));
@@ -316,7 +334,11 @@ describe('Settings — "Download & Load" button', () => {
       .mockResolvedValueOnce(NOT_LOADED)
       .mockResolvedValueOnce(RECOMMENDED)
       .mockResolvedValueOnce(EMBED_NOT_LOADED)
-      .mockReturnValueOnce(new Promise((res) => { resolveDownload = () => res(undefined); }));
+      .mockReturnValueOnce(
+        new Promise((res) => {
+          resolveDownload = () => res(undefined);
+        })
+      );
 
     render(Settings);
     await waitFor(() => screen.getByRole('button', { name: /download & load/i }));
