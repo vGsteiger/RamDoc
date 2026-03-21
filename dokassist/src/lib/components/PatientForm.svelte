@@ -28,7 +28,7 @@
     insurance: patient?.insurance || '',
     gp_name: patient?.gp_name || '',
     gp_address: patient?.gp_address || '',
-    notes: patient?.notes || ''
+    notes: patient?.notes || '',
   });
 
   $effect(() => {
@@ -46,7 +46,7 @@
           insurance: patient!.insurance || '',
           gp_name: patient!.gp_name || '',
           gp_address: patient!.gp_address || '',
-          notes: patient!.notes || ''
+          notes: patient!.notes || '',
         };
       });
     }
@@ -118,7 +118,7 @@
         insurance: formData.insurance || null,
         gp_name: formData.gp_name || null,
         gp_address: formData.gp_address || null,
-        notes: formData.notes || null
+        notes: formData.notes || null,
       };
 
       dispatch('submit', createData);
@@ -130,7 +130,13 @@
   }
 </script>
 
-<form onsubmit={(e) => { e.preventDefault(); handleSubmit(); }} class="space-y-6">
+<form
+  onsubmit={(e) => {
+    e.preventDefault();
+    handleSubmit();
+  }}
+  class="space-y-6"
+>
   <!-- AHV Number -->
   <div>
     <label for="ahv_number" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -142,7 +148,10 @@
   <!-- Name Fields -->
   <div class="grid grid-cols-2 gap-4">
     <div>
-      <label for="first_name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+      <label
+        for="first_name"
+        class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+      >
         {$t('patients.firstName')} <span class="text-red-400">*</span>
       </label>
       <input
@@ -159,7 +168,10 @@
     </div>
 
     <div>
-      <label for="last_name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+      <label
+        for="last_name"
+        class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+      >
         {$t('patients.lastName')} <span class="text-red-400">*</span>
       </label>
       <input
@@ -179,7 +191,10 @@
   <!-- Date of Birth and Gender -->
   <div class="grid grid-cols-2 gap-4">
     <div>
-      <label for="date_of_birth" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+      <label
+        for="date_of_birth"
+        class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+      >
         {$t('patients.dateOfBirth')} <span class="text-red-400">*</span>
       </label>
       <input
@@ -196,7 +211,9 @@
     </div>
 
     <div>
-      <label for="gender" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{$t('patients.gender')}</label>
+      <label for="gender" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+        >{$t('patients.gender')}</label
+      >
       <select
         id="gender"
         bind:value={formData.gender}
@@ -213,7 +230,9 @@
   <!-- Contact Information -->
   <div class="grid grid-cols-2 gap-4">
     <div>
-      <label for="phone" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{$t('patients.phone')}</label>
+      <label for="phone" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+        >{$t('patients.phone')}</label
+      >
       <input
         type="tel"
         id="phone"
@@ -223,7 +242,9 @@
     </div>
 
     <div>
-      <label for="email" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{$t('patients.email')}</label>
+      <label for="email" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+        >{$t('patients.email')}</label
+      >
       <input
         type="email"
         id="email"
@@ -235,7 +256,9 @@
 
   <!-- Address -->
   <div>
-    <label for="address" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{$t('patients.address')}</label>
+    <label for="address" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+      >{$t('patients.address')}</label
+    >
     <textarea
       id="address"
       bind:value={formData.address}
@@ -246,7 +269,9 @@
 
   <!-- Insurance -->
   <div>
-    <label for="insurance" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{$t('patients.insurance')}</label>
+    <label for="insurance" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+      >{$t('patients.insurance')}</label
+    >
     <input
       type="text"
       id="insurance"
@@ -258,7 +283,9 @@
   <!-- GP Information -->
   <div class="grid grid-cols-2 gap-4">
     <div>
-      <label for="gp_name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{$t('patients.gpName')}</label>
+      <label for="gp_name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+        >{$t('patients.gpName')}</label
+      >
       <input
         type="text"
         id="gp_name"
@@ -268,7 +295,10 @@
     </div>
 
     <div>
-      <label for="gp_address" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+      <label
+        for="gp_address"
+        class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+      >
         {$t('patients.gpAddress')}
       </label>
       <input
@@ -282,7 +312,9 @@
 
   <!-- Notes -->
   <div>
-    <label for="notes" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{$t('patients.notes')}</label>
+    <label for="notes" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+      >{$t('patients.notes')}</label
+    >
     <textarea
       id="notes"
       bind:value={formData.notes}
@@ -306,7 +338,11 @@
       disabled={isSubmitting}
       class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
     >
-      {isSubmitting ? $t('patients.saving') : patient ? $t('patients.updatePatient') : $t('patients.createPatient')}
+      {isSubmitting
+        ? $t('patients.saving')
+        : patient
+          ? $t('patients.updatePatient')
+          : $t('patients.createPatient')}
     </button>
   </div>
 </form>

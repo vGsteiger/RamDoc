@@ -1,5 +1,5 @@
-import { invoke } from "@tauri-apps/api/core";
-import type { AuthStatus } from "./stores/auth";
+import { invoke } from '@tauri-apps/api/core';
+import type { AuthStatus } from './stores/auth';
 
 // ---------------------------------------------------------------------------
 // Error handling
@@ -18,23 +18,18 @@ export interface AppError {
  * into an `UNKNOWN_ERROR`.
  */
 export function parseError(err: unknown): AppError {
-  if (
-    err !== null &&
-    typeof err === "object" &&
-    "code" in err &&
-    "message" in err
-  ) {
-    const ref = "ref" in err ? String(err.ref) : "UNKNOWN_REF";
+  if (err !== null && typeof err === 'object' && 'code' in err && 'message' in err) {
+    const ref = 'ref' in err ? String(err.ref) : 'UNKNOWN_REF';
     return {
       code: String(err.code),
       message: String(err.message),
-      ref
+      ref,
     };
   }
   return {
-    code: "UNKNOWN_ERROR",
+    code: 'UNKNOWN_ERROR',
     message: String(err),
-    ref: "UNKNOWN_REF"
+    ref: 'UNKNOWN_REF',
   };
 }
 
@@ -52,49 +47,49 @@ export function formatError(err: AppError): string {
  */
 export function getUserFriendlyMessage(err: AppError): string {
   switch (err.code) {
-    case "REPORT_NOT_FOUND":
-      return "The requested report could not be found. It may have been deleted.";
-    case "PATIENT_NOT_FOUND":
-      return "The requested patient could not be found. They may have been deleted.";
-    case "SESSION_NOT_FOUND":
-      return "The requested session could not be found. It may have been deleted.";
-    case "FILE_NOT_FOUND":
-      return "The requested file could not be found. It may have been deleted.";
-    case "REPORT_VALIDATION_ERROR":
-      return "The report data is invalid. Please check your input and try again.";
-    case "PATIENT_VALIDATION_ERROR":
-      return "The patient data is invalid. Please check your input and try again.";
-    case "DB_UNIQUE_CONSTRAINT":
-      return "This record already exists in the database.";
-    case "DB_FOREIGN_KEY":
+    case 'REPORT_NOT_FOUND':
+      return 'The requested report could not be found. It may have been deleted.';
+    case 'PATIENT_NOT_FOUND':
+      return 'The requested patient could not be found. They may have been deleted.';
+    case 'SESSION_NOT_FOUND':
+      return 'The requested session could not be found. It may have been deleted.';
+    case 'FILE_NOT_FOUND':
+      return 'The requested file could not be found. It may have been deleted.';
+    case 'REPORT_VALIDATION_ERROR':
+      return 'The report data is invalid. Please check your input and try again.';
+    case 'PATIENT_VALIDATION_ERROR':
+      return 'The patient data is invalid. Please check your input and try again.';
+    case 'DB_UNIQUE_CONSTRAINT':
+      return 'This record already exists in the database.';
+    case 'DB_FOREIGN_KEY':
       return "Cannot complete this operation because it references data that doesn't exist.";
-    case "AUTH_REQUIRED":
-      return "Please unlock the application to continue.";
-    case "LLM_ERROR":
-      return "An error occurred while generating content with the language model.";
+    case 'AUTH_REQUIRED':
+      return 'Please unlock the application to continue.';
+    case 'LLM_ERROR':
+      return 'An error occurred while generating content with the language model.';
     default:
       return err.message;
   }
 }
 
 export async function checkAuth(): Promise<AuthStatus> {
-  return await invoke<AuthStatus>("check_auth");
+  return await invoke<AuthStatus>('check_auth');
 }
 
 export async function initializeApp(): Promise<string[]> {
-  return await invoke<string[]>("initialize_app");
+  return await invoke<string[]>('initialize_app');
 }
 
 export async function unlockApp(): Promise<boolean> {
-  return await invoke<boolean>("unlock_app");
+  return await invoke<boolean>('unlock_app');
 }
 
 export async function recoverApp(words: string[]): Promise<boolean> {
-  return await invoke<boolean>("recover_app", { words });
+  return await invoke<boolean>('recover_app', { words });
 }
 
 export async function lockApp(): Promise<void> {
-  return await invoke<void>("lock_app");
+  return await invoke<void>('lock_app');
 }
 
 /**
@@ -103,7 +98,7 @@ export async function lockApp(): Promise<void> {
  * `first_run` state.  **Irreversible.**
  */
 export async function resetApp(): Promise<void> {
-  return await invoke<void>("reset_app");
+  return await invoke<void>('reset_app');
 }
 
 export interface LlmEngineStatus {
@@ -121,11 +116,11 @@ export interface EmbedStatus {
 }
 
 export async function getEmbedStatus(): Promise<EmbedStatus> {
-  return await invoke<EmbedStatus>("get_embed_status");
+  return await invoke<EmbedStatus>('get_embed_status');
 }
 
 export async function initializeEmbedEngine(): Promise<void> {
-  return await invoke<void>("initialize_embed_engine");
+  return await invoke<void>('initialize_embed_engine');
 }
 
 export interface ModelChoice {
@@ -136,19 +131,19 @@ export interface ModelChoice {
 }
 
 export async function getEngineStatus(): Promise<LlmEngineStatus> {
-  return await invoke<LlmEngineStatus>("get_engine_status");
+  return await invoke<LlmEngineStatus>('get_engine_status');
 }
 
 export async function getRecommendedModel(): Promise<ModelChoice> {
-  return await invoke<ModelChoice>("get_recommended_model");
+  return await invoke<ModelChoice>('get_recommended_model');
 }
 
 export async function downloadModel(model: ModelChoice): Promise<void> {
-  return await invoke<void>("download_model", { model });
+  return await invoke<void>('download_model', { model });
 }
 
 export async function loadModel(modelFilename: string): Promise<void> {
-  return await invoke<void>("load_model", { modelFilename });
+  return await invoke<void>('load_model', { modelFilename });
 }
 
 export interface FileRecord {
@@ -165,9 +160,9 @@ export async function uploadFile(
   patientId: string,
   filename: string,
   data: number[],
-  mimeType: string,
+  mimeType: string
 ): Promise<FileRecord> {
-  return await invoke<FileRecord>("upload_file", {
+  return await invoke<FileRecord>('upload_file', {
     patientId,
     filename,
     data,
@@ -176,15 +171,15 @@ export async function uploadFile(
 }
 
 export async function downloadFile(fileId: string): Promise<number[]> {
-  return await invoke<number[]>("download_file", { fileId });
+  return await invoke<number[]>('download_file', { fileId });
 }
 
 export async function listFiles(patientId: string): Promise<FileRecord[]> {
-  return await invoke<FileRecord[]>("list_files", { patientId });
+  return await invoke<FileRecord[]>('list_files', { patientId });
 }
 
 export async function deleteFile(fileId: string): Promise<void> {
-  return await invoke<void>("delete_file", { fileId });
+  return await invoke<void>('delete_file', { fileId });
 }
 
 /**
@@ -193,7 +188,7 @@ export async function deleteFile(fileId: string): Promise<void> {
  * event when done.  Fire-and-forget: the upload UI should not await this.
  */
 export async function processFile(fileId: string): Promise<void> {
-  return await invoke<void>("process_file", { fileId });
+  return await invoke<void>('process_file', { fileId });
 }
 
 export interface Patient {
@@ -258,38 +253,29 @@ export interface SearchResult {
 // === Patient API ===
 
 export async function createPatient(input: CreatePatient): Promise<Patient> {
-  return await invoke<Patient>("create_patient", { input });
+  return await invoke<Patient>('create_patient', { input });
 }
 
 export async function getPatient(id: string): Promise<Patient> {
-  return await invoke<Patient>("get_patient", { id });
+  return await invoke<Patient>('get_patient', { id });
 }
 
-export async function listPatients(
-  limit?: number,
-  offset?: number,
-): Promise<Patient[]> {
-  return await invoke<Patient[]>("list_patients", { limit, offset });
+export async function listPatients(limit?: number, offset?: number): Promise<Patient[]> {
+  return await invoke<Patient[]>('list_patients', { limit, offset });
 }
 
-export async function updatePatient(
-  id: string,
-  input: UpdatePatient,
-): Promise<Patient> {
-  return await invoke<Patient>("update_patient", { id, input });
+export async function updatePatient(id: string, input: UpdatePatient): Promise<Patient> {
+  return await invoke<Patient>('update_patient', { id, input });
 }
 
 export async function deletePatient(id: string): Promise<void> {
-  return await invoke<void>("delete_patient", { id });
+  return await invoke<void>('delete_patient', { id });
 }
 
 // === Search API ===
 
-export async function globalSearch(
-  query: string,
-  limit?: number,
-): Promise<SearchResult[]> {
-  return await invoke<SearchResult[]>("global_search", { query, limit });
+export async function globalSearch(query: string, limit?: number): Promise<SearchResult[]> {
+  return await invoke<SearchResult[]>('global_search', { query, limit });
 }
 
 // === Session Types ===
@@ -324,11 +310,11 @@ export interface UpdateSession {
 }
 
 export async function createSession(input: CreateSession): Promise<Session> {
-  return await invoke<Session>("create_session", { input });
+  return await invoke<Session>('create_session', { input });
 }
 
 export async function getSession(id: string): Promise<Session> {
-  return await invoke<Session>("get_session", { id });
+  return await invoke<Session>('get_session', { id });
 }
 
 export interface SessionWithPatient {
@@ -338,9 +324,9 @@ export interface SessionWithPatient {
 
 export async function listAllSessions(
   limit?: number,
-  offset?: number,
+  offset?: number
 ): Promise<SessionWithPatient[]> {
-  return await invoke<SessionWithPatient[]>("list_all_sessions", {
+  return await invoke<SessionWithPatient[]>('list_all_sessions', {
     limit,
     offset,
   });
@@ -349,24 +335,21 @@ export async function listAllSessions(
 export async function listSessionsForPatient(
   patientId: string,
   limit?: number,
-  offset?: number,
+  offset?: number
 ): Promise<Session[]> {
-  return await invoke<Session[]>("list_sessions_for_patient", {
+  return await invoke<Session[]>('list_sessions_for_patient', {
     patientId,
     limit,
     offset,
   });
 }
 
-export async function updateSession(
-  id: string,
-  input: UpdateSession,
-): Promise<Session> {
-  return await invoke<Session>("update_session", { id, input });
+export async function updateSession(id: string, input: UpdateSession): Promise<Session> {
+  return await invoke<Session>('update_session', { id, input });
 }
 
 export async function deleteSession(id: string): Promise<void> {
-  return await invoke<void>("delete_session", { id });
+  return await invoke<void>('delete_session', { id });
 }
 
 // === Diagnosis Types ===
@@ -403,37 +386,32 @@ export interface UpdateDiagnosis {
   notes?: string;
 }
 
-export async function createDiagnosis(
-  input: CreateDiagnosis,
-): Promise<Diagnosis> {
-  return await invoke<Diagnosis>("create_diagnosis", { input });
+export async function createDiagnosis(input: CreateDiagnosis): Promise<Diagnosis> {
+  return await invoke<Diagnosis>('create_diagnosis', { input });
 }
 
 export async function getDiagnosis(id: string): Promise<Diagnosis> {
-  return await invoke<Diagnosis>("get_diagnosis", { id });
+  return await invoke<Diagnosis>('get_diagnosis', { id });
 }
 
 export async function listDiagnosesForPatient(
   patientId: string,
   limit?: number,
-  offset?: number,
+  offset?: number
 ): Promise<Diagnosis[]> {
-  return await invoke<Diagnosis[]>("list_diagnoses_for_patient", {
+  return await invoke<Diagnosis[]>('list_diagnoses_for_patient', {
     patientId,
     limit,
     offset,
   });
 }
 
-export async function updateDiagnosis(
-  id: string,
-  input: UpdateDiagnosis,
-): Promise<Diagnosis> {
-  return await invoke<Diagnosis>("update_diagnosis", { id, input });
+export async function updateDiagnosis(id: string, input: UpdateDiagnosis): Promise<Diagnosis> {
+  return await invoke<Diagnosis>('update_diagnosis', { id, input });
 }
 
 export async function deleteDiagnosis(id: string): Promise<void> {
-  return await invoke<void>("delete_diagnosis", { id });
+  return await invoke<void>('delete_diagnosis', { id });
 }
 
 // === Medication Types ===
@@ -470,37 +448,32 @@ export interface UpdateMedication {
   notes?: string;
 }
 
-export async function createMedication(
-  input: CreateMedication,
-): Promise<Medication> {
-  return await invoke<Medication>("create_medication", { input });
+export async function createMedication(input: CreateMedication): Promise<Medication> {
+  return await invoke<Medication>('create_medication', { input });
 }
 
 export async function getMedication(id: string): Promise<Medication> {
-  return await invoke<Medication>("get_medication", { id });
+  return await invoke<Medication>('get_medication', { id });
 }
 
 export async function listMedicationsForPatient(
   patientId: string,
   limit?: number,
-  offset?: number,
+  offset?: number
 ): Promise<Medication[]> {
-  return await invoke<Medication[]>("list_medications_for_patient", {
+  return await invoke<Medication[]>('list_medications_for_patient', {
     patientId,
     limit,
     offset,
   });
 }
 
-export async function updateMedication(
-  id: string,
-  input: UpdateMedication,
-): Promise<Medication> {
-  return await invoke<Medication>("update_medication", { id, input });
+export async function updateMedication(id: string, input: UpdateMedication): Promise<Medication> {
+  return await invoke<Medication>('update_medication', { id, input });
 }
 
 export async function deleteMedication(id: string): Promise<void> {
-  return await invoke<void>("delete_medication", { id });
+  return await invoke<void>('delete_medication', { id });
 }
 
 // === Treatment Plan Types ===
@@ -732,43 +705,40 @@ export interface UpdateReport {
 // === Report API ===
 
 export async function createReport(input: CreateReport): Promise<Report> {
-  return await invoke<Report>("create_report", { input });
+  return await invoke<Report>('create_report', { input });
 }
 
 export async function getReport(id: string): Promise<Report> {
-  return await invoke<Report>("get_report", { id });
+  return await invoke<Report>('get_report', { id });
 }
 
 export async function listReports(
   patientId: string,
   limit?: number,
-  offset?: number,
+  offset?: number
 ): Promise<Report[]> {
-  return await invoke<Report[]>("list_reports", {
+  return await invoke<Report[]>('list_reports', {
     patientId,
     limit,
     offset,
   });
 }
 
-export async function updateReport(
-  id: string,
-  input: UpdateReport,
-): Promise<Report> {
-  return await invoke<Report>("update_report", { id, input });
+export async function updateReport(id: string, input: UpdateReport): Promise<Report> {
+  return await invoke<Report>('update_report', { id, input });
 }
 
 export async function deleteReport(id: string): Promise<void> {
-  return await invoke<void>("delete_report", { id });
+  return await invoke<void>('delete_report', { id });
 }
 
 export async function generateReport(
   patientContext: string,
   reportType: string,
   sessionNotes: string,
-  systemPrompt?: string,
+  systemPrompt?: string
 ): Promise<string> {
-  return await invoke<string>("generate_report", {
+  return await invoke<string>('generate_report', {
     patientContext,
     reportType,
     sessionNotes,
@@ -777,11 +747,11 @@ export async function generateReport(
 }
 
 export async function exportReportToPdf(reportId: string): Promise<number[]> {
-  return await invoke<number[]>("export_report_to_pdf", { reportId });
+  return await invoke<number[]>('export_report_to_pdf', { reportId });
 }
 
 export async function exportReportToDocx(reportId: string): Promise<number[]> {
-  return await invoke<number[]>("export_report_to_docx", { reportId });
+  return await invoke<number[]>('export_report_to_docx', { reportId });
 }
 
 // ---------------------------------------------------------------------------
@@ -815,38 +785,35 @@ export interface UpdateEmail {
 }
 
 export async function createEmail(input: CreateEmail): Promise<Email> {
-  return await invoke<Email>("create_email", { input });
+  return await invoke<Email>('create_email', { input });
 }
 
 export async function getEmail(id: string): Promise<Email> {
-  return await invoke<Email>("get_email", { id });
+  return await invoke<Email>('get_email', { id });
 }
 
 export async function listEmails(
   patientId: string,
   limit?: number,
-  offset?: number,
+  offset?: number
 ): Promise<Email[]> {
-  return await invoke<Email[]>("list_emails", {
+  return await invoke<Email[]>('list_emails', {
     patientId,
     limit,
     offset,
   });
 }
 
-export async function updateEmail(
-  id: string,
-  input: UpdateEmail,
-): Promise<Email> {
-  return await invoke<Email>("update_email", { id, input });
+export async function updateEmail(id: string, input: UpdateEmail): Promise<Email> {
+  return await invoke<Email>('update_email', { id, input });
 }
 
 export async function deleteEmail(id: string): Promise<void> {
-  return await invoke<void>("delete_email", { id });
+  return await invoke<void>('delete_email', { id });
 }
 
 export async function markEmailAsSent(id: string): Promise<Email> {
-  return await invoke<Email>("mark_email_as_sent", { id });
+  return await invoke<Email>('mark_email_as_sent', { id });
 }
 
 // ---------------------------------------------------------------------------
@@ -862,15 +829,15 @@ export interface UpdateInfo {
 }
 
 export async function checkForUpdates(): Promise<UpdateInfo> {
-  return await invoke<UpdateInfo>("check_for_updates");
+  return await invoke<UpdateInfo>('check_for_updates');
 }
 
 export async function installUpdate(): Promise<void> {
-  return await invoke<void>("install_update");
+  return await invoke<void>('install_update');
 }
 
 export async function getAppVersion(): Promise<string> {
-  return await invoke<string>("get_app_version");
+  return await invoke<string>('get_app_version');
 }
 
 // ---------------------------------------------------------------------------
@@ -878,7 +845,7 @@ export async function getAppVersion(): Promise<string> {
 // ---------------------------------------------------------------------------
 
 export async function exportAllPatientData(): Promise<number[]> {
-  return await invoke<number[]>("export_all_patient_data");
+  return await invoke<number[]>('export_all_patient_data');
 }
 
 // Chat / Agent API
@@ -918,9 +885,9 @@ export interface AgentTurnResult {
 
 export async function runAgentTurn(
   sessionId: string,
-  userMessage: string,
+  userMessage: string
 ): Promise<AgentTurnResult> {
-  return await invoke<AgentTurnResult>("run_agent_turn", {
+  return await invoke<AgentTurnResult>('run_agent_turn', {
     sessionId,
     userMessage,
   });
@@ -929,48 +896,38 @@ export async function runAgentTurn(
 export async function createChatSession(
   scope: string,
   patientId?: string,
-  title?: string,
+  title?: string
 ): Promise<ChatSession> {
-  return await invoke<ChatSession>("create_chat_session", {
+  return await invoke<ChatSession>('create_chat_session', {
     scope,
     patientId,
     title,
   });
 }
 
-export async function getOrCreatePatientChatSession(
-  patientId: string,
-): Promise<ChatSession> {
-  return await invoke<ChatSession>("get_or_create_patient_chat_session", {
+export async function getOrCreatePatientChatSession(patientId: string): Promise<ChatSession> {
+  return await invoke<ChatSession>('get_or_create_patient_chat_session', {
     patientId,
   });
 }
 
-export async function listChatSessions(
-  scope: string,
-  patientId?: string,
-): Promise<ChatSession[]> {
-  return await invoke<ChatSession[]>("list_chat_sessions", {
+export async function listChatSessions(scope: string, patientId?: string): Promise<ChatSession[]> {
+  return await invoke<ChatSession[]>('list_chat_sessions', {
     scope,
     patientId,
   });
 }
 
 export async function deleteChatSession(sessionId: string): Promise<void> {
-  return await invoke<void>("delete_chat_session", { sessionId });
+  return await invoke<void>('delete_chat_session', { sessionId });
 }
 
-export async function getChatMessages(
-  sessionId: string,
-): Promise<ChatMessageRow[]> {
-  return await invoke<ChatMessageRow[]>("get_chat_messages", { sessionId });
+export async function getChatMessages(sessionId: string): Promise<ChatMessageRow[]> {
+  return await invoke<ChatMessageRow[]>('get_chat_messages', { sessionId });
 }
 
-export async function renameChatSession(
-  sessionId: string,
-  title: string,
-): Promise<ChatSession> {
-  return await invoke<ChatSession>("rename_chat_session", { sessionId, title });
+export async function renameChatSession(sessionId: string, title: string): Promise<ChatSession> {
+  return await invoke<ChatSession>('rename_chat_session', { sessionId, title });
 }
 
 // ---------------------------------------------------------------------------
@@ -1012,9 +969,9 @@ export async function uploadLiterature(
   filename: string,
   data: Uint8Array,
   mimeType: string,
-  description: string | null = null,
+  description: string | null = null
 ): Promise<Literature> {
-  return await invoke<Literature>("upload_literature", {
+  return await invoke<Literature>('upload_literature', {
     filename,
     data: Array.from(data),
     mimeType,
@@ -1023,52 +980,49 @@ export async function uploadLiterature(
 }
 
 export async function getLiteratureById(id: string): Promise<Literature> {
-  return await invoke<Literature>("get_literature_by_id", { id });
+  return await invoke<Literature>('get_literature_by_id', { id });
 }
 
 export async function listAllLiterature(
   limit: number = 100,
-  offset: number = 0,
+  offset: number = 0
 ): Promise<Literature[]> {
-  return await invoke<Literature[]>("list_all_literature", { limit, offset });
+  return await invoke<Literature[]>('list_all_literature', { limit, offset });
 }
 
 export async function updateLiteratureMetadata(
   id: string,
-  description: string | null,
+  description: string | null
 ): Promise<Literature> {
-  return await invoke<Literature>("update_literature_metadata", {
+  return await invoke<Literature>('update_literature_metadata', {
     id,
     description,
   });
 }
 
 export async function deleteLiteratureDocument(id: string): Promise<void> {
-  return await invoke<void>("delete_literature_document", { id });
+  return await invoke<void>('delete_literature_document', { id });
 }
 
 export async function downloadLiterature(id: string): Promise<Uint8Array> {
-  const data = await invoke<number[]>("download_literature", { id });
+  const data = await invoke<number[]>('download_literature', { id });
   return new Uint8Array(data);
 }
 
 export async function processLiterature(id: string): Promise<void> {
-  return await invoke<void>("process_literature", { id });
+  return await invoke<void>('process_literature', { id });
 }
 
 export async function searchLiterature(
   query: string,
-  limit: number = 5,
+  limit: number = 5
 ): Promise<LiteratureChunkResult[]> {
-  return await invoke<LiteratureChunkResult[]>("search_literature", {
+  return await invoke<LiteratureChunkResult[]>('search_literature', {
     query,
     limit,
   });
 }
 
-export async function getLiteratureDocumentChunks(
-  id: string,
-): Promise<DocumentChunk[]> {
-  return await invoke<DocumentChunk[]>("get_literature_document_chunks", { id });
+export async function getLiteratureDocumentChunks(id: string): Promise<DocumentChunk[]> {
+  return await invoke<DocumentChunk[]>('get_literature_document_chunks', { id });
 }
-

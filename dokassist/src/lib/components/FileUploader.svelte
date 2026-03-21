@@ -15,7 +15,12 @@
   let uploadProgress = $state(0);
   let errorMessage = $state('');
 
-  const supportedTypes = ['application/pdf', 'image/png', 'image/jpeg', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+  const supportedTypes = [
+    'application/pdf',
+    'image/png',
+    'image/jpeg',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  ];
 
   function handleDragOver(event: DragEvent) {
     event.preventDefault();
@@ -49,7 +54,7 @@
     for (const file of Array.from(files)) {
       if (!supportedTypes.includes(file.type)) {
         errorMessage = $t('files.unsupportedType').replace('{type}', file.type);
-        setTimeout(() => errorMessage = '', 5000);
+        setTimeout(() => (errorMessage = ''), 5000);
         continue;
       }
 
@@ -79,10 +84,12 @@
         uploadProgress = 0;
       } catch (error) {
         console.error('Upload failed:', error);
-        errorMessage = $t('files.uploadFailed').replace('{name}', file.name).replace('{error}', String(error));
+        errorMessage = $t('files.uploadFailed')
+          .replace('{name}', file.name)
+          .replace('{error}', String(error));
         isUploading = false;
         uploadProgress = 0;
-        setTimeout(() => errorMessage = '', 5000);
+        setTimeout(() => (errorMessage = ''), 5000);
       }
     }
   }
@@ -136,7 +143,9 @@
   {/if}
 
   {#if errorMessage}
-    <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+    <div
+      class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4"
+    >
       <p class="text-sm text-red-600 dark:text-red-400">{errorMessage}</p>
     </div>
   {/if}

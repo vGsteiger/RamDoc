@@ -52,7 +52,9 @@
   let Icon = $derived(getFileIcon(file.mime_type));
 </script>
 
-<div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-4 hover:border-gray-300 dark:hover:border-gray-700 transition-colors">
+<div
+  class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-4 hover:border-gray-300 dark:hover:border-gray-700 transition-colors"
+>
   <div class="flex items-start gap-4">
     <div class="flex-shrink-0">
       <Icon size={32} class="text-gray-400" />

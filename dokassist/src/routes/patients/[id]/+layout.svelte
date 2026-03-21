@@ -47,17 +47,23 @@
     </div>
   {:else if errorMessage}
     <div class="flex-1 flex items-center justify-center p-8">
-      <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6 max-w-md">
+      <div
+        class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6 max-w-md"
+      >
         <p class="text-red-600 dark:text-red-400">{$t('patients.loadError')}</p>
       </div>
     </div>
   {:else if patient}
     <div class="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 p-6">
       <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-        {patient.first_name} {patient.last_name}
+        {patient.first_name}
+        {patient.last_name}
       </h1>
       {#if patient.date_of_birth}
-        <p class="text-gray-500 dark:text-gray-400">{$t('patients.bornOn')} {patient.date_of_birth}</p>
+        <p class="text-gray-500 dark:text-gray-400">
+          {$t('patients.bornOn')}
+          {patient.date_of_birth}
+        </p>
       {/if}
     </div>
 

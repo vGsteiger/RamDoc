@@ -21,7 +21,8 @@
       error = null;
       sessions = await listSessionsForPatient(patientId);
     } catch (err) {
-      error = 'Fehler beim Laden der Sitzungen: ' + (err instanceof Error ? err.message : String(err));
+      error =
+        'Fehler beim Laden der Sitzungen: ' + (err instanceof Error ? err.message : String(err));
       console.error('Failed to load sessions:', err);
     } finally {
       loading = false;

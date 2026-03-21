@@ -33,7 +33,7 @@
 
   const weekLabel = $derived(
     `${currentWeekStart.toLocaleDateString('de-CH', { day: 'numeric', month: 'long' })} – ` +
-    `${weekEnd.toLocaleDateString('de-CH', { day: 'numeric', month: 'long', year: 'numeric' })}`
+      `${weekEnd.toLocaleDateString('de-CH', { day: 'numeric', month: 'long', year: 'numeric' })}`
   );
 
   const weekSessions = $derived.by(() => {
@@ -103,7 +103,9 @@
     >
       ‹
     </button>
-    <span class="text-gray-700 dark:text-gray-200 text-sm font-medium flex-1 text-center">{weekLabel}</span>
+    <span class="text-gray-700 dark:text-gray-200 text-sm font-medium flex-1 text-center"
+      >{weekLabel}</span
+    >
     <button
       onclick={nextWeek}
       class="px-3 py-1.5 rounded-lg bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 text-sm transition-colors"
@@ -125,7 +127,9 @@
     <div class="space-y-6">
       {#each weekSessions as [date, sessions]}
         <div>
-          <h2 class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+          <h2
+            class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2"
+          >
             {formatDate(date)}
           </h2>
           <div class="space-y-2">
@@ -135,13 +139,19 @@
                 class="w-full text-left bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-3 flex items-center gap-3 transition-colors"
               >
                 <div class="flex-1 min-w-0">
-                  <p class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{item.patient_name}</p>
+                  <p class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                    {item.patient_name}
+                  </p>
                 </div>
-                <span class="text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-200 shrink-0">
+                <span
+                  class="text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-200 shrink-0"
+                >
                   {SESSION_TYPE_LABELS[item.session.session_type] ?? item.session.session_type}
                 </span>
                 {#if item.session.duration_minutes}
-                  <span class="text-xs text-gray-500 dark:text-gray-400 shrink-0">{item.session.duration_minutes} Min.</span>
+                  <span class="text-xs text-gray-500 dark:text-gray-400 shrink-0"
+                    >{item.session.duration_minutes} Min.</span
+                  >
                 {/if}
               </button>
             {/each}

@@ -105,15 +105,15 @@ function captureListeners() {
 /** Mount the component with model loaded (default happy path). */
 function setupLoaded() {
   mockInvoke
-    .mockResolvedValueOnce(PATIENT)        // get_patient
+    .mockResolvedValueOnce(PATIENT) // get_patient
     .mockResolvedValueOnce(ENGINE_LOADED); // get_engine_status
 }
 
 /** Mount the component with model NOT loaded. */
 function setupNotLoaded() {
   mockInvoke
-    .mockResolvedValueOnce(PATIENT)           // get_patient
-    .mockResolvedValueOnce(ENGINE_NOT_LOADED);// get_engine_status
+    .mockResolvedValueOnce(PATIENT) // get_patient
+    .mockResolvedValueOnce(ENGINE_NOT_LOADED); // get_engine_status
 }
 
 beforeEach(() => {
@@ -218,7 +218,7 @@ describe('EmailCompose — AI generation', () => {
   it('calls create_chat_session and run_agent_turn when Generate Draft is clicked', async () => {
     setupLoaded();
     mockInvoke
-      .mockResolvedValueOnce(CHAT_SESSION)    // create_chat_session
+      .mockResolvedValueOnce(CHAT_SESSION) // create_chat_session
       .mockResolvedValueOnce({ session_id: 'session-1', final_answer: '', tool_calls_made: [] }); // run_agent_turn
 
     render(EmailCompose);
@@ -228,8 +228,14 @@ describe('EmailCompose — AI generation', () => {
     await fireEvent.click(screen.getByRole('button', { name: /generate draft/i }));
 
     await waitFor(() => {
-      expect(mockInvoke).toHaveBeenCalledWith('create_chat_session', expect.objectContaining({ patientId: 'patient-1' }));
-      expect(mockInvoke).toHaveBeenCalledWith('run_agent_turn', expect.objectContaining({ sessionId: 'session-1' }));
+      expect(mockInvoke).toHaveBeenCalledWith(
+        'create_chat_session',
+        expect.objectContaining({ patientId: 'patient-1' })
+      );
+      expect(mockInvoke).toHaveBeenCalledWith(
+        'run_agent_turn',
+        expect.objectContaining({ sessionId: 'session-1' })
+      );
     });
   });
 
@@ -237,9 +243,7 @@ describe('EmailCompose — AI generation', () => {
     const handlers = captureListeners();
     setupLoaded();
     // create_chat_session resolves; run_agent_turn never resolves (simulates streaming)
-    mockInvoke
-      .mockResolvedValueOnce(CHAT_SESSION)
-      .mockReturnValueOnce(new Promise(() => {}));
+    mockInvoke.mockResolvedValueOnce(CHAT_SESSION).mockReturnValueOnce(new Promise(() => {}));
 
     render(EmailCompose);
     await waitFor(() => expect(screen.getByText(/anna müller/i)).toBeInTheDocument());
@@ -257,9 +261,7 @@ describe('EmailCompose — AI generation', () => {
   it('appends agent-chunk tokens into the message body', async () => {
     const handlers = captureListeners();
     setupLoaded();
-    mockInvoke
-      .mockResolvedValueOnce(CHAT_SESSION)
-      .mockReturnValueOnce(new Promise(() => {}));
+    mockInvoke.mockResolvedValueOnce(CHAT_SESSION).mockReturnValueOnce(new Promise(() => {}));
 
     render(EmailCompose);
     await waitFor(() => expect(screen.getByText(/anna müller/i)).toBeInTheDocument());
@@ -281,9 +283,7 @@ describe('EmailCompose — AI generation', () => {
   it('clears the generating state when agent-done fires', async () => {
     const handlers = captureListeners();
     setupLoaded();
-    mockInvoke
-      .mockResolvedValueOnce(CHAT_SESSION)
-      .mockReturnValueOnce(new Promise(() => {}));
+    mockInvoke.mockResolvedValueOnce(CHAT_SESSION).mockReturnValueOnce(new Promise(() => {}));
 
     render(EmailCompose);
     await waitFor(() => expect(handlers['agent-done']).toBeDefined());
@@ -306,9 +306,7 @@ describe('EmailCompose — AI generation', () => {
   it('shows an error and clears generating state when agent-error fires', async () => {
     const handlers = captureListeners();
     setupLoaded();
-    mockInvoke
-      .mockResolvedValueOnce(CHAT_SESSION)
-      .mockReturnValueOnce(new Promise(() => {}));
+    mockInvoke.mockResolvedValueOnce(CHAT_SESSION).mockReturnValueOnce(new Promise(() => {}));
 
     render(EmailCompose);
     await waitFor(() => expect(handlers['agent-error']).toBeDefined());
@@ -365,7 +363,9 @@ describe('EmailCompose — save draft', () => {
     mockInvoke.mockResolvedValueOnce(EMAIL); // create_email
 
     render(EmailCompose);
-    await waitFor(() => expect(screen.getByDisplayValue('anna.mueller@example.com')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByDisplayValue('anna.mueller@example.com')).toBeInTheDocument()
+    );
 
     await fireEvent.input(screen.getByLabelText(/subject:/i), { target: { value: 'Follow-up' } });
     await fireEvent.input(screen.getByLabelText(/message:/i), { target: { value: 'Hello Anna,' } });
@@ -393,7 +393,7 @@ describe('EmailCompose — send email', () => {
   it('calls create_email then mark_email_as_sent before opening the mail client', async () => {
     setupLoaded();
     mockInvoke
-      .mockResolvedValueOnce(EMAIL)  // create_email
+      .mockResolvedValueOnce(EMAIL) // create_email
       .mockResolvedValueOnce(EMAIL); // mark_email_as_sent
 
     // Stub window.location.href to avoid navigation errors in jsdom
@@ -403,7 +403,9 @@ describe('EmailCompose — send email', () => {
     });
 
     render(EmailCompose);
-    await waitFor(() => expect(screen.getByDisplayValue('anna.mueller@example.com')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByDisplayValue('anna.mueller@example.com')).toBeInTheDocument()
+    );
 
     await fireEvent.input(screen.getByLabelText(/subject:/i), { target: { value: 'Follow-up' } });
     await fireEvent.input(screen.getByLabelText(/message:/i), { target: { value: 'Hello Anna,' } });

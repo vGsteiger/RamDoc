@@ -15,7 +15,7 @@
       return date.toLocaleDateString('de-CH', {
         year: 'numeric',
         month: '2-digit',
-        day: '2-digit'
+        day: '2-digit',
       });
     } catch {
       return dateStr;
@@ -35,7 +35,7 @@
 </script>
 
 <button
-  onclick={onclick}
+  {onclick}
   class="w-full text-left p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
 >
   <div class="flex justify-between items-start mb-2">
@@ -59,7 +59,9 @@
 
   {#if patient.gender}
     <div class="flex gap-2 items-center">
-      <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded">
+      <span
+        class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded"
+      >
         {patient.gender}
       </span>
     </div>

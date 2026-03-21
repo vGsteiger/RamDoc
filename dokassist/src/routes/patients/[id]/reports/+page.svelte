@@ -40,7 +40,7 @@
       month: '2-digit',
       day: '2-digit',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
     });
   }
 
@@ -90,14 +90,17 @@
   {:else}
     <div class="space-y-4">
       {#each reports as report}
-        <div class="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
+        <div
+          class="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700"
+        >
           <div class="flex justify-between items-start mb-3">
             <div>
               <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
                 {formatReportType(report.report_type)}
               </h3>
               <p class="text-sm text-gray-400 mt-1">
-                {$t('reports.generated')} {formatDate(report.generated_at)}
+                {$t('reports.generated')}
+                {formatDate(report.generated_at)}
               </p>
               {#if report.model_name}
                 <p class="text-xs text-gray-500 mt-1">{$t('reports.model')} {report.model_name}</p>

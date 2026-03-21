@@ -1,16 +1,16 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  import { page } from "$app/stores";
-  import { goto } from "$app/navigation";
+  import { onMount } from 'svelte';
+  import { page } from '$app/stores';
+  import { goto } from '$app/navigation';
   import {
     getPatient,
     updatePatient,
     deletePatient,
     type Patient,
     type UpdatePatient,
-  } from "$lib/api";
-  import PatientForm from "$lib/components/PatientForm.svelte";
-  import { t } from "$lib/translations";
+  } from '$lib/api';
+  import PatientForm from '$lib/components/PatientForm.svelte';
+  import { t } from '$lib/translations';
 
   let patient = $state<Patient | null>(null);
   let isLoading = $state(true);
@@ -18,7 +18,7 @@
   let isSubmitting = $state(false);
   let isDeleting = $state(false);
   let showDeleteConfirm = $state(false);
-  let error = $state("");
+  let error = $state('');
 
   let patientId = $derived($page.params.id);
 
@@ -28,34 +28,32 @@
 
   async function loadPatient() {
     if (!patientId) {
-      error = "No patient ID provided";
+      error = 'No patient ID provided';
       isLoading = false;
       return;
     }
 
     try {
       isLoading = true;
-      error = "";
+      error = '';
       patient = await getPatient(patientId);
     } catch (e) {
-      error = e instanceof Error ? e.message : "Failed to load patient";
-      console.error("Error loading patient:", e);
+      error = e instanceof Error ? e.message : 'Failed to load patient';
+      console.error('Error loading patient:', e);
     } finally {
       isLoading = false;
     }
   }
 
-  async function handleUpdate(
-    event: CustomEvent<{ id: string; data: UpdatePatient }>,
-  ) {
+  async function handleUpdate(event: CustomEvent<{ id: string; data: UpdatePatient }>) {
     try {
       isSubmitting = true;
-      error = "";
+      error = '';
       patient = await updatePatient(event.detail.id, event.detail.data);
       isEditing = false;
     } catch (e) {
-      error = e instanceof Error ? e.message : "Failed to update patient";
-      console.error("Error updating patient:", e);
+      error = e instanceof Error ? e.message : 'Failed to update patient';
+      console.error('Error updating patient:', e);
     } finally {
       isSubmitting = false;
     }
@@ -66,12 +64,12 @@
 
     try {
       isDeleting = true;
-      error = "";
+      error = '';
       await deletePatient(patientId);
-      goto("/patients");
+      goto('/patients');
     } catch (e) {
-      error = e instanceof Error ? e.message : "Failed to delete patient";
-      console.error("Error deleting patient:", e);
+      error = e instanceof Error ? e.message : 'Failed to delete patient';
+      console.error('Error deleting patient:', e);
       isDeleting = false;
       showDeleteConfirm = false;
     }
@@ -84,10 +82,10 @@
   function formatDate(dateStr: string): string {
     try {
       const date = new Date(dateStr);
-      return date.toLocaleDateString("de-CH", {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
+      return date.toLocaleDateString('de-CH', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
       });
     } catch {
       return dateStr;
@@ -196,8 +194,7 @@
                 <div class="grid grid-cols-2 gap-6">
                   {#if patient.phone}
                     <div>
-                      <span
-                        class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
+                      <span class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
                         >{$t('patients.phone')}</span
                       >
                       <p class="text-gray-900 dark:text-gray-100">{patient.phone}</p>
@@ -205,8 +202,7 @@
                   {/if}
                   {#if patient.email}
                     <div>
-                      <span
-                        class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
+                      <span class="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1"
                         >{$t('patients.email')}</span
                       >
                       <p class="text-gray-900 dark:text-gray-100">{patient.email}</p>
@@ -306,9 +302,17 @@
             onclick={(e) => e.stopPropagation()}
             onkeydown={(e) => e.key === 'Escape' && (showDeleteConfirm = false)}
           >
-            <h2 id="delete-dialog-title" class="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">{$t('patients.deletePatient')}</h2>
+            <h2
+              id="delete-dialog-title"
+              class="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4"
+            >
+              {$t('patients.deletePatient')}
+            </h2>
             <p class="text-gray-600 dark:text-gray-300 mb-6">
-              {$t('patients.confirmDeleteText').replace('{name}', `${patient.first_name} ${patient.last_name}`)}
+              {$t('patients.confirmDeleteText').replace(
+                '{name}',
+                `${patient.first_name} ${patient.last_name}`
+              )}
             </p>
             <div class="flex gap-4 justify-end">
               <button

@@ -39,7 +39,9 @@
   <!-- Sidebar: session list -->
   <div class="w-64 border-r border-gray-200 dark:border-gray-700 flex flex-col shrink-0">
     <div class="p-4 border-b border-gray-200 dark:border-gray-700">
-      <h2 class="text-sm font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wide">{$t('chat.chats')}</h2>
+      <h2 class="text-sm font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wide">
+        {$t('chat.chats')}
+      </h2>
     </div>
     {#if !isLoading}
       <ChatSessionList

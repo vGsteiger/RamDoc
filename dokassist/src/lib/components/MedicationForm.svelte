@@ -14,7 +14,9 @@
   let substance = $state(untrack(() => medication?.substance || ''));
   let dosage = $state(untrack(() => medication?.dosage || ''));
   let frequency = $state(untrack(() => medication?.frequency || ''));
-  let startDate = $state(untrack(() => medication?.start_date || new Date().toISOString().split('T')[0]));
+  let startDate = $state(
+    untrack(() => medication?.start_date || new Date().toISOString().split('T')[0])
+  );
   let endDate = $state(untrack(() => medication?.end_date || ''));
   let notes = $state(untrack(() => medication?.notes || ''));
 
@@ -43,8 +45,8 @@
         dosage: dosage !== medication.dosage ? dosage : undefined,
         frequency: frequency !== medication.frequency ? frequency : undefined,
         start_date: startDate !== medication.start_date ? startDate : undefined,
-        end_date: endDate !== (medication.end_date || '') ? (endDate || undefined) : undefined,
-        notes: notes !== (medication.notes || '') ? (notes || undefined) : undefined
+        end_date: endDate !== (medication.end_date || '') ? endDate || undefined : undefined,
+        notes: notes !== (medication.notes || '') ? notes || undefined : undefined,
       };
       onSave({ id: medication.id, update });
     } else if (patientId) {
@@ -56,7 +58,7 @@
         frequency,
         start_date: startDate,
         end_date: endDate || undefined,
-        notes: notes || undefined
+        notes: notes || undefined,
       };
       onSave(input);
     }
@@ -79,9 +81,7 @@
   </div>
 
   <div>
-    <label for="dosage" class="block text-sm font-medium text-gray-300 mb-1">
-      Dosierung *
-    </label>
+    <label for="dosage" class="block text-sm font-medium text-gray-300 mb-1"> Dosierung * </label>
     <input
       id="dosage"
       type="text"
@@ -121,9 +121,7 @@
     </div>
 
     <div>
-      <label for="end-date" class="block text-sm font-medium text-gray-300 mb-1">
-        Enddatum
-      </label>
+      <label for="end-date" class="block text-sm font-medium text-gray-300 mb-1"> Enddatum </label>
       <input
         id="end-date"
         type="date"
@@ -134,9 +132,7 @@
   </div>
 
   <div>
-    <label for="notes" class="block text-sm font-medium text-gray-300 mb-1">
-      Notizen
-    </label>
+    <label for="notes" class="block text-sm font-medium text-gray-300 mb-1"> Notizen </label>
     <textarea
       id="notes"
       bind:value={notes}

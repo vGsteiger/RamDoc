@@ -1,0 +1,14 @@
+[files]
+# Exclude files containing intentional German content:
+# - LLM system prompts (must be in German for the target user base)
+# - German translation file
+# - Medical code database (Swiss FoD codes with German labels)
+# - Test files that mirror German data from the Rust backend
+# - Report generation page (formatPatientContext builds LLM context in German)
+extend-exclude = [
+  "dokassist/src-tauri/src/llm/",
+  "dokassist/src/lib/translations/de.json",
+  "dokassist/src/lib/amdp.ts",
+  "dokassist/src/tests/",
+  "dokassist/src/routes/patients/*/reports/new/+page.svelte",
+]

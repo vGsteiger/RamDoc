@@ -23,9 +23,8 @@
   }
 
   async function handleDeleteEmail(emailId: string, status: string) {
-    const confirmMessage = status === 'draft'
-      ? $t('email.confirmDeleteDraft')
-      : $t('email.confirmDelete');
+    const confirmMessage =
+      status === 'draft' ? $t('email.confirmDeleteDraft') : $t('email.confirmDelete');
 
     if (!confirm(confirmMessage)) {
       return;
@@ -44,7 +43,7 @@
       month: '2-digit',
       day: '2-digit',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
     });
   }
 
@@ -85,19 +84,26 @@
   {:else}
     <div class="space-y-4">
       {#each emails as email}
-        <div class="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
+        <div
+          class="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700"
+        >
           <div class="flex justify-between items-start mb-3">
             <div class="flex-1">
               <div class="flex items-center gap-3 mb-2">
                 <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
                   {email.subject}
                 </h3>
-                <span class="px-2 py-1 text-xs rounded {email.status === 'sent' ? 'bg-green-900/30 text-green-400' : 'bg-yellow-900/30 text-yellow-400'}">
+                <span
+                  class="px-2 py-1 text-xs rounded {email.status === 'sent'
+                    ? 'bg-green-900/30 text-green-400'
+                    : 'bg-yellow-900/30 text-yellow-400'}"
+                >
                   {formatStatus(email.status)}
                 </span>
               </div>
               <p class="text-sm text-gray-500 dark:text-gray-400">
-                {$t('email.to')} {email.recipient_email}
+                {$t('email.to')}
+                {email.recipient_email}
               </p>
               <p class="text-xs text-gray-500 mt-1">
                 {#if email.status === 'sent' && email.sent_at}

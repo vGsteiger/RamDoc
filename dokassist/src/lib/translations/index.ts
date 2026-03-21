@@ -28,12 +28,9 @@ function getNestedValue(obj: Record<string, unknown>, path: string): string {
 }
 
 // Create a derived store that provides the translation function
-export const t: Readable<(key: TranslationKey) => string> = derived(
-  language,
-  ($language) => {
-    return (key: TranslationKey) => {
-      const translationSet = translations[$language];
-      return getNestedValue(translationSet, key);
-    };
-  }
-);
+export const t: Readable<(key: TranslationKey) => string> = derived(language, ($language) => {
+  return (key: TranslationKey) => {
+    const translationSet = translations[$language];
+    return getNestedValue(translationSet, key);
+  };
+});

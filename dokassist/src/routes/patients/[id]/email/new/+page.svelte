@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { page } from "$app/stores";
-  import { goto } from "$app/navigation";
-  import { onMount, onDestroy } from "svelte";
-  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+  import { page } from '$app/stores';
+  import { goto } from '$app/navigation';
+  import { onMount, onDestroy } from 'svelte';
+  import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import {
     getPatient,
     createEmail,
@@ -15,24 +15,24 @@
     type Patient,
     type AppError,
     type LlmEngineStatus,
-  } from "$lib/api";
-  import ErrorDisplay from "$lib/components/ErrorDisplay.svelte";
-  import { t } from "$lib/translations";
+  } from '$lib/api';
+  import ErrorDisplay from '$lib/components/ErrorDisplay.svelte';
+  import { t } from '$lib/translations';
 
   $: patientId = $page.params.id;
 
   let patient: Patient | null = null;
-  let recipientEmail = "";
-  let subject = "";
-  let body = "";
+  let recipientEmail = '';
+  let subject = '';
+  let body = '';
   let error: AppError | null = null;
   let isSaving = false;
 
   // AI Assist panel
   let showAiPanel = false;
-  let aiPrompt = "";
+  let aiPrompt = '';
   let isGenerating = false;
-  let aiError = "";
+  let aiError = '';
   let engineStatus: LlmEngineStatus | null = null;
 
   let unlistenChunk: UnlistenFn | null = null;
@@ -61,11 +61,11 @@
   async function handleGenerateDraft() {
     if (!engineStatus?.is_loaded || isGenerating) return;
     isGenerating = true;
-    aiError = "";
-    body = "";
+    aiError = '';
+    body = '';
 
     try {
-      const session = await createChatSession("patient", patientId, "Email Draft");
+      const session = await createChatSession('patient', patientId, 'Email Draft');
       const prompt = aiPrompt.trim() || `Write a professional email for this patient.`;
       await runAgentTurn(session.id, prompt);
     } catch (e) {
@@ -77,9 +77,9 @@
   async function handleSaveDraft() {
     if (!recipientEmail.trim() || !subject.trim() || !body.trim()) {
       error = {
-        code: "VALIDATION_ERROR",
+        code: 'VALIDATION_ERROR',
         message: $t('email.validationError'),
-        ref: "VALIDATION",
+        ref: 'VALIDATION',
       };
       return;
     }
@@ -107,9 +107,9 @@
   async function handleSendEmail() {
     if (!recipientEmail.trim() || !subject.trim() || !body.trim()) {
       error = {
-        code: "VALIDATION_ERROR",
+        code: 'VALIDATION_ERROR',
         message: $t('email.validationError'),
-        ref: "VALIDATION",
+        ref: 'VALIDATION',
       };
       return;
     }
@@ -128,7 +128,9 @@
       const savedEmail = await createEmail(input);
       await markEmailAsSent(savedEmail.id);
 
-      const mailtoLink = encodeURI(`mailto:${recipientEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
+      const mailtoLink = encodeURI(
+        `mailto:${recipientEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+      );
       window.location.href = mailtoLink;
 
       setTimeout(() => {
@@ -145,15 +147,15 @@
     await loadPatient();
     await loadEngineStatus();
 
-    unlistenChunk = await listen<string>("agent-chunk", (event) => {
+    unlistenChunk = await listen<string>('agent-chunk', (event) => {
       body += event.payload;
     });
 
-    unlistenDone = await listen("agent-done", () => {
+    unlistenDone = await listen('agent-done', () => {
       isGenerating = false;
     });
 
-    unlistenError = await listen<{ message: string }>("agent-error", (event) => {
+    unlistenError = await listen<{ message: string }>('agent-error', (event) => {
       isGenerating = false;
       aiError = event.payload?.message ?? String(event.payload);
     });
@@ -171,7 +173,9 @@
     <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">{$t('email.compose')}</h2>
     {#if patient}
       <p class="text-gray-500 dark:text-gray-400">
-        {$t('email.forPatient')} {patient.first_name} {patient.last_name}
+        {$t('email.forPatient')}
+        {patient.first_name}
+        {patient.last_name}
       </p>
     {/if}
   </div>
@@ -182,9 +186,14 @@
     </div>
   {/if}
 
-  <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700 space-y-4">
+  <div
+    class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700 space-y-4"
+  >
     <div>
-      <label for="recipient" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+      <label
+        for="recipient"
+        class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+      >
         {$t('email.to')}
       </label>
       <input
@@ -237,7 +246,10 @@
           {/if}
 
           <div>
-            <label for="ai-prompt" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label
+              for="ai-prompt"
+              class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+            >
               What should this email say?
             </label>
             <textarea
@@ -254,7 +266,7 @@
               disabled={isGenerating}
               class="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isGenerating ? "Generating…" : "Generate Draft"}
+              {isGenerating ? 'Generating…' : 'Generate Draft'}
             </button>
           {:else}
             <p class="text-sm text-gray-500 dark:text-gray-400">No AI model is loaded</p>
@@ -263,7 +275,9 @@
       {/if}
     </div>
 
-    <div class="flex justify-between items-center pt-4 border-t border-gray-200 dark:border-gray-700">
+    <div
+      class="flex justify-between items-center pt-4 border-t border-gray-200 dark:border-gray-700"
+    >
       <a
         href={`/patients/${patientId}/email`}
         class="px-4 py-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"

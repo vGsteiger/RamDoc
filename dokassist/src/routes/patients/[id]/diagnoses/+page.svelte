@@ -8,7 +8,7 @@
     deleteDiagnosis,
     type Diagnosis,
     type CreateDiagnosis,
-    type UpdateDiagnosis
+    type UpdateDiagnosis,
   } from '$lib/api';
   import DiagnosisCard from '$lib/components/DiagnosisCard.svelte';
   import IcdSearch from '$lib/components/IcdSearch.svelte';
@@ -35,7 +35,7 @@
   const statusOptions = [
     { value: 'active', label: 'Aktiv' },
     { value: 'remission', label: 'Remission' },
-    { value: 'resolved', label: 'Aufgelöst' }
+    { value: 'resolved', label: 'Aufgelöst' },
   ];
 
   onMount(async () => {
@@ -48,7 +48,8 @@
       error = null;
       diagnoses = await listDiagnosesForPatient(patientId);
     } catch (err) {
-      error = 'Fehler beim Laden der Diagnosen: ' + (err instanceof Error ? err.message : String(err));
+      error =
+        'Fehler beim Laden der Diagnosen: ' + (err instanceof Error ? err.message : String(err));
       console.error('Failed to load diagnoses:', err);
     } finally {
       loading = false;
@@ -105,7 +106,7 @@
           status,
           diagnosed_date: diagnosedDate,
           resolved_date: resolvedDate || undefined,
-          notes: notes || undefined
+          notes: notes || undefined,
         };
         await updateDiagnosis(editingId, update);
       } else {
@@ -117,7 +118,7 @@
           status,
           diagnosed_date: diagnosedDate,
           resolved_date: resolvedDate || undefined,
-          notes: notes || undefined
+          notes: notes || undefined,
         };
         await createDiagnosis(input);
       }
@@ -169,7 +170,9 @@
   {/if}
 
   {#if showAddForm}
-    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 mb-6">
+    <div
+      class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 mb-6"
+    >
       <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
         {editingId ? 'Diagnose bearbeiten' : 'Neue Diagnose hinzufügen'}
       </h2>
@@ -182,14 +185,19 @@
           {#if selectedCode}
             <div class="mt-2 p-3 bg-gray-700 rounded border border-gray-600">
               <span class="font-mono text-sm text-blue-500 dark:text-blue-400">{selectedCode}</span>
-              <span class="text-sm text-gray-600 dark:text-gray-300 ml-2">— {selectedDescription}</span>
+              <span class="text-sm text-gray-600 dark:text-gray-300 ml-2"
+                >— {selectedDescription}</span
+              >
             </div>
           {/if}
         </div>
 
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <label for="diagnosed-date" class="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">
+            <label
+              for="diagnosed-date"
+              class="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1"
+            >
               Diagnosedatum *
             </label>
             <input
@@ -202,7 +210,10 @@
           </div>
 
           <div>
-            <label for="status" class="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">
+            <label
+              for="status"
+              class="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1"
+            >
               Status *
             </label>
             <select
@@ -220,7 +231,10 @@
 
         {#if status === 'resolved'}
           <div>
-            <label for="resolved-date" class="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">
+            <label
+              for="resolved-date"
+              class="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1"
+            >
               Auflösungsdatum
             </label>
             <input
@@ -233,7 +247,10 @@
         {/if}
 
         <div>
-          <label for="notes" class="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">
+          <label
+            for="notes"
+            class="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1"
+          >
             Notizen
           </label>
           <textarea

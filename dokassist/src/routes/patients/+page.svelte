@@ -133,7 +133,8 @@
     <!-- Patient Count -->
     {#if !isLoading}
       <div class="mb-4 text-sm text-gray-500 dark:text-gray-400">
-        {sortedPatients.length} {sortedPatients.length === 1 ? $t('patients.patient') : $t('patients.patients')}
+        {sortedPatients.length}
+        {sortedPatients.length === 1 ? $t('patients.patient') : $t('patients.patients')}
         {#if searchQuery}
           {$t('patients.matching')} "{searchQuery}"
         {/if}
@@ -146,7 +147,9 @@
         <div class="text-gray-500 dark:text-gray-400">{$t('common.loading')}</div>
       </div>
     {:else if error}
-      <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-red-600 dark:text-red-400">
+      <div
+        class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-red-600 dark:text-red-400"
+      >
         {error}
       </div>
     {:else if sortedPatients.length === 0}

@@ -1,7 +1,14 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { getEngineStatus, loadModel, globalSearch, parseError, type LlmEngineStatus, type SearchResult } from '$lib/api';
+  import {
+    getEngineStatus,
+    loadModel,
+    globalSearch,
+    parseError,
+    type LlmEngineStatus,
+    type SearchResult,
+  } from '$lib/api';
   import { t } from '$lib/translations';
 
   let searchInput = $state<HTMLInputElement | null>(null);
@@ -137,7 +144,9 @@
   });
 </script>
 
-<header class="h-16 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center px-6 gap-4">
+<header
+  class="h-16 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center px-6 gap-4"
+>
   <div class="flex-1 max-w-2xl relative">
     <input
       bind:this={searchInput}
@@ -150,11 +159,17 @@
     />
 
     {#if showDropdown && searchQuery.trim()}
-      <div class="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-50 max-h-96 overflow-y-auto">
+      <div
+        class="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-50 max-h-96 overflow-y-auto"
+      >
         {#if isSearching}
-          <div class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{$t('topbar.searching')}</div>
+          <div class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+            {$t('topbar.searching')}
+          </div>
         {:else if searchResults.length === 0}
-          <div class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{$t('topbar.noResults').replace('{query}', searchQuery)}</div>
+          <div class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+            {$t('topbar.noResults').replace('{query}', searchQuery)}
+          </div>
         {:else}
           {#each searchResults as result (result.entity_id)}
             <button
@@ -165,11 +180,17 @@
                 <span class="text-xs font-medium text-blue-600 dark:text-blue-400 shrink-0">
                   {typeLabel[result.result_type] ?? result.result_type}
                 </span>
-                <span class="text-xs text-gray-400 dark:text-gray-500 shrink-0">{result.patient_name}</span>
+                <span class="text-xs text-gray-400 dark:text-gray-500 shrink-0"
+                  >{result.patient_name}</span
+                >
               </div>
-              <div class="text-sm text-gray-900 dark:text-gray-100 mt-0.5 truncate">{result.title}</div>
+              <div class="text-sm text-gray-900 dark:text-gray-100 mt-0.5 truncate">
+                {result.title}
+              </div>
               {#if result.snippet}
-                <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-1">{result.snippet}</div>
+                <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-1">
+                  {result.snippet}
+                </div>
               {/if}
             </button>
           {/each}

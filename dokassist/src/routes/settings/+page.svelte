@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
-  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-  import { getVersion } from "@tauri-apps/api/app";
-  import { goto } from "$app/navigation";
+  import { onMount, onDestroy } from 'svelte';
+  import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+  import { getVersion } from '@tauri-apps/api/app';
+  import { goto } from '$app/navigation';
   import {
     getEngineStatus,
     getRecommendedModel,
@@ -19,54 +19,52 @@
     type ModelChoice,
     type UpdateInfo,
     type EmbedStatus,
-  } from "$lib/api";
-  import { themePreference } from "$lib/stores/theme";
-  import { language } from "$lib/stores/language";
-  import { t } from "$lib/translations";
+  } from '$lib/api';
+  import { themePreference } from '$lib/stores/theme';
+  import { language } from '$lib/stores/language';
+  import { t } from '$lib/translations';
 
   let status = $state<LlmEngineStatus | null>(null);
   let recommended = $state<ModelChoice | null>(null);
   let downloadProgress = $state<number | null>(null);
-  let phase = $state<"idle" | "downloading" | "loading" | "done" | "error">(
-    "idle",
-  );
-  let errorMsg = $state("");
+  let phase = $state<'idle' | 'downloading' | 'loading' | 'done' | 'error'>('idle');
+  let errorMsg = $state('');
   let unlisten: UnlistenFn | null = null;
-  let appVersion = $state("");
+  let appVersion = $state('');
 
   // Embedding model state
   let embedStatus = $state<EmbedStatus | null>(null);
-  let embedPhase = $state<"idle" | "loading" | "done" | "error">("idle");
-  let embedError = $state("");
+  let embedPhase = $state<'idle' | 'loading' | 'done' | 'error'>('idle');
+  let embedError = $state('');
 
   // Update state
   let updateInfo = $state<UpdateInfo | null>(null);
   let checkingUpdate = $state(false);
   let installingUpdate = $state(false);
   let updateProgress = $state<number>(0);
-  let updateError = $state("");
+  let updateError = $state('');
   let updateUnlisten: UnlistenFn | null = null;
 
   onMount(async () => {
     [status, recommended, appVersion, embedStatus] = await Promise.all([
       getEngineStatus(),
       getRecommendedModel(),
-      getVersion().catch(() => "Unknown"),
+      getVersion().catch(() => 'Unknown'),
       getEmbedStatus(),
     ]);
-    if (status.is_loaded) phase = "done";
-    if (embedStatus.is_loaded) embedPhase = "done";
+    if (status.is_loaded) phase = 'done';
+    if (embedStatus.is_loaded) embedPhase = 'done';
   });
 
   async function handleInitEmbed() {
-    embedPhase = "loading";
-    embedError = "";
+    embedPhase = 'loading';
+    embedError = '';
     try {
       await initializeEmbedEngine();
       embedStatus = await getEmbedStatus();
-      embedPhase = "done";
+      embedPhase = 'done';
     } catch (e) {
-      embedPhase = "error";
+      embedPhase = 'error';
       embedError = parseError(e).message;
     }
   }
@@ -78,7 +76,7 @@
 
   async function handleCheckForUpdates() {
     checkingUpdate = true;
-    updateError = "";
+    updateError = '';
     try {
       updateInfo = await checkForUpdates();
     } catch (e) {
@@ -92,15 +90,15 @@
     if (!updateInfo?.update_available) return;
 
     installingUpdate = true;
-    updateError = "";
+    updateError = '';
     updateProgress = 0;
 
     // Listen for download progress events
-    updateUnlisten = await listen<number>("updater-download-progress", (e) => {
+    updateUnlisten = await listen<number>('updater-download-progress', (e) => {
       updateProgress = Math.round(e.payload * 100);
     });
 
-    const completeUnsub = await listen("updater-download-complete", () => {
+    const completeUnsub = await listen('updater-download-complete', () => {
       completeUnsub();
     });
 
@@ -122,15 +120,15 @@
 
   async function handleDownload() {
     if (!recommended) return;
-    phase = "downloading";
+    phase = 'downloading';
     downloadProgress = 0;
-    errorMsg = "";
+    errorMsg = '';
 
-    unlisten = await listen<number>("model-download-progress", (e) => {
+    unlisten = await listen<number>('model-download-progress', (e) => {
       downloadProgress = Math.round(e.payload * 100);
     });
 
-    const doneUnsub = await listen("model-download-done", () => {
+    const doneUnsub = await listen('model-download-done', () => {
       doneUnsub();
     });
 
@@ -142,42 +140,42 @@
     } catch (e) {
       unlisten?.();
       unlisten = null;
-      phase = "error";
+      phase = 'error';
       errorMsg = parseError(e).message;
     }
   }
 
   async function handleLoad() {
     if (!recommended) return;
-    phase = "loading";
-    errorMsg = "";
+    phase = 'loading';
+    errorMsg = '';
     try {
       await loadModel(recommended.filename);
       status = await getEngineStatus();
-      phase = "done";
+      phase = 'done';
     } catch (e) {
-      phase = "error";
+      phase = 'error';
       errorMsg = parseError(e).message;
     }
   }
 
   let showResetConfirm = $state(false);
-  let resetInput = $state("");
+  let resetInput = $state('');
   let resetting = $state(false);
-  let resetError = $state("");
+  let resetError = $state('');
 
   // Export state
   let showExportConfirm = $state(false);
-  let exportInput = $state("");
+  let exportInput = $state('');
   let exporting = $state(false);
-  let exportError = $state("");
+  let exportError = $state('');
 
   async function handleReset() {
     resetting = true;
-    resetError = "";
+    resetError = '';
     try {
       await resetApp();
-      goto("/");
+      goto('/');
     } catch (e) {
       resetError = parseError(e).message;
       resetting = false;
@@ -186,18 +184,18 @@
 
   async function handleExport() {
     exporting = true;
-    exportError = "";
+    exportError = '';
     try {
       const zipData = await exportAllPatientData();
 
       // Convert number array to Uint8Array
       const blob = new Blob([new Uint8Array(zipData)], {
-        type: "application/zip"
+        type: 'application/zip',
       });
 
       // Create download link
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
+      const a = document.createElement('a');
       a.href = url;
       a.download = `RamDoc_Export_${new Date().toISOString().split('T')[0]}.zip`;
       document.body.appendChild(a);
@@ -207,7 +205,7 @@
 
       // Reset the form
       showExportConfirm = false;
-      exportInput = "";
+      exportInput = '';
     } catch (e) {
       exportError = parseError(e).message;
     } finally {
@@ -227,8 +225,12 @@
     <div class="bg-gray-100 dark:bg-gray-800 rounded-lg p-4 mb-4">
       <div class="flex items-center justify-between mb-3">
         <div>
-          <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{$t('settings.currentVersion')}</p>
-          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">{appVersion || $t('common.loading')}</p>
+          <p class="text-sm font-medium text-gray-900 dark:text-gray-100">
+            {$t('settings.currentVersion')}
+          </p>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            {appVersion || $t('common.loading')}
+          </p>
         </div>
         <button
           onclick={handleCheckForUpdates}
@@ -248,7 +250,9 @@
                   {$t('settings.updateAvailable')}
                 </p>
                 <p class="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                  {$t('settings.version')} {updateInfo.latest_version} {$t('settings.versionAvailable')}
+                  {$t('settings.version')}
+                  {updateInfo.latest_version}
+                  {$t('settings.versionAvailable')}
                 </p>
               </div>
             </div>
@@ -265,7 +269,8 @@
             {#if installingUpdate}
               <div class="mb-3">
                 <div class="flex justify-between text-xs text-gray-600 dark:text-gray-400 mb-1">
-                  <span>{$t('settings.downloading')} {$t('settings.downloadingAndInstalling')}</span>
+                  <span>{$t('settings.downloading')} {$t('settings.downloadingAndInstalling')}</span
+                  >
                   <span>{updateProgress}%</span>
                 </div>
                 <div class="w-full bg-gray-300 dark:bg-gray-700 rounded-full h-2">
@@ -322,7 +327,12 @@
       </p>
 
       <div class="space-y-2">
-        <label class="flex items-center gap-3 p-3 rounded-lg border border-gray-300 dark:border-gray-700 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors {$themePreference === 'light' ? 'bg-gray-200 dark:bg-gray-700 border-blue-500' : ''}">
+        <label
+          class="flex items-center gap-3 p-3 rounded-lg border border-gray-300 dark:border-gray-700 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors {$themePreference ===
+          'light'
+            ? 'bg-gray-200 dark:bg-gray-700 border-blue-500'
+            : ''}"
+        >
           <input
             type="radio"
             name="theme"
@@ -332,12 +342,21 @@
             class="w-4 h-4 text-blue-600 focus:ring-blue-500"
           />
           <div>
-            <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{$t('settings.light')}</p>
-            <p class="text-xs text-gray-600 dark:text-gray-400">{$t('settings.lightDescription')}</p>
+            <p class="text-sm font-medium text-gray-900 dark:text-gray-100">
+              {$t('settings.light')}
+            </p>
+            <p class="text-xs text-gray-600 dark:text-gray-400">
+              {$t('settings.lightDescription')}
+            </p>
           </div>
         </label>
 
-        <label class="flex items-center gap-3 p-3 rounded-lg border border-gray-300 dark:border-gray-700 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors {$themePreference === 'dark' ? 'bg-gray-200 dark:bg-gray-700 border-blue-500' : ''}">
+        <label
+          class="flex items-center gap-3 p-3 rounded-lg border border-gray-300 dark:border-gray-700 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors {$themePreference ===
+          'dark'
+            ? 'bg-gray-200 dark:bg-gray-700 border-blue-500'
+            : ''}"
+        >
           <input
             type="radio"
             name="theme"
@@ -347,12 +366,19 @@
             class="w-4 h-4 text-blue-600 focus:ring-blue-500"
           />
           <div>
-            <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{$t('settings.dark')}</p>
+            <p class="text-sm font-medium text-gray-900 dark:text-gray-100">
+              {$t('settings.dark')}
+            </p>
             <p class="text-xs text-gray-600 dark:text-gray-400">{$t('settings.darkDescription')}</p>
           </div>
         </label>
 
-        <label class="flex items-center gap-3 p-3 rounded-lg border border-gray-300 dark:border-gray-700 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors {$themePreference === 'system' ? 'bg-gray-200 dark:bg-gray-700 border-blue-500' : ''}">
+        <label
+          class="flex items-center gap-3 p-3 rounded-lg border border-gray-300 dark:border-gray-700 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors {$themePreference ===
+          'system'
+            ? 'bg-gray-200 dark:bg-gray-700 border-blue-500'
+            : ''}"
+        >
           <input
             type="radio"
             name="theme"
@@ -362,8 +388,12 @@
             class="w-4 h-4 text-blue-600 focus:ring-blue-500"
           />
           <div>
-            <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{$t('settings.system')}</p>
-            <p class="text-xs text-gray-600 dark:text-gray-400">{$t('settings.systemDescription')}</p>
+            <p class="text-sm font-medium text-gray-900 dark:text-gray-100">
+              {$t('settings.system')}
+            </p>
+            <p class="text-xs text-gray-600 dark:text-gray-400">
+              {$t('settings.systemDescription')}
+            </p>
           </div>
         </label>
       </div>
@@ -378,7 +408,12 @@
       </p>
 
       <div class="space-y-2">
-        <label class="flex items-center gap-3 p-3 rounded-lg border border-gray-300 dark:border-gray-700 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors {$language === 'en' ? 'bg-gray-200 dark:bg-gray-700 border-blue-500' : ''}">
+        <label
+          class="flex items-center gap-3 p-3 rounded-lg border border-gray-300 dark:border-gray-700 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors {$language ===
+          'en'
+            ? 'bg-gray-200 dark:bg-gray-700 border-blue-500'
+            : ''}"
+        >
           <input
             type="radio"
             name="language"
@@ -388,12 +423,19 @@
             class="w-4 h-4 text-blue-600 focus:ring-blue-500"
           />
           <div>
-            <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{$t('settings.english')}</p>
+            <p class="text-sm font-medium text-gray-900 dark:text-gray-100">
+              {$t('settings.english')}
+            </p>
             <p class="text-xs text-gray-600 dark:text-gray-400">English</p>
           </div>
         </label>
 
-        <label class="flex items-center gap-3 p-3 rounded-lg border border-gray-300 dark:border-gray-700 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors {$language === 'de' ? 'bg-gray-200 dark:bg-gray-700 border-blue-500' : ''}">
+        <label
+          class="flex items-center gap-3 p-3 rounded-lg border border-gray-300 dark:border-gray-700 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors {$language ===
+          'de'
+            ? 'bg-gray-200 dark:bg-gray-700 border-blue-500'
+            : ''}"
+        >
           <input
             type="radio"
             name="language"
@@ -403,7 +445,9 @@
             class="w-4 h-4 text-blue-600 focus:ring-blue-500"
           />
           <div>
-            <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{$t('settings.german')}</p>
+            <p class="text-sm font-medium text-gray-900 dark:text-gray-100">
+              {$t('settings.german')}
+            </p>
             <p class="text-xs text-gray-600 dark:text-gray-400">Deutsch</p>
           </div>
         </label>
@@ -412,7 +456,9 @@
   </section>
 
   <section>
-    <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-200 mb-4">{$t('settings.llmModelSection')}</h2>
+    <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-200 mb-4">
+      {$t('settings.llmModelSection')}
+    </h2>
 
     <!-- Current status -->
     <div class="bg-gray-100 dark:bg-gray-800 rounded-lg p-4 mb-6 flex items-center gap-3">
@@ -434,10 +480,14 @@
             {$t('settings.modelDownloadedNotLoaded')}
           </p>
           <p class="text-xs text-gray-600 dark:text-gray-400">
-            {$t('settings.modelDownloadedInfo').replace('{name}', status.downloaded_filename ?? '').replace('{ram}', formatBytes(status.total_ram_bytes))}
+            {$t('settings.modelDownloadedInfo')
+              .replace('{name}', status.downloaded_filename ?? '')
+              .replace('{ram}', formatBytes(status.total_ram_bytes))}
           </p>
         {:else}
-          <p class="text-sm text-gray-900 dark:text-gray-100 font-medium">{$t('settings.noModelDownloaded')}</p>
+          <p class="text-sm text-gray-900 dark:text-gray-100 font-medium">
+            {$t('settings.noModelDownloaded')}
+          </p>
           {#if status}
             <p class="text-xs text-gray-600 dark:text-gray-400">
               {$t('settings.ramAvailable').replace('{ram}', formatBytes(status.total_ram_bytes))}
@@ -449,7 +499,9 @@
 
     <!-- Recommended model card -->
     {#if recommended && !status?.is_loaded}
-      <div class="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-4 mb-4">
+      <div
+        class="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-4 mb-4"
+      >
         <div class="flex items-start justify-between gap-4 mb-1">
           <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{recommended.name}</p>
           <span class="text-xs text-gray-600 dark:text-gray-400 shrink-0"
@@ -458,7 +510,7 @@
         </div>
         <p class="text-xs text-gray-600 dark:text-gray-400 mb-4">{recommended.reason}</p>
 
-        {#if phase === "downloading"}
+        {#if phase === 'downloading'}
           <div class="mb-3">
             <div class="flex justify-between text-xs text-gray-600 dark:text-gray-400 mb-1">
               <span>{$t('settings.downloadingLabel')}</span>
@@ -471,11 +523,11 @@
               ></div>
             </div>
           </div>
-        {:else if phase === "loading"}
+        {:else if phase === 'loading'}
           <p class="text-xs text-blue-400 mb-3">{$t('settings.loadingModelLabel')}</p>
         {/if}
 
-        {#if phase === "error"}
+        {#if phase === 'error'}
           <p class="text-xs text-red-400 mb-3">{errorMsg}</p>
         {/if}
 
@@ -483,34 +535,38 @@
           <div class="flex gap-2">
             <button
               onclick={handleLoad}
-              disabled={phase === "downloading" || phase === "loading"}
+              disabled={phase === 'downloading' || phase === 'loading'}
               class="px-4 py-2 text-sm rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors"
             >
-              {phase === "loading" ? $t('common.loading') : $t('settings.loadModel')}
+              {phase === 'loading' ? $t('common.loading') : $t('settings.loadModel')}
             </button>
             <button
               onclick={handleDownload}
-              disabled={phase === "downloading" || phase === "loading"}
+              disabled={phase === 'downloading' || phase === 'loading'}
               class="px-4 py-2 text-sm rounded-lg bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 dark:text-gray-100 transition-colors"
             >
-              {phase === "downloading" ? $t('settings.downloadingLabel') : $t('settings.redownload')}
+              {phase === 'downloading'
+                ? $t('settings.downloadingLabel')
+                : $t('settings.redownload')}
             </button>
           </div>
         {:else}
           <div class="flex gap-2">
             <button
               onclick={handleDownload}
-              disabled={phase === "downloading" || phase === "loading"}
+              disabled={phase === 'downloading' || phase === 'loading'}
               class="px-4 py-2 text-sm rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors"
             >
-              {phase === "downloading" ? $t('settings.downloadingLabel') : $t('settings.downloadAndLoad')}
+              {phase === 'downloading'
+                ? $t('settings.downloadingLabel')
+                : $t('settings.downloadAndLoad')}
             </button>
             <button
               onclick={handleLoad}
-              disabled={phase === "downloading" || phase === "loading"}
+              disabled={phase === 'downloading' || phase === 'loading'}
               class="px-4 py-2 text-sm rounded-lg bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 dark:text-gray-100 transition-colors"
             >
-              {phase === "loading" ? $t('common.loading') : $t('settings.loadExisting')}
+              {phase === 'loading' ? $t('common.loading') : $t('settings.loadExisting')}
             </button>
           </div>
           <p class="text-xs text-gray-600 dark:text-gray-400 mt-2">
@@ -520,7 +576,7 @@
       </div>
     {/if}
 
-    {#if phase === "done" && status?.is_loaded}
+    {#if phase === 'done' && status?.is_loaded}
       <p class="text-sm text-green-400">
         {$t('settings.modelReadyMsg')}
       </p>
@@ -528,7 +584,9 @@
   </section>
 
   <section class="mt-10">
-    <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-200 mb-4">{$t('settings.embeddingModel')}</h2>
+    <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-200 mb-4">
+      {$t('settings.embeddingModel')}
+    </h2>
     <p class="text-xs text-gray-600 dark:text-gray-400 mb-4">
       {$t('settings.embeddingModelDesc')}
     </p>
@@ -543,9 +601,7 @@
       ></div>
       <div class="flex-1">
         {#if embedStatus?.is_loaded}
-          <p class="text-sm text-gray-900 dark:text-gray-100 font-medium">
-            nomic-embed-text-v1.5
-          </p>
+          <p class="text-sm text-gray-900 dark:text-gray-100 font-medium">nomic-embed-text-v1.5</p>
           <p class="text-xs text-gray-600 dark:text-gray-400">{$t('settings.embeddingLoaded')}</p>
         {:else if embedStatus?.is_downloaded}
           <p class="text-sm text-gray-900 dark:text-gray-100 font-medium">
@@ -555,38 +611,43 @@
             {$t('settings.embeddingCachedDesc')}
           </p>
         {:else}
-          <p class="text-sm text-gray-900 dark:text-gray-100 font-medium">{$t('settings.embeddingNotDownloaded')}</p>
+          <p class="text-sm text-gray-900 dark:text-gray-100 font-medium">
+            {$t('settings.embeddingNotDownloaded')}
+          </p>
           <p class="text-xs text-gray-600 dark:text-gray-400">
             {$t('settings.embeddingNotDownloadedDesc')}
           </p>
         {/if}
       </div>
 
-      {#if embedPhase !== "done"}
+      {#if embedPhase !== 'done'}
         <button
           onclick={handleInitEmbed}
-          disabled={embedPhase === "loading"}
+          disabled={embedPhase === 'loading'}
           class="px-4 py-2 text-sm rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors shrink-0"
         >
-          {embedPhase === "loading" ? $t('common.loading') : $t('settings.loadNow')}
+          {embedPhase === 'loading' ? $t('common.loading') : $t('settings.loadNow')}
         </button>
       {/if}
     </div>
 
-    {#if embedPhase === "loading"}
+    {#if embedPhase === 'loading'}
       <p class="text-xs text-blue-400">
         {$t('settings.embeddingInitializing')}
       </p>
     {/if}
-    {#if embedPhase === "error"}
+    {#if embedPhase === 'error'}
       <p class="text-xs text-red-400">{embedError}</p>
     {/if}
   </section>
 
   <section class="mt-10">
-    <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-200 mb-2">{$t('settings.about')}</h2>
+    <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-200 mb-2">
+      {$t('settings.about')}
+    </h2>
     <p class="text-sm text-gray-600 dark:text-gray-400">
-      {$t('settings.appVersion')}: <span class="text-gray-900 dark:text-gray-100">{appVersion || "…"}</span>
+      {$t('settings.appVersion')}:
+      <span class="text-gray-900 dark:text-gray-100">{appVersion || '…'}</span>
     </p>
   </section>
 
@@ -597,7 +658,9 @@
     <div class="border border-amber-600 rounded-lg p-4 mb-4">
       <div class="flex items-start justify-between gap-4">
         <div>
-          <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{$t('settings.emergencyExport')}</p>
+          <p class="text-sm font-medium text-gray-900 dark:text-gray-100">
+            {$t('settings.emergencyExport')}
+          </p>
           <p class="text-xs text-gray-600 dark:text-gray-400 mt-1">
             {$t('settings.emergencyExportDesc')}
           </p>
@@ -606,8 +669,8 @@
           <button
             onclick={() => {
               showExportConfirm = true;
-              exportInput = "";
-              exportError = "";
+              exportInput = '';
+              exportError = '';
             }}
             class="px-4 py-2 text-sm rounded-lg bg-amber-700 hover:bg-amber-600 text-white transition-colors shrink-0"
           >
@@ -628,7 +691,7 @@
               placeholder={$t('settings.exportConfirmWord')}
               class="flex-1 px-3 py-2 text-sm rounded-lg bg-gray-200 dark:bg-gray-900 border border-gray-400 dark:border-gray-600 text-gray-900 dark:text-gray-100 placeholder-gray-500 focus:outline-none focus:border-amber-500"
               onkeydown={(e) => {
-                if (e.key === "Enter" && exportInput === $t('settings.exportConfirmWord'))
+                if (e.key === 'Enter' && exportInput === $t('settings.exportConfirmWord'))
                   handleExport();
               }}
             />
@@ -642,8 +705,8 @@
             <button
               onclick={() => {
                 showExportConfirm = false;
-                exportInput = "";
-                exportError = "";
+                exportInput = '';
+                exportError = '';
               }}
               class="px-4 py-2 text-sm rounded-lg bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 transition-colors shrink-0"
             >
@@ -661,7 +724,9 @@
     <div class="border border-red-800 rounded-lg p-4">
       <div class="flex items-start justify-between gap-4">
         <div>
-          <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{$t('settings.factoryReset')}</p>
+          <p class="text-sm font-medium text-gray-900 dark:text-gray-100">
+            {$t('settings.factoryReset')}
+          </p>
           <p class="text-xs text-gray-600 dark:text-gray-400 mt-1">
             {$t('settings.factoryResetShortDesc')}
           </p>
@@ -670,8 +735,8 @@
           <button
             onclick={() => {
               showResetConfirm = true;
-              resetInput = "";
-              resetError = "";
+              resetInput = '';
+              resetError = '';
             }}
             class="px-4 py-2 text-sm rounded-lg bg-red-700 hover:bg-red-600 text-white transition-colors shrink-0"
           >
@@ -692,7 +757,8 @@
               placeholder={$t('settings.resetConfirmWord')}
               class="flex-1 px-3 py-2 text-sm rounded-lg bg-gray-200 dark:bg-gray-900 border border-gray-400 dark:border-gray-600 text-gray-900 dark:text-gray-100 placeholder-gray-500 focus:outline-none focus:border-red-500"
               onkeydown={(e) => {
-                if (e.key === "Enter" && resetInput === $t('settings.resetConfirmWord')) handleReset();
+                if (e.key === 'Enter' && resetInput === $t('settings.resetConfirmWord'))
+                  handleReset();
               }}
             />
             <button
@@ -705,8 +771,8 @@
             <button
               onclick={() => {
                 showResetConfirm = false;
-                resetInput = "";
-                resetError = "";
+                resetInput = '';
+                resetError = '';
               }}
               class="px-4 py-2 text-sm rounded-lg bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 transition-colors shrink-0"
             >

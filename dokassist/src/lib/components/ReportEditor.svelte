@@ -5,7 +5,9 @@
   let showPreview = false;
 </script>
 
-<div class="flex flex-col h-full border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+<div
+  class="flex flex-col h-full border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden"
+>
   <div class="flex border-b border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800">
     <button
       on:click={() => (showPreview = false)}
@@ -29,7 +31,8 @@
     {#if showPreview}
       <div class="p-6 prose dark:prose-invert max-w-none">
         {#if content}
-          <pre class="whitespace-pre-wrap font-sans text-gray-900 dark:text-gray-100">{content}</pre>
+          <pre
+            class="whitespace-pre-wrap font-sans text-gray-900 dark:text-gray-100">{content}</pre>
         {:else}
           <p class="text-gray-400 dark:text-gray-500 italic">No content to preview</p>
         {/if}

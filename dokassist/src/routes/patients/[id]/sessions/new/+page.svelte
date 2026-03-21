@@ -25,16 +25,14 @@
     'Krisenintervention',
     'Psychotherapie',
     'Medikamentenanpassung',
-    'Andere'
+    'Andere',
   ];
 
   function handleAMDPScoreChange(code: string, score: 0 | 1 | 2 | 3) {
     // Find and update the score for the specific item
-    amdpCategories = amdpCategories.map(category => ({
+    amdpCategories = amdpCategories.map((category) => ({
       ...category,
-      items: category.items.map(item =>
-        item.code === code ? { ...item, score } : item
-      )
+      items: category.items.map((item) => (item.code === code ? { ...item, score } : item)),
     }));
   }
 
@@ -56,7 +54,7 @@
         session_type: sessionType,
         duration_minutes: durationMinutes || undefined,
         notes,
-        amdp_data: showAMDP ? serializeAMDP(amdpCategories) : undefined
+        amdp_data: showAMDP ? serializeAMDP(amdpCategories) : undefined,
       };
 
       await createSession(input);
@@ -131,9 +129,7 @@
     </div>
 
     <div>
-      <label for="notes" class="block text-sm font-medium text-gray-300 mb-1">
-        Notizen *
-      </label>
+      <label for="notes" class="block text-sm font-medium text-gray-300 mb-1"> Notizen * </label>
       <textarea
         id="notes"
         bind:value={notes}
@@ -151,7 +147,9 @@
           bind:checked={showAMDP}
           class="w-4 h-4 bg-gray-700 border-gray-600 rounded text-blue-600 focus:ring-2 focus:ring-blue-500"
         />
-        <span class="text-sm font-medium text-gray-300">AMDP psychopathologische Befunde erfassen</span>
+        <span class="text-sm font-medium text-gray-300"
+          >AMDP psychopathologische Befunde erfassen</span
+        >
       </label>
     </div>
 

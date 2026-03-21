@@ -1,12 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-  import {
-    checkForUpdates,
-    installUpdate,
-    parseError,
-    type UpdateInfo,
-  } from '$lib/api';
+  import { checkForUpdates, installUpdate, parseError, type UpdateInfo } from '$lib/api';
 
   let updateInfo = $state<UpdateInfo | null>(null);
   let installing = $state(false);
@@ -72,10 +67,14 @@
 </script>
 
 {#if showNotification && updateInfo?.update_available}
-  <div class="fixed top-4 right-4 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-4 max-w-md">
+  <div
+    class="fixed top-4 right-4 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-4 max-w-md"
+  >
     <div class="flex items-start justify-between gap-4">
       <div class="flex-1">
-        <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">Update Available</h3>
+        <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">
+          Update Available
+        </h3>
         <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">
           Version {updateInfo.latest_version} is now available. You are currently on version {updateInfo.current_version}.
         </p>
@@ -128,7 +127,12 @@
         class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors disabled:opacity-50"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M6 18L18 6M6 6l12 12"
+          />
         </svg>
       </button>
     </div>

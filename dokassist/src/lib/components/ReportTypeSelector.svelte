@@ -12,18 +12,18 @@
     {
       value: 'Befundbericht',
       label: 'Befundbericht',
-      descriptionKey: 'reports.types.befundbericht'
+      descriptionKey: 'reports.types.befundbericht',
     },
     {
       value: 'Verlaufsbericht',
       label: 'Verlaufsbericht',
-      descriptionKey: 'reports.types.verlaufsbericht'
+      descriptionKey: 'reports.types.verlaufsbericht',
     },
     {
       value: 'Ueberweisungsschreiben',
       label: 'Überweisungsschreiben',
-      descriptionKey: 'reports.types.ueberweisungsschreiben'
-    }
+      descriptionKey: 'reports.types.ueberweisungsschreiben',
+    },
   ];
 
   function selectType(type: string) {

@@ -14,7 +14,7 @@
       return date.toLocaleDateString('de-CH', {
         year: 'numeric',
         month: '2-digit',
-        day: '2-digit'
+        day: '2-digit',
       });
     } catch {
       return dateStr;
@@ -30,7 +30,7 @@
 <button
   type="button"
   class="w-full text-left p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-blue-500 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all"
-  onclick={onclick}
+  {onclick}
 >
   <div class="flex justify-between items-start mb-2">
     <div class="flex-1">

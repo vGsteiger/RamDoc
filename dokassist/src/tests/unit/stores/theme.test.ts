@@ -15,12 +15,12 @@ const localStorageMock = (() => {
     },
     clear: () => {
       store = {};
-    }
+    },
   };
 })();
 
 Object.defineProperty(window, 'localStorage', {
-  value: localStorageMock
+  value: localStorageMock,
 });
 
 // Mock matchMedia
@@ -43,11 +43,11 @@ const createMatchMediaMock = (matches: boolean) => {
     }),
     dispatchEvent: vi.fn(),
     triggerChange: (newMatches: boolean) => {
-      listeners.forEach(listener => {
+      listeners.forEach((listener) => {
         listener({ matches: newMatches } as MediaQueryListEvent);
       });
     },
-    getListeners: () => listeners
+    getListeners: () => listeners,
   };
 };
 
@@ -150,7 +150,7 @@ describe('resolvedTheme store', () => {
     matchMediaMock.triggerChange(false);
 
     // Wait a tick
-    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
     // Should still be light because we're not in system mode
     expect(get(resolvedTheme)).toBe('light');

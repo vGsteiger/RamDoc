@@ -52,8 +52,10 @@
       URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Failed to download file:', error);
-      errorMessage = $t('files.failedToDownload').replace('{filename}', file.filename).replace('{error}', String(error));
-      setTimeout(() => errorMessage = '', 5000);
+      errorMessage = $t('files.failedToDownload')
+        .replace('{filename}', file.filename)
+        .replace('{error}', String(error));
+      setTimeout(() => (errorMessage = ''), 5000);
     }
   }
 
@@ -65,11 +67,13 @@
     try {
       _deletingFileId = file.id;
       await deleteFile(file.id);
-      files = files.filter(f => f.id !== file.id);
+      files = files.filter((f) => f.id !== file.id);
     } catch (error) {
       console.error('Failed to delete file:', error);
-      errorMessage = $t('files.failedToDelete').replace('{filename}', file.filename).replace('{error}', String(error));
-      setTimeout(() => errorMessage = '', 5000);
+      errorMessage = $t('files.failedToDelete')
+        .replace('{filename}', file.filename)
+        .replace('{error}', String(error));
+      setTimeout(() => (errorMessage = ''), 5000);
     } finally {
       _deletingFileId = null;
     }
@@ -88,11 +92,13 @@
   <h2 class="text-xl font-bold text-gray-900 dark:text-gray-100 mb-6">{$t('files.title')}</h2>
 
   <div class="mb-8">
-    <FileUploader patientId={patientId} onUpload={handleUpload} />
+    <FileUploader {patientId} onUpload={handleUpload} />
   </div>
 
   {#if errorMessage}
-    <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-6">
+    <div
+      class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-6"
+    >
       <p class="text-sm text-red-600 dark:text-red-400">{errorMessage}</p>
     </div>
   {/if}
@@ -107,7 +113,9 @@
       </div>
     </div>
   {:else if files.length === 0}
-    <div class="text-center py-12 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800">
+    <div
+      class="text-center py-12 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800"
+    >
       <div class="mb-4 flex justify-center text-gray-400">
         <FolderOpen size={48} />
       </div>
@@ -117,12 +125,7 @@
   {:else}
     <div class="space-y-4">
       {#each files as file (file.id)}
-        <FileCard
-          {file}
-          onView={handleView}
-          onDownload={handleDownload}
-          onDelete={handleDelete}
-        />
+        <FileCard {file} onView={handleView} onDownload={handleDownload} onDelete={handleDelete} />
       {/each}
     </div>
   {/if}

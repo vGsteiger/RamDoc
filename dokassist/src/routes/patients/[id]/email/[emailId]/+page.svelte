@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { page } from "$app/stores";
-  import { goto } from "$app/navigation";
-  import { onMount } from "svelte";
+  import { page } from '$app/stores';
+  import { goto } from '$app/navigation';
+  import { onMount } from 'svelte';
   import {
     getEmail,
     updateEmail,
@@ -10,17 +10,17 @@
     type Email,
     type UpdateEmail,
     type AppError,
-  } from "$lib/api";
-  import ErrorDisplay from "$lib/components/ErrorDisplay.svelte";
-  import { t } from "$lib/translations";
+  } from '$lib/api';
+  import ErrorDisplay from '$lib/components/ErrorDisplay.svelte';
+  import { t } from '$lib/translations';
 
   $: patientId = $page.params.id;
   $: emailId = $page.params.emailId;
 
   let email: Email | null = null;
-  let recipientEmail = "";
-  let subject = "";
-  let body = "";
+  let recipientEmail = '';
+  let subject = '';
+  let body = '';
   let error: AppError | null = null;
   let isLoading = true;
   let isSaving = false;
@@ -34,7 +34,7 @@
       recipientEmail = email.recipient_email;
       subject = email.subject;
       body = email.body;
-      isEditing = email.status === "draft";
+      isEditing = email.status === 'draft';
     } catch (e) {
       error = parseError(e);
     } finally {
@@ -45,9 +45,9 @@
   async function handleSaveChanges() {
     if (!recipientEmail.trim() || !subject.trim() || !body.trim()) {
       error = {
-        code: "VALIDATION_ERROR",
+        code: 'VALIDATION_ERROR',
         message: $t('email.validationError'),
-        ref: "VALIDATION",
+        ref: 'VALIDATION',
       };
       return;
     }
@@ -93,7 +93,9 @@
 
       await markEmailAsSent(emailId);
 
-      const mailtoLink = encodeURI(`mailto:${recipientEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
+      const mailtoLink = encodeURI(
+        `mailto:${recipientEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+      );
       window.location.href = mailtoLink;
 
       setTimeout(() => {
@@ -107,12 +109,12 @@
   }
 
   function formatDate(dateStr: string): string {
-    return new Date(dateStr).toLocaleDateString("de-DE", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
+    return new Date(dateStr).toLocaleDateString('de-DE', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
     });
   }
 
@@ -130,18 +132,18 @@
     <div class="mb-6">
       <div class="flex justify-between items-start mb-2">
         <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
-          {email.status === "draft" ? $t('email.editDraft') : $t('email.viewEmail')}
+          {email.status === 'draft' ? $t('email.editDraft') : $t('email.viewEmail')}
         </h2>
         <span
           class="px-3 py-1 text-sm rounded {email.status === 'sent'
             ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
             : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'}"
         >
-          {email.status === "draft" ? $t('email.draft') : $t('email.sentStatus')}
+          {email.status === 'draft' ? $t('email.draft') : $t('email.sentStatus')}
         </span>
       </div>
       <p class="text-gray-500 dark:text-gray-400 text-sm">
-        {#if email.status === "sent" && email.sent_at}
+        {#if email.status === 'sent' && email.sent_at}
           {$t('email.sent')} {formatDate(email.sent_at)}
         {:else}
           {$t('email.created')} {formatDate(email.created_at)}
@@ -155,9 +157,14 @@
       </div>
     {/if}
 
-    <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700 space-y-4">
+    <div
+      class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700 space-y-4"
+    >
       <div>
-        <label for="recipient" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+        <label
+          for="recipient"
+          class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+        >
           {$t('email.to')}
         </label>
         <input
@@ -170,7 +177,10 @@
       </div>
 
       <div>
-        <label for="subject" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+        <label
+          for="subject"
+          class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+        >
           {$t('email.subject')}
         </label>
         <input
@@ -195,7 +205,9 @@
         ></textarea>
       </div>
 
-      <div class="flex justify-between items-center pt-4 border-t border-gray-200 dark:border-gray-700">
+      <div
+        class="flex justify-between items-center pt-4 border-t border-gray-200 dark:border-gray-700"
+      >
         <a
           href={`/patients/${patientId}/email`}
           class="px-4 py-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
@@ -222,7 +234,9 @@
         {:else}
           <button
             on:click={() => {
-              const mailtoLink = encodeURI(`mailto:${recipientEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
+              const mailtoLink = encodeURI(
+                `mailto:${recipientEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+              );
               window.location.href = mailtoLink;
             }}
             class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"

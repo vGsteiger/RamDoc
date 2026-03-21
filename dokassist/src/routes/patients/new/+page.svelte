@@ -29,7 +29,9 @@
     <h1 class="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-6">New Patient</h1>
 
     {#if error}
-      <div class="mb-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-red-600 dark:text-red-400">
+      <div
+        class="mb-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-red-600 dark:text-red-400"
+      >
         {error}
       </div>
     {/if}

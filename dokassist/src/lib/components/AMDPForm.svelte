@@ -33,10 +33,7 @@
 
   <!-- Active category content -->
   {#if categories[activeCategoryIndex]}
-    <AMDPCategoryComponent
-      category={categories[activeCategoryIndex]}
-      {onScoreChange}
-    />
+    <AMDPCategoryComponent category={categories[activeCategoryIndex]} {onScoreChange} />
   {/if}
 
   <!-- Navigation buttons -->
@@ -53,7 +50,8 @@
       type="button"
       class="px-4 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
       disabled={activeCategoryIndex === categories.length - 1}
-      onclick={() => (activeCategoryIndex = Math.min(categories.length - 1, activeCategoryIndex + 1))}
+      onclick={() =>
+        (activeCategoryIndex = Math.min(categories.length - 1, activeCategoryIndex + 1))}
     >
       Weiter →
     </button>
