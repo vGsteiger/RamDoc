@@ -1,7 +1,8 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import { createPatient, type CreatePatient } from '$lib/api';
+  import { createPatient, parseError, type CreatePatient } from '$lib/api';
   import PatientForm from '$lib/components/PatientForm.svelte';
+  import { addToast } from '$lib/stores/toast';
 
   let isSubmitting = $state(false);
   let error = $state('');
@@ -11,9 +12,15 @@
       isSubmitting = true;
       error = '';
       const patient = await createPatient(event.detail);
+      addToast('Patient created');
       goto(`/patients/${patient.id}`);
     } catch (e) {
-      error = e instanceof Error ? e.message : 'Failed to create patient';
+      const { code } = parseError(e);
+      if (code === 'DB_UNIQUE_CONSTRAINT') {
+        error = 'A patient with this AHV number already exists.';
+      } else {
+        error = e instanceof Error ? e.message : 'Failed to create patient';
+      }
       console.error('Error creating patient:', e);
       isSubmitting = false;
     }

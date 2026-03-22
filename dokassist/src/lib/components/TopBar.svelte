@@ -204,13 +204,20 @@
     <button
       onclick={handleDotClick}
       disabled={isLoaded || isLoadingModel}
-      class="w-3 h-3 rounded-full transition-colors focus:outline-none {isLoadingModel
+      class="w-3 h-3 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 {isLoadingModel
         ? 'bg-amber-400 animate-pulse cursor-wait'
         : isLoaded
           ? 'bg-green-500 cursor-default'
           : isDownloaded
             ? 'bg-amber-400 cursor-pointer hover:bg-amber-300'
             : 'bg-red-500 cursor-pointer hover:bg-red-400'}"
+      aria-label={isLoadingModel
+        ? $t('topbar.loadingModel')
+        : isLoaded
+          ? $t('topbar.modelLoaded')
+          : isDownloaded
+            ? $t('topbar.modelDownloaded')
+            : $t('topbar.noModelDownloaded')}
       title={isLoadingModel
         ? $t('topbar.loadingModel')
         : isLoaded

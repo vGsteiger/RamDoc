@@ -2,6 +2,40 @@
   import type { ChatMessageRow } from '$lib/api';
   import { Zap, Check } from 'lucide-svelte';
 
+  // Internal fields to hide from tool result display
+  const HIDDEN_FIELDS = new Set(['id', 'patient_id', 'session_id', 'created_at', 'updated_at', 'vault_path', 'extracted_text', 'metadata_json', 'prompt_hash', 'amdp_data']);
+
+  function toLabel(key: string): string {
+    return key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+
+  function formatValue(val: unknown): string {
+    if (val === null || val === undefined) return '—';
+    if (typeof val === 'boolean') return val ? 'Yes' : 'No';
+    if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
+      return val.slice(0, 10).split('-').reverse().join('.');
+    }
+    return String(val);
+  }
+
+  type JsonObject = Record<string, unknown>;
+
+  function parseToolResult(content: string): JsonObject | JsonObject[] | null {
+    try {
+      const parsed: unknown = JSON.parse(content);
+      if (Array.isArray(parsed) || (typeof parsed === 'object' && parsed !== null)) {
+        return parsed as JsonObject | JsonObject[];
+      }
+    } catch {
+      // not JSON
+    }
+    return null;
+  }
+
+  function visibleEntries(obj: JsonObject): [string, unknown][] {
+    return Object.entries(obj).filter(([k]) => !HIDDEN_FIELDS.has(k));
+  }
+
   interface Props {
     message: ChatMessageRow;
     isStreaming?: boolean;
@@ -68,6 +102,7 @@
     <div class="max-w-[80%]">
       <button
         onclick={() => (toolCallCollapsed = !toolCallCollapsed)}
+        aria-label={toolCallCollapsed ? 'Show tool call details' : 'Hide tool call details'}
         class="flex items-center gap-2 text-xs text-gray-500 hover:text-gray-400 transition-colors"
       >
         <Zap size={14} class="text-amber-500" />
@@ -86,10 +121,12 @@
     </div>
   </div>
 {:else if message.role === 'tool_result'}
+  {@const parsed = parseToolResult(message.content)}
   <div class="flex justify-start mb-3">
     <div class="max-w-[80%]">
       <button
         onclick={() => (toolResultCollapsed = !toolResultCollapsed)}
+        aria-label={toolResultCollapsed ? 'Ergebnis anzeigen' : 'Ergebnis ausblenden'}
         class="flex items-center gap-2 text-xs text-gray-500 hover:text-gray-400 transition-colors"
       >
         <Check size={14} class="text-green-500" />
@@ -100,8 +137,34 @@
         <div
           class="mt-1 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800/50 rounded-lg px-3 py-2"
         >
-          <pre
-            class="text-xs text-gray-500 dark:text-gray-400 whitespace-pre-wrap overflow-x-auto">{message.content}</pre>
+          {#if parsed !== null}
+            {#if Array.isArray(parsed)}
+              <div class="space-y-2">
+                {#each parsed as item, i}
+                  <div class="text-xs text-gray-700 dark:text-gray-300 border-b border-green-200 dark:border-green-800/30 pb-1 last:border-0 last:pb-0">
+                    <span class="text-[10px] text-gray-400 uppercase">{i + 1}</span>
+                    {#each visibleEntries(item) as [key, val]}
+                      <div class="flex gap-2">
+                        <span class="text-gray-500 dark:text-gray-400 shrink-0">{toLabel(key)}:</span>
+                        <span class="text-gray-800 dark:text-gray-200">{formatValue(val)}</span>
+                      </div>
+                    {/each}
+                  </div>
+                {/each}
+              </div>
+            {:else}
+              <div class="space-y-1">
+                {#each visibleEntries(parsed) as [key, val]}
+                  <div class="flex gap-2 text-xs">
+                    <span class="text-gray-500 dark:text-gray-400 shrink-0">{toLabel(key)}:</span>
+                    <span class="text-gray-800 dark:text-gray-200">{formatValue(val)}</span>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          {:else}
+            <pre class="text-xs text-gray-500 dark:text-gray-400 whitespace-pre-wrap overflow-x-auto">{message.content}</pre>
+          {/if}
         </div>
       {/if}
     </div>

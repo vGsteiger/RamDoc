@@ -157,3 +157,123 @@ pub fn list_reports_for_patient(
 
     Ok(reports)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::database::init_db;
+    use tempfile::tempdir;
+
+    fn open_test_db() -> (tempfile::TempDir, crate::database::DbPool) {
+        let dir = tempdir().unwrap();
+        let key = crate::crypto::generate_key();
+        let pool = init_db(&dir.path().join("test.db"), &key).unwrap();
+        (dir, pool)
+    }
+
+    fn insert_patient(conn: &Connection) {
+        conn.execute(
+            "INSERT INTO patients (id, first_name, last_name, date_of_birth, ahv_number)
+             VALUES ('p1', 'Anna', 'Test', '1985-01-01', '756.1234.5678.97')",
+            [],
+        )
+        .unwrap();
+    }
+
+    fn make_report(conn: &Connection, report_type: &str, content: &str) -> Report {
+        create_report(
+            conn,
+            CreateReport {
+                patient_id: "p1".into(),
+                report_type: report_type.into(),
+                content: content.into(),
+                model_name: None,
+                prompt_hash: None,
+                session_ids: None,
+            },
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn test_create_and_get_report() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        let r = make_report(&conn, "psychiatric", "Patient is stable.");
+        assert_eq!(r.report_type, "psychiatric");
+        assert_eq!(r.content, "Patient is stable.");
+        assert!(!r.generated_at.is_empty());
+        let r2 = get_report(&conn, &r.id).unwrap();
+        assert_eq!(r.id, r2.id);
+    }
+
+    #[test]
+    fn test_update_report_content() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        let r = make_report(&conn, "referral", "Original content.");
+        let updated = update_report(
+            &conn,
+            &r.id,
+            UpdateReport {
+                report_type: None,
+                content: Some("Updated content.".into()),
+                model_name: None,
+                prompt_hash: None,
+                session_ids: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(updated.content, "Updated content.");
+        assert_eq!(updated.report_type, "referral");
+    }
+
+    #[test]
+    fn test_delete_report() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        let r = make_report(&conn, "discharge", "Discharged.");
+        delete_report(&conn, &r.id).unwrap();
+        assert!(matches!(
+            get_report(&conn, &r.id),
+            Err(AppError::NotFound(_))
+        ));
+    }
+
+    #[test]
+    fn test_list_reports_for_patient() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        make_report(&conn, "type_a", "Content A");
+        make_report(&conn, "type_b", "Content B");
+        make_report(&conn, "type_c", "Content C");
+        let list = list_reports_for_patient(&conn, "p1", 10, 0).unwrap();
+        assert_eq!(list.len(), 3);
+    }
+
+    #[test]
+    fn test_update_report_no_fields() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        let r = make_report(&conn, "progress", "No change.");
+        let unchanged = update_report(
+            &conn,
+            &r.id,
+            UpdateReport {
+                report_type: None,
+                content: None,
+                model_name: None,
+                prompt_hash: None,
+                session_ids: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(unchanged.content, "No change.");
+        assert_eq!(unchanged.report_type, "progress");
+    }
+}

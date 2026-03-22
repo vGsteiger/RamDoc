@@ -173,3 +173,163 @@ pub fn list_diagnoses_for_patient(
 
     Ok(diagnoses)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::database::init_db;
+    use tempfile::tempdir;
+
+    fn open_test_db() -> (tempfile::TempDir, crate::database::DbPool) {
+        let dir = tempdir().unwrap();
+        let key = crate::crypto::generate_key();
+        let pool = init_db(&dir.path().join("test.db"), &key).unwrap();
+        (dir, pool)
+    }
+
+    fn insert_patient(conn: &Connection) {
+        conn.execute(
+            "INSERT INTO patients (id, first_name, last_name, date_of_birth, ahv_number)
+             VALUES ('p1', 'Anna', 'Test', '1985-01-01', '756.1234.5678.97')",
+            [],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_create_and_get_diagnosis() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        let d = create_diagnosis(
+            &conn,
+            CreateDiagnosis {
+                patient_id: "p1".into(),
+                icd10_code: "F32.1".into(),
+                description: "Moderate depressive episode".into(),
+                status: Some("active".into()),
+                diagnosed_date: "2026-01-15".into(),
+                resolved_date: None,
+                notes: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(d.icd10_code, "F32.1");
+        assert_eq!(d.patient_id, "p1");
+        let d2 = get_diagnosis(&conn, &d.id).unwrap();
+        assert_eq!(d.id, d2.id);
+        assert_eq!(d2.description, "Moderate depressive episode");
+    }
+
+    #[test]
+    fn test_create_diagnosis_default_status() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        let d = create_diagnosis(
+            &conn,
+            CreateDiagnosis {
+                patient_id: "p1".into(),
+                icd10_code: "F41.0".into(),
+                description: "Panic disorder".into(),
+                status: None,
+                diagnosed_date: "2026-02-01".into(),
+                resolved_date: None,
+                notes: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(d.status, "active");
+    }
+
+    #[test]
+    fn test_update_diagnosis() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        let d = create_diagnosis(
+            &conn,
+            CreateDiagnosis {
+                patient_id: "p1".into(),
+                icd10_code: "F32.0".into(),
+                description: "Mild depressive episode".into(),
+                status: None,
+                diagnosed_date: "2026-01-01".into(),
+                resolved_date: None,
+                notes: None,
+            },
+        )
+        .unwrap();
+        let updated = update_diagnosis(
+            &conn,
+            &d.id,
+            UpdateDiagnosis {
+                icd10_code: Some("F32.1".into()),
+                description: None,
+                status: None,
+                diagnosed_date: None,
+                resolved_date: Some("2026-03-01".into()),
+                notes: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(updated.icd10_code, "F32.1");
+        assert_eq!(updated.description, "Mild depressive episode");
+        assert_eq!(updated.resolved_date, Some("2026-03-01".into()));
+    }
+
+    #[test]
+    fn test_delete_diagnosis() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        let d = create_diagnosis(
+            &conn,
+            CreateDiagnosis {
+                patient_id: "p1".into(),
+                icd10_code: "F40.1".into(),
+                description: "Social phobia".into(),
+                status: None,
+                diagnosed_date: "2026-01-01".into(),
+                resolved_date: None,
+                notes: None,
+            },
+        )
+        .unwrap();
+        delete_diagnosis(&conn, &d.id).unwrap();
+        assert!(matches!(
+            get_diagnosis(&conn, &d.id),
+            Err(AppError::NotFound(_))
+        ));
+    }
+
+    #[test]
+    fn test_list_diagnoses_for_patient() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        for (code, date) in [
+            ("F32.0", "2026-01-01"),
+            ("F41.0", "2026-02-01"),
+            ("F40.0", "2026-03-01"),
+        ] {
+            create_diagnosis(
+                &conn,
+                CreateDiagnosis {
+                    patient_id: "p1".into(),
+                    icd10_code: code.into(),
+                    description: code.into(),
+                    status: None,
+                    diagnosed_date: date.into(),
+                    resolved_date: None,
+                    notes: None,
+                },
+            )
+            .unwrap();
+        }
+        let list = list_diagnoses_for_patient(&conn, "p1", 10, 0).unwrap();
+        assert_eq!(list.len(), 3);
+        assert_eq!(list[0].diagnosed_date, "2026-03-01");
+        assert_eq!(list[2].diagnosed_date, "2026-01-01");
+    }
+}

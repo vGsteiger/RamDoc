@@ -286,6 +286,7 @@ export interface Session {
   session_date: string;
   session_type: string;
   duration_minutes: number | null;
+  scheduled_time: string | null;
   notes: string | null;
   amdp_data: string | null;
   created_at: string;
@@ -297,6 +298,7 @@ export interface CreateSession {
   session_date: string;
   session_type: string;
   duration_minutes?: number;
+  scheduled_time?: string;
   notes?: string;
   amdp_data?: string;
 }
@@ -305,6 +307,7 @@ export interface UpdateSession {
   session_date?: string;
   session_type?: string;
   duration_minutes?: number;
+  scheduled_time?: string;
   notes?: string;
   amdp_data?: string;
 }

@@ -2,6 +2,7 @@
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { createSession, type CreateSession } from '$lib/api';
+  import { addToast } from '$lib/stores/toast';
   import { AMDP_CATEGORIES, serializeAMDP, type AMDPCategory } from '$lib/amdp';
   import AMDPForm from '$lib/components/AMDPForm.svelte';
   import { get } from 'svelte/store';
@@ -9,8 +10,12 @@
 
   const patientId = $derived($page.params.id);
 
+  const prefilledDate = $page.url.searchParams.get('date');
+  const prefilledTime = $page.url.searchParams.get('time');
+
   let sessionType = $state('Erstgespräch');
-  let sessionDate = $state(new Date().toISOString().split('T')[0]);
+  let sessionDate = $state(prefilledDate ?? new Date().toISOString().split('T')[0]);
+  let sessionTime = $state(prefilledTime ?? '');
   let durationMinutes = $state(50);
   let notes = $state('');
   let amdpCategories = $state<AMDPCategory[]>(JSON.parse(JSON.stringify(AMDP_CATEGORIES)));
@@ -53,11 +58,13 @@
         session_date: sessionDate,
         session_type: sessionType,
         duration_minutes: durationMinutes || undefined,
+        scheduled_time: sessionTime ? `${sessionDate}T${sessionTime}:00` : undefined,
         notes,
         amdp_data: showAMDP ? serializeAMDP(amdpCategories) : undefined,
       };
 
       await createSession(input);
+      addToast('Session saved');
       goto(`/patients/${patientId}/sessions`);
     } catch (err) {
       error = 'Fehler beim Speichern: ' + (err instanceof Error ? err.message : String(err));
@@ -124,6 +131,18 @@
         type="date"
         bind:value={sessionDate}
         required
+        class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+    </div>
+
+    <div>
+      <label for="session-time" class="block text-sm font-medium text-gray-300 mb-1">
+        Uhrzeit (optional)
+      </label>
+      <input
+        id="session-time"
+        type="time"
+        bind:value={sessionTime}
         class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
     </div>

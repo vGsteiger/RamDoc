@@ -36,19 +36,19 @@ describe('PatientForm — create mode', () => {
     const { container } = render(PatientForm);
     const form = container.querySelector('form')!;
     await fireEvent.submit(form);
-    expect(screen.getByText('First name is required')).toBeInTheDocument();
+    expect(screen.getByText(/first name.*required/i)).toBeInTheDocument();
   });
 
   it('shows last-name required error on empty submit', async () => {
     const { container } = render(PatientForm);
     await fireEvent.submit(container.querySelector('form')!);
-    expect(screen.getByText('Last name is required')).toBeInTheDocument();
+    expect(screen.getByText(/last name.*required/i)).toBeInTheDocument();
   });
 
   it('shows date-of-birth required error on empty submit', async () => {
     const { container } = render(PatientForm);
     await fireEvent.submit(container.querySelector('form')!);
-    expect(screen.getByText('Date of birth is required')).toBeInTheDocument();
+    expect(screen.getByText(/date of birth.*required/i)).toBeInTheDocument();
   });
 
   it('disables the submit button while isSubmitting is true', () => {

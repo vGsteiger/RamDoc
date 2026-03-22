@@ -159,3 +159,119 @@ pub fn mark_email_as_sent(conn: &Connection, id: &str) -> Result<Email, AppError
 
     get_email(conn, id)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::database::init_db;
+    use tempfile::tempdir;
+
+    fn open_test_db() -> (tempfile::TempDir, crate::database::DbPool) {
+        let dir = tempdir().unwrap();
+        let key = crate::crypto::generate_key();
+        let pool = init_db(&dir.path().join("test.db"), &key).unwrap();
+        (dir, pool)
+    }
+
+    fn insert_patient(conn: &Connection) {
+        conn.execute(
+            "INSERT INTO patients (id, first_name, last_name, date_of_birth, ahv_number)
+             VALUES ('p1', 'Anna', 'Test', '1985-01-01', '756.1234.5678.97')",
+            [],
+        )
+        .unwrap();
+    }
+
+    fn make_email(conn: &Connection) -> Email {
+        create_email(
+            conn,
+            CreateEmail {
+                patient_id: "p1".into(),
+                recipient_email: "doc@example.com".into(),
+                subject: "Patient Update".into(),
+                body: "Dear Doctor, ...".into(),
+            },
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn test_create_and_get_email() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        let e = make_email(&conn);
+        assert_eq!(e.status, "draft");
+        assert_eq!(e.subject, "Patient Update");
+        assert!(e.sent_at.is_none());
+        let e2 = get_email(&conn, &e.id).unwrap();
+        assert_eq!(e.id, e2.id);
+    }
+
+    #[test]
+    fn test_update_email_subject() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        let e = make_email(&conn);
+        let updated = update_email(
+            &conn,
+            &e.id,
+            UpdateEmail {
+                recipient_email: None,
+                subject: Some("Updated Subject".into()),
+                body: None,
+                status: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(updated.subject, "Updated Subject");
+        assert_eq!(updated.body, "Dear Doctor, ...");
+    }
+
+    #[test]
+    fn test_delete_email() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        let e = make_email(&conn);
+        delete_email(&conn, &e.id).unwrap();
+        assert!(matches!(
+            get_email(&conn, &e.id),
+            Err(AppError::NotFound(_))
+        ));
+    }
+
+    #[test]
+    fn test_list_emails_for_patient() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        make_email(&conn);
+        make_email(&conn);
+        let list = list_emails_for_patient(&conn, "p1", 10, 0).unwrap();
+        assert_eq!(list.len(), 2);
+    }
+
+    #[test]
+    fn test_mark_email_as_sent() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        let e = make_email(&conn);
+        assert_eq!(e.status, "draft");
+        let sent = mark_email_as_sent(&conn, &e.id).unwrap();
+        assert_eq!(sent.status, "sent");
+        assert!(sent.sent_at.is_some());
+    }
+
+    #[test]
+    fn test_mark_nonexistent_email_as_sent() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        assert!(matches!(
+            mark_email_as_sent(&conn, "nonexistent-id"),
+            Err(AppError::NotFound(_))
+        ));
+    }
+}

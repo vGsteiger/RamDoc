@@ -34,6 +34,10 @@ pub enum AppError {
 
     #[error("Update error: {0}")]
     Update(String),
+
+    /// Touch ID sheet was dismissed by the user (not an error — just a cancel).
+    #[error("Touch ID authentication was cancelled")]
+    BiometricCancelled,
 }
 
 impl AppError {
@@ -87,6 +91,7 @@ impl AppError {
             }
             AppError::RateLimited(_) => "RATE_LIMITED".to_string(),
             AppError::Update(_) => "UPDATE_ERROR".to_string(),
+            AppError::BiometricCancelled => "BIOMETRIC_CANCELLED".to_string(),
         }
     }
 

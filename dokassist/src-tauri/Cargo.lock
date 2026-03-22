@@ -1267,11 +1267,12 @@ dependencies = [
 
 [[package]]
 name = "dokassist"
-version = "0.7.11"
+version = "0.7.12"
 dependencies = [
  "aes-gcm",
  "argon2",
  "bip39",
+ "cc",
  "chrono",
  "core-foundation 0.10.1",
  "core-foundation-sys",

@@ -14,22 +14,39 @@ const MAX_DOWNLOAD_BYTES: u64 = 60 * 1024 * 1024 * 1024;
 /// Maximum size we'll accept for an LFS pointer body (they're ~130 bytes).
 const MAX_POINTER_BYTES: usize = 4096;
 
-/// CRIT-3: Map each whitelisted GGUF filename to its HuggingFace raw-git LFS pointer URL.
-/// The pointer file is a tiny text file (~130 bytes) containing the true SHA-256 of the blob,
-/// served over TLS from HuggingFace's git metadata endpoint.
-fn lfs_pointer_url(filename: &str) -> Option<&'static str> {
-    match filename {
-        "Qwen3-30B-A3B-Q4_K_M.gguf" => Some(
-            "https://huggingface.co/unsloth/Qwen3-30B-A3B-GGUF/raw/main/Qwen3-30B-A3B-Q4_K_M.gguf",
-        ),
-        "Qwen3-8B-Q4_K_M.gguf" => Some(
-            "https://huggingface.co/unsloth/Qwen3-8B-GGUF/raw/main/Qwen3-8B-Q4_K_M.gguf",
-        ),
-        "Phi-4-mini-instruct-Q4_K_M.gguf" => Some(
-            "https://huggingface.co/unsloth/Phi-4-mini-instruct-GGUF/raw/main/Phi-4-mini-instruct-Q4_K_M.gguf",
-        ),
-        _ => None,
-    }
+/// Single source of truth for all whitelisted models.
+/// Both the download URL and the LFS pointer URL are co-located so they
+/// cannot diverge — adding a model in one place without the other is a
+/// compile error (missing struct field).
+struct ModelEntry {
+    filename: &'static str,
+    /// CRIT-4: HuggingFace blob URL (resolve/main) — used for the actual download.
+    download_url: &'static str,
+    /// CRIT-3: HuggingFace raw-git URL (raw/main) — returns the LFS pointer text
+    /// (~130 bytes) containing the authoritative SHA-256 of the blob.
+    lfs_pointer_url: &'static str,
+}
+
+const MODELS: &[ModelEntry] = &[
+    ModelEntry {
+        filename: "Qwen3-30B-A3B-Q4_K_M.gguf",
+        download_url: "https://huggingface.co/unsloth/Qwen3-30B-A3B-GGUF/resolve/main/Qwen3-30B-A3B-Q4_K_M.gguf",
+        lfs_pointer_url: "https://huggingface.co/unsloth/Qwen3-30B-A3B-GGUF/raw/main/Qwen3-30B-A3B-Q4_K_M.gguf",
+    },
+    ModelEntry {
+        filename: "Qwen3-8B-Q4_K_M.gguf",
+        download_url: "https://huggingface.co/unsloth/Qwen3-8B-GGUF/resolve/main/Qwen3-8B-Q4_K_M.gguf",
+        lfs_pointer_url: "https://huggingface.co/unsloth/Qwen3-8B-GGUF/raw/main/Qwen3-8B-Q4_K_M.gguf",
+    },
+    ModelEntry {
+        filename: "Phi-4-mini-instruct-Q4_K_M.gguf",
+        download_url: "https://huggingface.co/unsloth/Phi-4-mini-instruct-GGUF/resolve/main/Phi-4-mini-instruct-Q4_K_M.gguf",
+        lfs_pointer_url: "https://huggingface.co/unsloth/Phi-4-mini-instruct-GGUF/raw/main/Phi-4-mini-instruct-Q4_K_M.gguf",
+    },
+];
+
+fn find_model(filename: &str) -> Option<&'static ModelEntry> {
+    MODELS.iter().find(|m| m.filename == filename)
 }
 
 /// CRIT-3: Fetch the expected SHA-256 digest from a HuggingFace LFS pointer file.
@@ -62,6 +79,12 @@ async fn fetch_lfs_sha256(client: &reqwest::Client, pointer_url: &str) -> Result
         .map_err(|e| AppError::Llm(format!("Failed to read LFS pointer body: {e}")))?;
 
     // Guard against no Content-Length but still oversized body.
+    parse_lfs_pointer_text(&text)
+}
+
+/// Parse an LFS pointer text body and return the lowercase hex SHA-256 digest.
+/// Extracted for unit testability — the HTTP fetching stays in `fetch_lfs_sha256`.
+fn parse_lfs_pointer_text(text: &str) -> Result<String, AppError> {
     if text.len() > MAX_POINTER_BYTES {
         return Err(AppError::Validation(
             "LFS pointer body too large".to_string(),
@@ -90,24 +113,14 @@ async fn fetch_lfs_sha256(client: &reqwest::Client, pointer_url: &str) -> Result
 /// Only explicitly whitelisted filenames are allowed — the fallback arm has been
 /// removed to prevent SSRF and arbitrary URL construction.
 pub fn model_url(filename: &str) -> Result<String, AppError> {
-    match filename {
-        "Qwen3-30B-A3B-Q4_K_M.gguf" => Ok(
-            "https://huggingface.co/unsloth/Qwen3-30B-A3B-GGUF/resolve/main/Qwen3-30B-A3B-Q4_K_M.gguf"
-                .to_string(),
-        ),
-        "Qwen3-8B-Q4_K_M.gguf" => Ok(
-            "https://huggingface.co/unsloth/Qwen3-8B-GGUF/resolve/main/Qwen3-8B-Q4_K_M.gguf"
-                .to_string(),
-        ),
-        "Phi-4-mini-instruct-Q4_K_M.gguf" => Ok(
-            "https://huggingface.co/unsloth/Phi-4-mini-instruct-GGUF/resolve/main/Phi-4-mini-instruct-Q4_K_M.gguf"
-                .to_string(),
-        ),
-        other => Err(AppError::Validation(format!(
-            "Unknown model filename '{}'. Only explicitly whitelisted models may be downloaded.",
-            other
-        ))),
-    }
+    find_model(filename)
+        .map(|m| m.download_url.to_string())
+        .ok_or_else(|| {
+            AppError::Validation(format!(
+                "Unknown model filename '{}'. Only explicitly whitelisted models may be downloaded.",
+                filename
+            ))
+        })
 }
 
 /// Download a model file, resuming from where it left off if a partial file exists.
@@ -126,19 +139,16 @@ pub async fn download_model_with_progress(
 
     // CRIT-3: Fetch expected SHA-256 from HuggingFace LFS pointer before the download begins.
     // This fails fast (before any large transfer) if the pointer is unavailable or malformed.
-    let expected_hex = match lfs_pointer_url(filename) {
-        Some(ptr_url) => {
-            log::info!("Fetching LFS pointer for '{}'…", filename);
-            Some(fetch_lfs_sha256(&client, ptr_url).await?)
-        }
-        None => {
-            log::warn!(
-                "No LFS pointer URL for '{}' — integrity check will be skipped",
-                filename
-            );
-            None
-        }
-    };
+    // Every filename that passes model_url() is guaranteed to have an lfs_pointer_url entry
+    // in MODELS, so the error branch below is unreachable in normal operation.
+    let model = find_model(filename).ok_or_else(|| {
+        AppError::Validation(format!(
+            "No model entry for '{}' — integrity check cannot proceed",
+            filename
+        ))
+    })?;
+    log::info!("Fetching LFS pointer for '{}'…", filename);
+    let expected_hex = fetch_lfs_sha256(&client, model.lfs_pointer_url).await?;
 
     // Check for an existing partial download.
     let existing_size = if dest_path.exists() {
@@ -230,27 +240,130 @@ pub async fn download_model_with_progress(
     let digest = sha256.finish();
     let computed_hex = hex::encode(digest.as_ref());
 
-    match expected_hex {
-        Some(ref expected) => {
-            if computed_hex != *expected {
-                let _ = tokio::fs::remove_file(dest_path).await;
-                return Err(AppError::Validation(format!(
-                    "SHA-256 mismatch for '{}': expected {}, got {}. \
-                     File removed — possible MITM or corrupted download.",
-                    filename, expected, computed_hex
-                )));
-            }
-            log::info!("SHA-256 verified for '{}': {}", filename, computed_hex);
-        }
-        None => {
-            log::warn!(
-                "No expected SHA-256 for '{}' — skipping integrity check. Computed: {}",
+    if computed_hex != expected_hex {
+        let _ = tokio::fs::remove_file(dest_path).await;
+        return Err(AppError::Validation(format!(
+            "SHA-256 mismatch for '{}': expected {}, got {}. \
+             File removed — possible MITM or corrupted download.",
+            filename, expected_hex, computed_hex
+        )));
+    }
+    log::info!("SHA-256 verified for '{}': {}", filename, computed_hex);
+
+    let _ = app.emit("model-download-done", ());
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ---- model_url whitelist ----
+
+    #[test]
+    fn test_model_url_known_filenames() {
+        let cases = [
+            (
+                "Qwen3-30B-A3B-Q4_K_M.gguf",
+                "resolve/main/Qwen3-30B-A3B-Q4_K_M.gguf",
+            ),
+            ("Qwen3-8B-Q4_K_M.gguf", "resolve/main/Qwen3-8B-Q4_K_M.gguf"),
+            (
+                "Phi-4-mini-instruct-Q4_K_M.gguf",
+                "resolve/main/Phi-4-mini-instruct-Q4_K_M.gguf",
+            ),
+        ];
+        for (filename, expected_suffix) in cases {
+            let url = model_url(filename).unwrap();
+            assert!(
+                url.contains(expected_suffix),
+                "URL for '{}' should contain '{}', got '{}'",
                 filename,
-                computed_hex
+                expected_suffix,
+                url
+            );
+            assert!(
+                url.starts_with("https://huggingface.co/"),
+                "URL should be HF: {}",
+                url
             );
         }
     }
 
-    let _ = app.emit("model-download-done", ());
-    Ok(())
+    #[test]
+    fn test_model_url_unknown_filename() {
+        let result = model_url("evil-model.gguf");
+        assert!(matches!(result, Err(AppError::Validation(_))));
+    }
+
+    // ---- parse_lfs_pointer_text ----
+
+    fn valid_hex() -> String {
+        "a".repeat(64)
+    }
+
+    #[test]
+    fn test_parse_lfs_pointer_valid() {
+        let hex = valid_hex();
+        let text = format!(
+            "version https://git-lfs.github.com/spec/v1\noid sha256:{}\nsize 1234567890\n",
+            hex
+        );
+        let result = parse_lfs_pointer_text(&text).unwrap();
+        assert_eq!(result, hex);
+    }
+
+    #[test]
+    fn test_parse_lfs_pointer_extra_whitespace() {
+        let hex = valid_hex();
+        // Simulate Windows line endings — trailing \r on the hex line
+        let text = format!(
+            "version https://git-lfs.github.com/spec/v1\r\noid sha256:{}\r\nsize 1234\r\n",
+            hex
+        );
+        let result = parse_lfs_pointer_text(&text).unwrap();
+        assert_eq!(result, hex);
+    }
+
+    #[test]
+    fn test_parse_lfs_pointer_missing_oid_line() {
+        let text = "version https://git-lfs.github.com/spec/v1\nsize 1234\n";
+        let result = parse_lfs_pointer_text(text);
+        assert!(matches!(result, Err(AppError::Validation(_))));
+    }
+
+    #[test]
+    fn test_parse_lfs_pointer_malformed_hex_short() {
+        // 63 chars instead of 64
+        let hex = "a".repeat(63);
+        let text = format!("oid sha256:{}\nsize 1234\n", hex);
+        let result = parse_lfs_pointer_text(&text);
+        assert!(matches!(result, Err(AppError::Validation(_))));
+    }
+
+    #[test]
+    fn test_parse_lfs_pointer_non_hex_chars() {
+        // 64 chars but contains non-hex character 'Z'
+        let hex = format!("{}Z{}", "a".repeat(32), "a".repeat(31));
+        let text = format!("oid sha256:{}\nsize 1234\n", hex);
+        let result = parse_lfs_pointer_text(&text);
+        assert!(matches!(result, Err(AppError::Validation(_))));
+    }
+
+    #[test]
+    fn test_parse_lfs_pointer_body_too_large() {
+        // Build a body that exceeds MAX_POINTER_BYTES (4096)
+        let large_text = "x".repeat(MAX_POINTER_BYTES + 1);
+        let result = parse_lfs_pointer_text(&large_text);
+        assert!(matches!(result, Err(AppError::Validation(_))));
+    }
+
+    #[test]
+    fn test_parse_lfs_pointer_hex_returned_lowercase() {
+        // Even if the hex were uppercase (non-standard), trim/to_lowercase is applied
+        let hex = "A".repeat(64);
+        let text = format!("oid sha256:{}\nsize 1234\n", hex);
+        let result = parse_lfs_pointer_text(&text).unwrap();
+        assert_eq!(result, "a".repeat(64));
+    }
 }

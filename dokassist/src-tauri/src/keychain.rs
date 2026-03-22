@@ -15,8 +15,8 @@ use security_framework_sys::item::{
     kSecAttrAccount, kSecAttrService, kSecClass, kSecClassGenericPassword, kSecReturnAttributes,
     kSecValueData,
 };
-// kSecAttrAccessible (the dict key for accessibility level) is not exported by
-// security_framework_sys, so we declare it directly from Security.framework.
+// kSecAttrAccessible (the dict key for the accessibility level) is not exported
+// by security_framework_sys, so we declare it directly from Security.framework.
 #[cfg(target_os = "macos")]
 extern "C" {
     static kSecAttrAccessible: core_foundation_sys::string::CFStringRef;
@@ -34,21 +34,19 @@ use core_foundation::string::CFString;
 #[cfg(target_os = "macos")]
 use security_framework_sys::keychain_item::{SecItemAdd, SecItemCopyMatching, SecItemDelete};
 
-/// Store a key in macOS Keychain with device-bound protection.
+/// Store a master key in macOS Keychain with device-bound protection.
 ///
 /// Uses `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`: the item is accessible
 /// only while the device is unlocked and is never synced to iCloud.
-/// No `SecAccessControl` object is used, so no entitlement is required —
-/// `SecAccessControl` (even with no flags) requires a signed app bundle.
 ///
-/// Touch ID enforcement can be added via `LocalAuthentication` once a proper
-/// Apple Developer ID signing identity is in place.
+/// Biometric gating is enforced at the application level via `touch_id::authenticate`
+/// (LocalAuthentication framework) rather than via a `SecAccessControl` object.
+/// The `SecAccessControl` approach requires `keychain-access-groups` entitlements
+/// that are only available with a paid Apple Developer signing identity.
 #[cfg(target_os = "macos")]
 pub fn store_key(service: &str, account: &str, key: &[u8]) -> Result<(), AppError> {
     // Delete any existing item first using a raw SecItemDelete query so we match
-    // items regardless of how they were originally stored (the high-level
-    // delete_generic_password builds a different query and can miss items stored
-    // via SecItemAdd with kSecAttrAccessibleWhenUnlockedThisDeviceOnly).
+    // items regardless of how they were originally stored.
     let del_query = CFDictionary::<CFString, _>::from_CFType_pairs(&[
         (
             unsafe { CFString::wrap_under_get_rule(kSecClass) },
@@ -100,10 +98,11 @@ pub fn store_key(service: &str, account: &str, key: &[u8]) -> Result<(), AppErro
     Ok(())
 }
 
-/// Retrieve a key from Keychain.
+/// Retrieve a master key from Keychain.
 ///
-/// Returns the key whenever the device is unlocked (no auth prompt, since
-/// items are stored without a biometric access-control flag).
+/// This function itself does not show Touch ID — biometric authentication is
+/// handled by `touch_id::authenticate` in the caller (`unlock_app`) before
+/// this function is invoked.
 #[cfg(target_os = "macos")]
 pub fn retrieve_key(service: &str, account: &str) -> Result<Vec<u8>, AppError> {
     get_generic_password(service, account)
@@ -250,8 +249,6 @@ mod tests {
 
     const TEST_SERVICE: &str = "ch.dokassist.app.test";
 
-    /// Requires Touch ID hardware and an enrolled fingerprint.
-    /// Run manually: `cargo test -- --ignored test_store_retrieve_delete`
     #[test]
     #[ignore = "requires Touch ID hardware"]
     fn test_store_retrieve_delete() {
@@ -268,8 +265,6 @@ mod tests {
         assert!(result.is_err());
     }
 
-    /// Requires Touch ID hardware and an enrolled fingerprint.
-    /// Run manually: `cargo test -- --ignored test_overwrite_key`
     #[test]
     #[ignore = "requires Touch ID hardware"]
     fn test_overwrite_key() {

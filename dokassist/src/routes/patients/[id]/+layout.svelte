@@ -16,11 +16,14 @@
   let currentPath = $derived($page.url.pathname);
 
   let tabs = $derived([
-    { path: `/patients/${patientId}`, labelKey: 'patients.overview' },
-    { path: `/patients/${patientId}/files`, labelKey: 'patients.files' },
-    { path: `/patients/${patientId}/reports`, labelKey: 'patients.reports' },
-    { path: `/patients/${patientId}/email`, labelKey: 'patients.email' },
-    { path: `/patients/${patientId}/chat`, labelKey: 'patients.chat' },
+    { path: `/patients/${patientId}`, labelKey: 'patients.overview', exact: true },
+    { path: `/patients/${patientId}/sessions`, labelKey: 'patients.sessions', exact: false },
+    { path: `/patients/${patientId}/medications`, labelKey: 'patients.medications', exact: false },
+    { path: `/patients/${patientId}/diagnoses`, labelKey: 'patients.diagnoses', exact: false },
+    { path: `/patients/${patientId}/files`, labelKey: 'patients.files', exact: false },
+    { path: `/patients/${patientId}/reports`, labelKey: 'patients.reports', exact: false },
+    { path: `/patients/${patientId}/email`, labelKey: 'patients.email', exact: false },
+    { path: `/patients/${patientId}/chat`, labelKey: 'patients.chat', exact: false },
   ]);
 
   onMount(async () => {
@@ -72,7 +75,9 @@
         {#each tabs as tab}
           <a
             href={tab.path}
-            class="px-4 py-3 font-medium transition-colors {currentPath === tab.path
+            class="px-4 py-3 font-medium transition-colors {(tab.exact
+              ? currentPath === tab.path
+              : currentPath === tab.path || currentPath.startsWith(tab.path + '/'))
               ? 'text-blue-500 dark:text-blue-400 border-b-2 border-blue-500 dark:border-blue-400'
               : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'}"
           >

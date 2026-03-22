@@ -165,3 +165,124 @@ pub fn delete_file_record(conn: &Connection, id: &str) -> Result<(), AppError> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::database::init_db;
+    use tempfile::tempdir;
+
+    fn open_test_db() -> (tempfile::TempDir, crate::database::DbPool) {
+        let dir = tempdir().unwrap();
+        let key = crate::crypto::generate_key();
+        let pool = init_db(&dir.path().join("test.db"), &key).unwrap();
+        (dir, pool)
+    }
+
+    fn insert_patient(conn: &Connection) {
+        conn.execute(
+            "INSERT INTO patients (id, first_name, last_name, date_of_birth, ahv_number)
+             VALUES ('p1', 'Anna', 'Test', '1985-01-01', '756.1234.5678.97')",
+            [],
+        )
+        .unwrap();
+    }
+
+    fn make_file(conn: &Connection) -> FileRecord {
+        create_file_record(
+            conn,
+            "p1",
+            "report.pdf",
+            "vault/abc.enc",
+            "application/pdf",
+            12345,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn test_create_and_get_file_record() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        let f = make_file(&conn);
+        assert_eq!(f.filename, "report.pdf");
+        assert_eq!(f.mime_type, "application/pdf");
+        assert_eq!(f.size_bytes, 12345u64);
+        let f2 = get_file_record(&conn, &f.id).unwrap();
+        assert_eq!(f.id, f2.id);
+        assert_eq!(f2.size_bytes, 12345u64);
+    }
+
+    #[test]
+    fn test_get_file_record_by_vault_path() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        let f = make_file(&conn);
+        let f2 = get_file_record_by_vault_path(&conn, "vault/abc.enc").unwrap();
+        assert_eq!(f.id, f2.id);
+        assert_eq!(f2.filename, "report.pdf");
+    }
+
+    #[test]
+    fn test_list_files_for_patient() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        for i in 0..3u64 {
+            create_file_record(
+                &conn,
+                "p1",
+                &format!("file{}.pdf", i),
+                &format!("vault/f{}.enc", i),
+                "application/pdf",
+                i * 100,
+            )
+            .unwrap();
+        }
+        let list = list_files_for_patient(&conn, "p1").unwrap();
+        assert_eq!(list.len(), 3);
+    }
+
+    #[test]
+    fn test_update_file_text() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        let f = make_file(&conn);
+        update_file_text(&conn, &f.id, "extracted content", Some("referral")).unwrap();
+        let text: (String, String) = conn
+            .query_row(
+                "SELECT extracted_text, document_type FROM files WHERE id = ?1",
+                [&f.id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(text.0, "extracted content");
+        assert_eq!(text.1, "referral");
+    }
+
+    #[test]
+    fn test_update_file_text_unknown_id() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        assert!(matches!(
+            update_file_text(&conn, "no-such-id", "text", None),
+            Err(AppError::NotFound(_))
+        ));
+    }
+
+    #[test]
+    fn test_delete_file_record() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        let f = make_file(&conn);
+        delete_file_record(&conn, &f.id).unwrap();
+        assert!(matches!(
+            get_file_record(&conn, &f.id),
+            Err(AppError::NotFound(_))
+        ));
+    }
+}

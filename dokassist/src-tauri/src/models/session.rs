@@ -10,6 +10,7 @@ pub struct Session {
     pub session_date: String,
     pub session_type: String,
     pub duration_minutes: Option<i32>,
+    pub scheduled_time: Option<String>,
     pub notes: Option<String>,
     pub amdp_data: Option<String>,
     pub created_at: String,
@@ -22,6 +23,7 @@ pub struct CreateSession {
     pub session_date: String,
     pub session_type: String,
     pub duration_minutes: Option<i32>,
+    pub scheduled_time: Option<String>,
     pub notes: Option<String>,
     pub amdp_data: Option<String>,
 }
@@ -31,6 +33,7 @@ pub struct UpdateSession {
     pub session_date: Option<String>,
     pub session_type: Option<String>,
     pub duration_minutes: Option<i32>,
+    pub scheduled_time: Option<String>,
     pub notes: Option<String>,
     pub amdp_data: Option<String>,
 }
@@ -42,10 +45,11 @@ fn row_to_session(row: &Row) -> Result<Session, rusqlite::Error> {
         session_date: row.get(2)?,
         session_type: row.get(3)?,
         duration_minutes: row.get(4)?,
-        notes: row.get(5)?,
-        amdp_data: row.get(6)?,
-        created_at: row.get(7)?,
-        updated_at: row.get(8)?,
+        scheduled_time: row.get(5)?,
+        notes: row.get(6)?,
+        amdp_data: row.get(7)?,
+        created_at: row.get(8)?,
+        updated_at: row.get(9)?,
     })
 }
 
@@ -53,14 +57,15 @@ pub fn create_session(conn: &Connection, input: CreateSession) -> Result<Session
     let id = Uuid::now_v7().to_string();
 
     conn.execute(
-        "INSERT INTO sessions (id, patient_id, session_date, session_type, duration_minutes, notes, amdp_data)
-         VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO sessions (id, patient_id, session_date, session_type, duration_minutes, scheduled_time, notes, amdp_data)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         params![
             id,
             input.patient_id,
             input.session_date,
             input.session_type,
             input.duration_minutes,
+            input.scheduled_time,
             input.notes,
             input.amdp_data,
         ],
@@ -72,7 +77,7 @@ pub fn create_session(conn: &Connection, input: CreateSession) -> Result<Session
 pub fn get_session(conn: &Connection, id: &str) -> Result<Session, AppError> {
     let session = conn
         .query_row(
-            "SELECT id, patient_id, session_date, session_type, duration_minutes, notes, amdp_data,
+            "SELECT id, patient_id, session_date, session_type, duration_minutes, scheduled_time, notes, amdp_data,
                     created_at, updated_at
              FROM sessions WHERE id = ?",
             params![id],
@@ -109,6 +114,10 @@ pub fn update_session(
     if let Some(duration_minutes) = input.duration_minutes {
         updates.push("duration_minutes = ?");
         values.push(Box::new(duration_minutes));
+    }
+    if let Some(scheduled_time) = input.scheduled_time {
+        updates.push("scheduled_time = ?");
+        values.push(Box::new(scheduled_time));
     }
     if let Some(notes) = input.notes {
         updates.push("notes = ?");
@@ -155,7 +164,7 @@ pub fn list_all_sessions(
 ) -> Result<Vec<SessionWithPatient>, AppError> {
     let mut stmt = conn.prepare(
         "SELECT s.id, s.patient_id, s.session_date, s.session_type, s.duration_minutes,
-                s.notes, s.amdp_data, s.created_at, s.updated_at,
+                s.scheduled_time, s.notes, s.amdp_data, s.created_at, s.updated_at,
                 p.first_name || ' ' || p.last_name AS patient_name
          FROM sessions s
          JOIN patients p ON s.patient_id = p.id
@@ -167,7 +176,7 @@ pub fn list_all_sessions(
         .query_map(params![limit, offset], |row| {
             Ok(SessionWithPatient {
                 session: row_to_session(row)?,
-                patient_name: row.get(9)?,
+                patient_name: row.get(10)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -182,7 +191,7 @@ pub fn list_sessions_for_patient(
     offset: u32,
 ) -> Result<Vec<Session>, AppError> {
     let mut stmt = conn.prepare(
-        "SELECT id, patient_id, session_date, session_type, duration_minutes, notes, amdp_data,
+        "SELECT id, patient_id, session_date, session_type, duration_minutes, scheduled_time, notes, amdp_data,
                 created_at, updated_at
          FROM sessions
          WHERE patient_id = ?

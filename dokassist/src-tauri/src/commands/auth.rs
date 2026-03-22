@@ -4,10 +4,14 @@ use crate::state::{AppState, AuthState};
 use crate::{keychain, recovery};
 use tauri::State;
 
+fn lock_poisoned() -> AppError {
+    AppError::Keychain("Auth state mutex poisoned".to_string())
+}
+
 /// Returns "first_run" | "locked" | "unlocked" | "recovery_required"
 #[tauri::command]
 pub async fn check_auth(state: State<'_, AppState>) -> Result<String, AppError> {
-    let auth = state.auth.lock().unwrap();
+    let auth = state.auth.lock().map_err(|_| lock_poisoned())?;
 
     match *auth {
         AuthState::FirstRun => Ok("first_run".to_string()),
@@ -21,7 +25,7 @@ pub async fn check_auth(state: State<'_, AppState>) -> Result<String, AppError> 
 #[tauri::command]
 pub async fn initialize_app(state: State<'_, AppState>) -> Result<Vec<String>, AppError> {
     {
-        let auth = state.auth.lock().unwrap();
+        let auth = state.auth.lock().map_err(|_| lock_poisoned())?;
         if !matches!(*auth, AuthState::FirstRun) {
             return Err(AppError::Validation(
                 "App is already initialized".to_string(),
@@ -45,24 +49,41 @@ pub async fn initialize_app(state: State<'_, AppState>) -> Result<Vec<String>, A
     state.init_db(&db_key)?;
 
     // Only transition to Unlocked after DB init succeeds
-    let mut auth = state.auth.lock().unwrap();
+    let mut auth = state.auth.lock().map_err(|_| lock_poisoned())?;
     *auth = AuthState::Unlocked { db_key, fs_key };
 
     Ok(words)
 }
 
-/// Unlock: triggers Touch ID, retrieves keys from Keychain.
+/// Unlock: show Touch ID sheet, retrieve master keys from Keychain.
+///
+/// Biometric authentication is performed via `LocalAuthentication` (LAContext)
+/// before accessing the Keychain.  Returns `AppError::BiometricCancelled`
+/// when the user dismisses the Touch ID / login-password sheet.
 #[tauri::command]
 pub async fn unlock_app(state: State<'_, AppState>) -> Result<bool, AppError> {
+    // Check auth state before showing Touch ID (avoids prompting if already unlocked).
+    {
+        let auth = state.auth.lock().map_err(|_| lock_poisoned())?;
+        if !matches!(*auth, AuthState::Locked) {
+            return Err(AppError::Validation("App is not locked".to_string()));
+        }
+    }
+
+    // Show Touch ID / device-password sheet.  This blocks the Tokio worker thread
+    // until the user responds; the auth lock is NOT held during this call.
+    crate::touch_id::authenticate("Unlock DokAssist to access patient data")?;
+
     // --- Retrieve keys while holding the auth lock ---
     let (db_key, fs_key) = {
-        let auth = state.auth.lock().unwrap();
+        let auth = state.auth.lock().map_err(|_| lock_poisoned())?;
 
+        // Re-check state in case the app was reset while Touch ID was showing.
         if !matches!(*auth, AuthState::Locked) {
             return Err(AppError::Validation("App is not locked".to_string()));
         }
 
-        // Retrieve keys from Keychain (triggers Touch ID)
+        // Retrieve keys from Keychain — fast, no biometric gate at keychain level.
         let mut db_key_vec = keychain::retrieve_key(KEYCHAIN_SERVICE, DB_KEY_ACCOUNT)?;
         let mut fs_key_vec = keychain::retrieve_key(KEYCHAIN_SERVICE, FS_KEY_ACCOUNT)?;
 
@@ -81,21 +102,15 @@ pub async fn unlock_app(state: State<'_, AppState>) -> Result<bool, AppError> {
         zeroize::Zeroize::zeroize(&mut fs_key_vec);
 
         (db_key, fs_key)
-        // auth lock is released here
+        // auth lock released here
     };
 
     // Initialize database *before* committing auth state (HIGH-5: TOCTOU fix).
     // If init_db fails, auth state remains Locked — no inconsistent state.
     state.init_db(&db_key)?;
 
-    // Silently upgrade existing keychain items to biometric protection.
-    // This is idempotent: items already protected are replaced with fresh ones.
-    // Errors are ignored — the app is already unlocked; migration is best-effort.
-    let _ = keychain::store_key(KEYCHAIN_SERVICE, DB_KEY_ACCOUNT, &db_key);
-    let _ = keychain::store_key(KEYCHAIN_SERVICE, FS_KEY_ACCOUNT, &fs_key);
-
     // Only transition to Unlocked after DB init succeeds
-    let mut auth = state.auth.lock().unwrap();
+    let mut auth = state.auth.lock().map_err(|_| lock_poisoned())?;
     *auth = AuthState::Unlocked {
         db_key: zeroize::Zeroizing::new(db_key),
         fs_key: zeroize::Zeroizing::new(fs_key),
@@ -109,7 +124,7 @@ pub async fn unlock_app(state: State<'_, AppState>) -> Result<bool, AppError> {
 pub async fn recover_app(state: State<'_, AppState>, words: Vec<String>) -> Result<bool, AppError> {
     // Verify we're in RecoveryRequired state (without holding lock during I/O)
     {
-        let auth = state.auth.lock().unwrap();
+        let auth = state.auth.lock().map_err(|_| lock_poisoned())?;
         if !matches!(*auth, AuthState::RecoveryRequired) {
             return Err(AppError::Validation("Recovery is not required".to_string()));
         }
@@ -143,7 +158,7 @@ pub async fn recover_app(state: State<'_, AppState>, words: Vec<String>) -> Resu
     state.init_db(&db_key)?;
 
     // Only transition to Unlocked after DB init succeeds
-    let mut auth = state.auth.lock().unwrap();
+    let mut auth = state.auth.lock().map_err(|_| lock_poisoned())?;
     *auth = AuthState::Unlocked {
         db_key: zeroize::Zeroizing::new(db_key),
         fs_key: zeroize::Zeroizing::new(fs_key),
@@ -163,7 +178,7 @@ pub async fn reset_app(state: State<'_, AppState>) -> Result<(), AppError> {
 
     // 1. Transition to FirstRun and release any in-memory keys / DB handles.
     {
-        let mut auth = state.auth.lock().unwrap();
+        let mut auth = state.auth.lock().map_err(|_| lock_poisoned())?;
         *auth = AuthState::FirstRun;
     }
     state.clear_db()?;
@@ -189,7 +204,7 @@ pub async fn reset_app(state: State<'_, AppState>) -> Result<(), AppError> {
 /// Lock: zero keys from memory.
 #[tauri::command]
 pub async fn lock_app(state: State<'_, AppState>) -> Result<(), AppError> {
-    let mut auth = state.auth.lock().unwrap();
+    let mut auth = state.auth.lock().map_err(|_| lock_poisoned())?;
 
     // Only lock if currently unlocked
     if matches!(*auth, AuthState::Unlocked { .. }) {

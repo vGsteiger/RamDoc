@@ -175,3 +175,176 @@ pub fn list_medications_for_patient(
 
     Ok(medications)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::database::init_db;
+    use tempfile::tempdir;
+
+    fn open_test_db() -> (tempfile::TempDir, crate::database::DbPool) {
+        let dir = tempdir().unwrap();
+        let key = crate::crypto::generate_key();
+        let pool = init_db(&dir.path().join("test.db"), &key).unwrap();
+        (dir, pool)
+    }
+
+    fn insert_patient(conn: &Connection) {
+        conn.execute(
+            "INSERT INTO patients (id, first_name, last_name, date_of_birth, ahv_number)
+             VALUES ('p1', 'Anna', 'Test', '1985-01-01', '756.1234.5678.97')",
+            [],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_create_and_get_medication() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        let m = create_medication(
+            &conn,
+            CreateMedication {
+                patient_id: "p1".into(),
+                substance: "Sertraline".into(),
+                dosage: "50mg".into(),
+                frequency: "daily".into(),
+                start_date: "2026-01-01".into(),
+                end_date: None,
+                notes: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(m.substance, "Sertraline");
+        assert_eq!(m.dosage, "50mg");
+        assert_eq!(m.frequency, "daily");
+        let m2 = get_medication(&conn, &m.id).unwrap();
+        assert_eq!(m.id, m2.id);
+    }
+
+    #[test]
+    fn test_update_medication() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        let m = create_medication(
+            &conn,
+            CreateMedication {
+                patient_id: "p1".into(),
+                substance: "Fluoxetine".into(),
+                dosage: "20mg".into(),
+                frequency: "daily".into(),
+                start_date: "2026-01-01".into(),
+                end_date: None,
+                notes: None,
+            },
+        )
+        .unwrap();
+        let updated = update_medication(
+            &conn,
+            &m.id,
+            UpdateMedication {
+                substance: None,
+                dosage: Some("40mg".into()),
+                frequency: None,
+                start_date: None,
+                end_date: None,
+                notes: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(updated.dosage, "40mg");
+        assert_eq!(updated.substance, "Fluoxetine");
+    }
+
+    #[test]
+    fn test_delete_medication() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        let m = create_medication(
+            &conn,
+            CreateMedication {
+                patient_id: "p1".into(),
+                substance: "Lorazepam".into(),
+                dosage: "1mg".into(),
+                frequency: "as needed".into(),
+                start_date: "2026-01-01".into(),
+                end_date: None,
+                notes: None,
+            },
+        )
+        .unwrap();
+        delete_medication(&conn, &m.id).unwrap();
+        assert!(matches!(
+            get_medication(&conn, &m.id),
+            Err(AppError::NotFound(_))
+        ));
+    }
+
+    #[test]
+    fn test_list_medications_for_patient() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        for (substance, date) in [
+            ("Med A", "2026-01-01"),
+            ("Med B", "2026-02-01"),
+            ("Med C", "2026-03-01"),
+        ] {
+            create_medication(
+                &conn,
+                CreateMedication {
+                    patient_id: "p1".into(),
+                    substance: substance.into(),
+                    dosage: "10mg".into(),
+                    frequency: "daily".into(),
+                    start_date: date.into(),
+                    end_date: None,
+                    notes: None,
+                },
+            )
+            .unwrap();
+        }
+        let list = list_medications_for_patient(&conn, "p1", 10, 0).unwrap();
+        assert_eq!(list.len(), 3);
+        assert_eq!(list[0].start_date, "2026-03-01");
+        assert_eq!(list[2].start_date, "2026-01-01");
+    }
+
+    #[test]
+    fn test_update_medication_no_fields() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        let m = create_medication(
+            &conn,
+            CreateMedication {
+                patient_id: "p1".into(),
+                substance: "Quetiapine".into(),
+                dosage: "25mg".into(),
+                frequency: "nightly".into(),
+                start_date: "2026-01-01".into(),
+                end_date: None,
+                notes: None,
+            },
+        )
+        .unwrap();
+        let unchanged = update_medication(
+            &conn,
+            &m.id,
+            UpdateMedication {
+                substance: None,
+                dosage: None,
+                frequency: None,
+                start_date: None,
+                end_date: None,
+                notes: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(unchanged.substance, "Quetiapine");
+        assert_eq!(unchanged.dosage, "25mg");
+    }
+}

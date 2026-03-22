@@ -8,8 +8,12 @@ use super::sanitize::sanitize_for_prompt;
 use crate::error::AppError;
 use crate::llm::embed::EmbedEngine;
 use crate::llm::LlmEngine;
+use crate::models::diagnosis::{self, CreateDiagnosis};
+use crate::models::email as email_model;
+use crate::models::medication::{self, CreateMedication};
 use crate::models::patient;
 use crate::models::session::{self, CreateSession};
+use crate::models::treatment_plan;
 use crate::search;
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -32,6 +36,12 @@ pub fn dispatch_tool(
         "search" => tool_search(conn, &call.args),
         "search_literature" => tool_search_literature(conn, app, &call.args),
         "write_report" => tool_write_report(conn, app, engine, scope, &call.args),
+        "list_diagnoses" => tool_list_diagnoses(conn, scope, &call.args),
+        "create_diagnosis" => tool_create_diagnosis(conn, scope, &call.args),
+        "list_medications" => tool_list_medications(conn, scope, &call.args),
+        "create_medication" => tool_create_medication(conn, scope, &call.args),
+        "draft_email" => tool_draft_email(conn, scope, &call.args),
+        "list_treatment_plans" => tool_list_treatment_plans(conn, scope, &call.args),
         unknown => Err(AppError::Validation(format!("Unknown tool: {}", unknown))),
     }
 }
@@ -162,6 +172,7 @@ fn tool_create_calendar_event(
             session_date: date,
             session_type,
             duration_minutes,
+            scheduled_time: None,
             notes,
             amdp_data: None,
         },
@@ -267,6 +278,189 @@ fn tool_write_report(
         "report_id": report.id,
         "content_preview": &content[..content.len().min(500)],
     }))
+}
+
+/// Validate YYYY-MM-DD format (same check as in tool_create_calendar_event).
+fn validate_date(date: &str) -> Result<(), AppError> {
+    if date.len() != 10
+        || !date.chars().enumerate().all(|(i, c)| {
+            if i == 4 || i == 7 {
+                c == '-'
+            } else {
+                c.is_ascii_digit()
+            }
+        })
+    {
+        return Err(AppError::Validation(
+            "date must be in YYYY-MM-DD format".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn tool_list_diagnoses(
+    conn: &Connection,
+    scope: &AgentScope,
+    args: &Value,
+) -> Result<Value, AppError> {
+    let patient_id = sanitize_for_prompt(str_arg(args, "patient_id")?);
+    enforce_patient_scope(scope, &patient_id)?;
+    let diagnoses = diagnosis::list_diagnoses_for_patient(conn, &patient_id, 50, 0)?;
+    Ok(serde_json::to_value(diagnoses).unwrap_or(json!({"error": "serialize"})))
+}
+
+fn tool_create_diagnosis(
+    conn: &Connection,
+    scope: &AgentScope,
+    args: &Value,
+) -> Result<Value, AppError> {
+    let patient_id = sanitize_for_prompt(str_arg(args, "patient_id")?);
+    enforce_patient_scope(scope, &patient_id)?;
+
+    let icd10_code = str_arg(args, "icd10_code")?.trim().to_uppercase();
+    // Basic ICD-10 validation: length 3–10, starts with a letter then 2 alphanumeric chars,
+    // followed by optional dot and alphanumeric suffix.
+    if icd10_code.len() < 3
+        || icd10_code.len() > 10
+        || !icd10_code
+            .chars()
+            .next()
+            .map(|c| c.is_ascii_alphabetic())
+            .unwrap_or(false)
+        || !icd10_code
+            .chars()
+            .nth(1)
+            .map(|c| c.is_ascii_digit())
+            .unwrap_or(false)
+        || !icd10_code
+            .chars()
+            .nth(2)
+            .map(|c| c.is_ascii_alphanumeric())
+            .unwrap_or(false)
+        || !icd10_code
+            .chars()
+            .skip(3)
+            .all(|c| c.is_ascii_alphanumeric() || c == '.')
+    {
+        return Err(AppError::Validation(
+            "icd10_code must be a valid ICD-10 code (e.g. F32.1)".to_string(),
+        ));
+    }
+
+    let description = sanitize_for_prompt(str_arg(args, "description")?);
+    let diagnosed_date = sanitize_for_prompt(str_arg(args, "diagnosed_date")?);
+    validate_date(&diagnosed_date)?;
+
+    let status_raw = opt_str_arg(args, "status").unwrap_or("active");
+    let allowed_statuses = ["active", "resolved", "chronic"];
+    if !allowed_statuses.contains(&status_raw) {
+        return Err(AppError::Validation(format!(
+            "Invalid status '{}'. Allowed: active | resolved | chronic",
+            status_raw
+        )));
+    }
+    let notes = opt_str_arg(args, "notes").map(sanitize_for_prompt);
+
+    let created = diagnosis::create_diagnosis(
+        conn,
+        CreateDiagnosis {
+            patient_id,
+            icd10_code,
+            description,
+            status: Some(status_raw.to_string()),
+            diagnosed_date,
+            resolved_date: None,
+            notes,
+        },
+    )?;
+    Ok(serde_json::to_value(created).unwrap_or(json!({"error": "serialize"})))
+}
+
+fn tool_list_medications(
+    conn: &Connection,
+    scope: &AgentScope,
+    args: &Value,
+) -> Result<Value, AppError> {
+    let patient_id = sanitize_for_prompt(str_arg(args, "patient_id")?);
+    enforce_patient_scope(scope, &patient_id)?;
+    let medications = medication::list_medications_for_patient(conn, &patient_id, 50, 0)?;
+    Ok(serde_json::to_value(medications).unwrap_or(json!({"error": "serialize"})))
+}
+
+fn tool_create_medication(
+    conn: &Connection,
+    scope: &AgentScope,
+    args: &Value,
+) -> Result<Value, AppError> {
+    let patient_id = sanitize_for_prompt(str_arg(args, "patient_id")?);
+    enforce_patient_scope(scope, &patient_id)?;
+
+    let substance = sanitize_for_prompt(str_arg(args, "substance")?);
+    let dosage = sanitize_for_prompt(str_arg(args, "dosage")?);
+    let frequency = sanitize_for_prompt(str_arg(args, "frequency")?);
+    let start_date = sanitize_for_prompt(str_arg(args, "start_date")?);
+    validate_date(&start_date)?;
+    let notes = opt_str_arg(args, "notes").map(sanitize_for_prompt);
+
+    let created = medication::create_medication(
+        conn,
+        CreateMedication {
+            patient_id,
+            substance,
+            dosage,
+            frequency,
+            start_date,
+            end_date: None,
+            notes,
+        },
+    )?;
+    Ok(serde_json::to_value(created).unwrap_or(json!({"error": "serialize"})))
+}
+
+fn tool_draft_email(
+    conn: &Connection,
+    scope: &AgentScope,
+    args: &Value,
+) -> Result<Value, AppError> {
+    let patient_id = sanitize_for_prompt(str_arg(args, "patient_id")?);
+    enforce_patient_scope(scope, &patient_id)?;
+
+    let recipient_email = str_arg(args, "recipient_email")?;
+    // Basic email validation: must have '@' and a '.' after the '@'
+    let at_pos = recipient_email.find('@').ok_or_else(|| {
+        AppError::Validation("recipient_email must be a valid email address".to_string())
+    })?;
+    if !recipient_email[at_pos + 1..].contains('.') {
+        return Err(AppError::Validation(
+            "recipient_email must be a valid email address".to_string(),
+        ));
+    }
+    let recipient_email = sanitize_for_prompt(recipient_email);
+
+    let subject = sanitize_for_prompt(str_arg(args, "subject")?);
+    let body = sanitize_for_prompt(str_arg(args, "body")?);
+
+    let created = email_model::create_email(
+        conn,
+        email_model::CreateEmail {
+            patient_id,
+            recipient_email,
+            subject,
+            body,
+        },
+    )?;
+    Ok(serde_json::to_value(created).unwrap_or(json!({"error": "serialize"})))
+}
+
+fn tool_list_treatment_plans(
+    conn: &Connection,
+    scope: &AgentScope,
+    args: &Value,
+) -> Result<Value, AppError> {
+    let patient_id = sanitize_for_prompt(str_arg(args, "patient_id")?);
+    enforce_patient_scope(scope, &patient_id)?;
+    let plans = treatment_plan::list_treatment_plans_for_patient(conn, &patient_id, 50, 0)?;
+    Ok(serde_json::to_value(plans).unwrap_or(json!({"error": "serialize"})))
 }
 
 #[cfg(test)]

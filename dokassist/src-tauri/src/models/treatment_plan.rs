@@ -503,3 +503,366 @@ pub fn list_treatment_interventions_for_plan(
 
     Ok(interventions)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::database::init_db;
+    use tempfile::tempdir;
+
+    fn open_test_db() -> (tempfile::TempDir, crate::database::DbPool) {
+        let dir = tempdir().unwrap();
+        let key = crate::crypto::generate_key();
+        let pool = init_db(&dir.path().join("test.db"), &key).unwrap();
+        (dir, pool)
+    }
+
+    fn insert_patient(conn: &Connection) {
+        conn.execute(
+            "INSERT INTO patients (id, first_name, last_name, date_of_birth, ahv_number)
+             VALUES ('p1', 'Anna', 'Test', '1985-01-01', '756.1234.5678.97')",
+            [],
+        )
+        .unwrap();
+    }
+
+    fn make_plan(conn: &Connection) -> TreatmentPlan {
+        create_treatment_plan(
+            conn,
+            CreateTreatmentPlan {
+                patient_id: "p1".into(),
+                title: "CBT Plan".into(),
+                description: None,
+                start_date: "2026-01-01".into(),
+                end_date: None,
+                status: None,
+            },
+        )
+        .unwrap()
+    }
+
+    // ---- TreatmentPlan ----
+
+    #[test]
+    fn test_create_and_get_treatment_plan() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        let p = make_plan(&conn);
+        assert_eq!(p.title, "CBT Plan");
+        assert_eq!(p.patient_id, "p1");
+        let p2 = get_treatment_plan(&conn, &p.id).unwrap();
+        assert_eq!(p.id, p2.id);
+    }
+
+    #[test]
+    fn test_create_treatment_plan_default_status() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        let p = make_plan(&conn);
+        assert_eq!(p.status, "active");
+    }
+
+    #[test]
+    fn test_update_treatment_plan() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        let p = make_plan(&conn);
+        let updated = update_treatment_plan(
+            &conn,
+            &p.id,
+            UpdateTreatmentPlan {
+                title: Some("DBT Plan".into()),
+                description: None,
+                start_date: None,
+                end_date: None,
+                status: Some("completed".into()),
+            },
+        )
+        .unwrap();
+        assert_eq!(updated.title, "DBT Plan");
+        assert_eq!(updated.status, "completed");
+    }
+
+    #[test]
+    fn test_delete_treatment_plan() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        let p = make_plan(&conn);
+        delete_treatment_plan(&conn, &p.id).unwrap();
+        assert!(matches!(
+            get_treatment_plan(&conn, &p.id),
+            Err(AppError::NotFound(_))
+        ));
+    }
+
+    #[test]
+    fn test_list_treatment_plans_for_patient() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        for (title, date) in [
+            ("Plan A", "2026-01-01"),
+            ("Plan B", "2026-02-01"),
+            ("Plan C", "2026-03-01"),
+        ] {
+            create_treatment_plan(
+                &conn,
+                CreateTreatmentPlan {
+                    patient_id: "p1".into(),
+                    title: title.into(),
+                    description: None,
+                    start_date: date.into(),
+                    end_date: None,
+                    status: None,
+                },
+            )
+            .unwrap();
+        }
+        let list = list_treatment_plans_for_patient(&conn, "p1", 10, 0).unwrap();
+        assert_eq!(list.len(), 3);
+        assert_eq!(list[0].start_date, "2026-03-01");
+    }
+
+    // ---- TreatmentGoal ----
+
+    #[test]
+    fn test_create_and_get_treatment_goal() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        let plan = make_plan(&conn);
+        let g = create_treatment_goal(
+            &conn,
+            CreateTreatmentGoal {
+                treatment_plan_id: plan.id.clone(),
+                description: "Reduce anxiety".into(),
+                target_date: None,
+                status: None,
+                sort_order: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(g.status, "in_progress");
+        assert_eq!(g.sort_order, 0);
+        assert_eq!(g.description, "Reduce anxiety");
+        let g2 = get_treatment_goal(&conn, &g.id).unwrap();
+        assert_eq!(g.id, g2.id);
+    }
+
+    #[test]
+    fn test_update_treatment_goal() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        let plan = make_plan(&conn);
+        let g = create_treatment_goal(
+            &conn,
+            CreateTreatmentGoal {
+                treatment_plan_id: plan.id.clone(),
+                description: "Improve sleep".into(),
+                target_date: None,
+                status: None,
+                sort_order: Some(1),
+            },
+        )
+        .unwrap();
+        let updated = update_treatment_goal(
+            &conn,
+            &g.id,
+            UpdateTreatmentGoal {
+                description: None,
+                target_date: None,
+                status: Some("achieved".into()),
+                sort_order: Some(5),
+            },
+        )
+        .unwrap();
+        assert_eq!(updated.status, "achieved");
+        assert_eq!(updated.sort_order, 5);
+        assert_eq!(updated.description, "Improve sleep");
+    }
+
+    #[test]
+    fn test_delete_treatment_goal() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        let plan = make_plan(&conn);
+        let g = create_treatment_goal(
+            &conn,
+            CreateTreatmentGoal {
+                treatment_plan_id: plan.id.clone(),
+                description: "Goal to delete".into(),
+                target_date: None,
+                status: None,
+                sort_order: None,
+            },
+        )
+        .unwrap();
+        delete_treatment_goal(&conn, &g.id).unwrap();
+        assert!(matches!(
+            get_treatment_goal(&conn, &g.id),
+            Err(AppError::NotFound(_))
+        ));
+    }
+
+    #[test]
+    fn test_list_treatment_goals_for_plan() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        let plan = make_plan(&conn);
+        for (desc, order) in [("Goal A", 2), ("Goal B", 0), ("Goal C", 1)] {
+            create_treatment_goal(
+                &conn,
+                CreateTreatmentGoal {
+                    treatment_plan_id: plan.id.clone(),
+                    description: desc.into(),
+                    target_date: None,
+                    status: None,
+                    sort_order: Some(order),
+                },
+            )
+            .unwrap();
+        }
+        let list = list_treatment_goals_for_plan(&conn, &plan.id, 10, 0).unwrap();
+        assert_eq!(list.len(), 3);
+        assert_eq!(list[0].sort_order, 0);
+        assert_eq!(list[2].sort_order, 2);
+    }
+
+    // ---- TreatmentIntervention ----
+
+    #[test]
+    fn test_create_and_get_treatment_intervention() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        let plan = make_plan(&conn);
+        let i = create_treatment_intervention(
+            &conn,
+            CreateTreatmentIntervention {
+                treatment_plan_id: plan.id.clone(),
+                r#type: "psychotherapy".into(),
+                description: "Exposure therapy".into(),
+                frequency: Some("weekly".into()),
+            },
+        )
+        .unwrap();
+        assert_eq!(i.r#type, "psychotherapy");
+        assert_eq!(i.description, "Exposure therapy");
+        assert_eq!(i.frequency, Some("weekly".into()));
+        let i2 = get_treatment_intervention(&conn, &i.id).unwrap();
+        assert_eq!(i.id, i2.id);
+    }
+
+    #[test]
+    fn test_update_treatment_intervention() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        let plan = make_plan(&conn);
+        let i = create_treatment_intervention(
+            &conn,
+            CreateTreatmentIntervention {
+                treatment_plan_id: plan.id.clone(),
+                r#type: "psychotherapy".into(),
+                description: "Thought records".into(),
+                frequency: None,
+            },
+        )
+        .unwrap();
+        let updated = update_treatment_intervention(
+            &conn,
+            &i.id,
+            UpdateTreatmentIntervention {
+                r#type: None,
+                description: Some("Thought diary".into()),
+                frequency: Some("daily".into()),
+            },
+        )
+        .unwrap();
+        assert_eq!(updated.description, "Thought diary");
+        assert_eq!(updated.r#type, "psychotherapy");
+        assert_eq!(updated.frequency, Some("daily".into()));
+    }
+
+    #[test]
+    fn test_delete_treatment_intervention() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        let plan = make_plan(&conn);
+        let i = create_treatment_intervention(
+            &conn,
+            CreateTreatmentIntervention {
+                treatment_plan_id: plan.id.clone(),
+                r#type: "other".into(),
+                description: "Breathing exercises".into(),
+                frequency: None,
+            },
+        )
+        .unwrap();
+        delete_treatment_intervention(&conn, &i.id).unwrap();
+        assert!(matches!(
+            get_treatment_intervention(&conn, &i.id),
+            Err(AppError::NotFound(_))
+        ));
+    }
+
+    #[test]
+    fn test_list_treatment_interventions_for_plan() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        let plan = make_plan(&conn);
+        for desc in ["Intervention A", "Intervention B", "Intervention C"] {
+            create_treatment_intervention(
+                &conn,
+                CreateTreatmentIntervention {
+                    treatment_plan_id: plan.id.clone(),
+                    r#type: "referral".into(),
+                    description: desc.into(),
+                    frequency: None,
+                },
+            )
+            .unwrap();
+        }
+        let list = list_treatment_interventions_for_plan(&conn, &plan.id, 10, 0).unwrap();
+        assert_eq!(list.len(), 3);
+    }
+
+    #[test]
+    fn test_update_intervention_no_fields() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        insert_patient(&conn);
+        let plan = make_plan(&conn);
+        let i = create_treatment_intervention(
+            &conn,
+            CreateTreatmentIntervention {
+                treatment_plan_id: plan.id.clone(),
+                r#type: "medication".into(),
+                description: "Depression education".into(),
+                frequency: Some("once".into()),
+            },
+        )
+        .unwrap();
+        let unchanged = update_treatment_intervention(
+            &conn,
+            &i.id,
+            UpdateTreatmentIntervention {
+                r#type: None,
+                description: None,
+                frequency: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(unchanged.description, "Depression education");
+        assert_eq!(unchanged.r#type, "medication");
+    }
+}

@@ -15,6 +15,11 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "lcov"],
       include: ["src/lib/**"],
+      thresholds: {
+        lines: 40,
+        functions: 40,
+        branches: 30,
+      },
     },
   },
 });

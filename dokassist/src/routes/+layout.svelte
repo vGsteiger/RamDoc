@@ -7,6 +7,7 @@
   import { resolvedTheme } from '$lib/stores/theme';
   import Sidebar from '$lib/components/Sidebar.svelte';
   import TopBar from '$lib/components/TopBar.svelte';
+  import Toast from '$lib/components/Toast.svelte';
   import type { Snippet } from 'svelte';
   import '../app.css';
 
@@ -70,6 +71,7 @@
       </main>
     </div>
   </div>
+  <Toast />
 {:else}
   {@render children()}
 {/if}

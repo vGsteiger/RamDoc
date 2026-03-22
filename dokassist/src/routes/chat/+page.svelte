@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { listChatSessions, createChatSession, type ChatSession } from '$lib/api';
+  import { listChatSessions, createChatSession, getEngineStatus, loadModel, type ChatSession } from '$lib/api';
   import ChatSessionList from '$lib/components/ChatSessionList.svelte';
   import ChatThread from '$lib/components/ChatThread.svelte';
   import { t } from '$lib/translations';
@@ -32,7 +32,17 @@
     }
   }
 
-  onMount(loadSessions);
+  onMount(async () => {
+    loadSessions();
+    try {
+      const engineStatus = await getEngineStatus();
+      if (engineStatus.is_downloaded && !engineStatus.is_loaded && engineStatus.downloaded_filename) {
+        loadModel(engineStatus.downloaded_filename);
+      }
+    } catch {
+      // ignore engine status errors
+    }
+  });
 </script>
 
 <div class="flex h-full">

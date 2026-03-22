@@ -15,6 +15,7 @@ mod recovery;
 mod search;
 mod spotlight; // PKG-3: macOS Spotlight exclusion
 mod state;
+mod touch_id;
 
 #[cfg(test)]
 mod integration_tests;

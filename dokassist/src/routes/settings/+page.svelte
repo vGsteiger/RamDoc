@@ -982,7 +982,7 @@
             />
             <button
               onclick={handleReset}
-              disabled={resetting}
+              disabled={resetting || resetInput !== $t('settings.resetConfirmWord')}
               class="px-4 py-2 text-sm rounded-lg bg-red-700 hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors shrink-0"
             >
               {resetting ? $t('settings.resetting') : $t('settings.confirmResetAction')}

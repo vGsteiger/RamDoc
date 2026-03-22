@@ -127,6 +127,13 @@ fn run_migrations(conn: &Connection) -> Result<(), AppError> {
         conn.execute("PRAGMA user_version = 8;", [])?;
     }
 
+    // Migration 9: Add scheduled_time to sessions table for calendar view
+    if version < 9 {
+        log::info!("Running migration 009: Sessions scheduled_time");
+        conn.execute_batch(include_str!("migrations/009_sessions_scheduled_time.sql"))?;
+        conn.execute("PRAGMA user_version = 9;", [])?;
+    }
+
     log::info!("Database migrations complete");
     Ok(())
 }
@@ -185,6 +192,6 @@ mod tests {
         let version: i32 = conn
             .query_row("PRAGMA user_version;", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 8);
+        assert_eq!(version, 9);
     }
 }
