@@ -1,6 +1,6 @@
 use super::{
     engine::LlmEngine,
-    prompts::{self, ReportType},
+    prompts::{self, LetterType, ReportType},
     sanitize::{build_delimited_prompt, sanitize_for_prompt},
 };
 use crate::error::AppError;
@@ -122,4 +122,36 @@ pub fn generate_session_summary_streaming_with_prompt(
     })?;
 
     Ok(full_summary)
+}
+
+/// Generate a letter using a caller-supplied system prompt.
+/// Emits `"letter-chunk"` Tauri events for each token as it is produced.
+/// Returns the full completed letter string.
+pub fn generate_letter_streaming_with_prompt(
+    app: &tauri::AppHandle,
+    engine: &LlmEngine,
+    letter_type: LetterType,
+    language: &str,
+    patient_context: &str,
+    clinical_summary: &str,
+    recipient_name: Option<&str>,
+    system_prompt: &str,
+) -> Result<String, AppError> {
+    let user_message = prompts::letter_generation_prompt(
+        letter_type,
+        language,
+        patient_context,
+        clinical_summary,
+        recipient_name,
+    );
+
+    let mut full_letter = String::new();
+
+    engine.generate_streaming(system_prompt, &user_message, 2048, 0.7, |token| {
+        full_letter.push_str(token);
+        let _ = app.emit("letter-chunk", token);
+        true
+    })?;
+
+    Ok(full_letter)
 }

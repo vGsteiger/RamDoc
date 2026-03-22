@@ -1,7 +1,7 @@
 use crate::error::AppError;
 use crate::llm::{
-    self, download, embed::EmbedEngine, EngineStatus, LlmEngine, ModelChoice, ReportType,
-    SYSTEM_PROMPT_DE,
+    self, download, embed::EmbedEngine, EngineStatus, LetterType, LlmEngine, ModelChoice, ReportType,
+    SYSTEM_PROMPT_DE, SYSTEM_PROMPT_FR, letter_generation_prompt,
 };
 use crate::state::{AppState, AuthState};
 use serde::Serialize;
@@ -319,23 +319,18 @@ pub async fn generate_session_summary(
     session_notes: String,
     system_prompt: Option<String>,
 ) -> Result<String, AppError> {
-    // Check authentication before processing patient data
     check_auth(&state)?;
 
-    // Acquire the engine handle under the mutex, but do not run inference while holding the lock.
     let engine = {
         let llm = state.llm.lock().unwrap();
         let engine = llm
             .as_ref()
             .ok_or_else(|| AppError::Llm("Model not loaded".to_string()))?;
-        // Clone the Arc so we can release the lock before inference.
         Arc::clone(engine)
     };
 
-    // Resolve the system prompt into an owned String we can move into the blocking task.
     let prompt: String = system_prompt.unwrap_or_else(|| SYSTEM_PROMPT_DE.to_string());
 
-    // Run the potentially long-running session summary generation on a blocking thread.
     let app_clone = app.clone();
     let summary = tokio::task::spawn_blocking(move || {
         llm::generate_session_summary_streaming_with_prompt(
@@ -351,4 +346,74 @@ pub async fn generate_session_summary(
 
     let _ = app.emit("session-summary-done", ());
     Ok(summary)
+}
+
+/// Generate a formal letter (referral, insurance authorization, or therapy extension) with streaming output.
+/// Emits `"letter-chunk"` events for each token and `"letter-done"` on completion.
+/// `system_prompt`: optional override; falls back to the built-in German or French prompt based on language.
+#[tauri::command]
+pub async fn generate_letter(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    letter_type: String,
+    language: String,
+    patient_context: String,
+    clinical_summary: String,
+    recipient_name: Option<String>,
+    system_prompt: Option<String>,
+) -> Result<String, AppError> {
+    check_auth(&state)?;
+
+    let lt = match letter_type.as_str() {
+        "referral" => LetterType::Referral,
+        "insurance_authorization" => LetterType::InsuranceAuthorization,
+        "therapy_extension" => LetterType::TherapyExtension,
+        other => {
+            return Err(AppError::Validation(format!(
+                "Unknown letter type: {other}"
+            )))
+        }
+    };
+
+    if language != "de" && language != "fr" {
+        return Err(AppError::Validation(format!(
+            "Unsupported language: {language}. Must be 'de' or 'fr'"
+        )));
+    }
+
+    let engine = {
+        let llm = state.llm.lock().unwrap();
+        let engine = llm
+            .as_ref()
+            .ok_or_else(|| AppError::Llm("Model not loaded".to_string()))?;
+        Arc::clone(engine)
+    };
+
+    let prompt: String = system_prompt.unwrap_or_else(|| {
+        if language == "fr" {
+            SYSTEM_PROMPT_FR.to_string()
+        } else {
+            SYSTEM_PROMPT_DE.to_string()
+        }
+    });
+
+    let app_clone = app.clone();
+    let recipient_name_clone = recipient_name.clone();
+    let letter = tokio::task::spawn_blocking(move || {
+        llm::generate_letter_streaming_with_prompt(
+            &app_clone,
+            &engine,
+            lt,
+            &language,
+            &patient_context,
+            &clinical_summary,
+            recipient_name_clone.as_deref(),
+            &prompt,
+        )
+    })
+    .await
+    .map_err(|e| AppError::Llm(format!("spawn_blocking error: {e}")))??;
+
+    let _ = app.emit("letter-done", ());
+    Ok(letter)
 }
