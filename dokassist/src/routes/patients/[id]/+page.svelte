@@ -6,6 +6,7 @@
     getPatient,
     updatePatient,
     deletePatient,
+    exportPatientPdf,
     type Patient,
     type UpdatePatient,
   } from '$lib/api';
@@ -17,6 +18,7 @@
   let isEditing = $state(false);
   let isSubmitting = $state(false);
   let isDeleting = $state(false);
+  let isExporting = $state(false);
   let showDeleteConfirm = $state(false);
   let error = $state('');
 
@@ -79,6 +81,31 @@
     isEditing = false;
   }
 
+  async function handleExportPdf() {
+    if (!patientId || !patient) return;
+
+    try {
+      isExporting = true;
+      error = "";
+      const bytes = await exportPatientPdf(patientId);
+      const uint8Array = new Uint8Array(bytes);
+      const blob = new Blob([uint8Array], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Patient_${patient.last_name}_${patient.first_name}_${new Date().toISOString().split("T")[0]}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      error = e instanceof Error ? e.message : "Failed to export patient summary";
+      console.error("Error exporting patient summary:", e);
+    } finally {
+      isExporting = false;
+    }
+  }
+
   function formatDate(dateStr: string): string {
     try {
       const date = new Date(dateStr);
@@ -134,6 +161,13 @@
               >
                 {$t('patients.sendEmail')}
               </a>
+              <button
+                onclick={handleExportPdf}
+                disabled={isExporting}
+                class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isExporting ? "Exporting..." : "Export PDF"}
+              </button>
             </div>
             <button
               onclick={() => (showDeleteConfirm = true)}
