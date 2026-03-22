@@ -928,6 +928,10 @@ export async function exportAllPatientData(): Promise<number[]> {
   return await invoke<number[]>('export_all_patient_data');
 }
 
+export async function exportFhirBundle(patientId: string): Promise<string> {
+  return await invoke<string>('export_fhir_bundle', { patientId });
+}
+
 // ---------------------------------------------------------------------------
 // Backup & Restore
 // ---------------------------------------------------------------------------

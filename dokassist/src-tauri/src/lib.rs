@@ -132,6 +132,7 @@ pub fn run() {
             commands::updater::install_update,
             commands::updater::get_app_version,
             commands::export::export_all_patient_data,
+            commands::fhir_export::export_fhir_bundle,
             commands::backup::create_vault_backup,
             commands::backup::restore_vault_backup,
             commands::backup::validate_backup_archive,

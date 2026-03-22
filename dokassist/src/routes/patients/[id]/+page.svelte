@@ -2,10 +2,12 @@
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
+  import { save } from '@tauri-apps/plugin-dialog';
   import {
     getPatient,
     updatePatient,
     deletePatient,
+    exportFhirBundle,
     type Patient,
     type UpdatePatient,
   } from '$lib/api';
@@ -18,6 +20,8 @@
   let isSubmitting = $state(false);
   let isDeleting = $state(false);
   let showDeleteConfirm = $state(false);
+  let isExporting = $state(false);
+  let showExportMenu = $state(false);
   let error = $state('');
 
   let patientId = $derived($page.params.id);
@@ -79,6 +83,49 @@
     isEditing = false;
   }
 
+  async function handleExportFhir() {
+    if (!patientId || !patient) return;
+
+    try {
+      isExporting = true;
+      showExportMenu = false;
+      error = '';
+
+      // Get FHIR bundle JSON
+      const fhirJson = await exportFhirBundle(patientId);
+
+      // Prompt user to save file
+      const fileName = `FHIR_${patient.last_name}_${patient.first_name}_${new Date().toISOString().split('T')[0]}.json`;
+      const filePath = await save({
+        defaultPath: fileName,
+        filters: [
+          {
+            name: 'FHIR Bundle',
+            extensions: ['json'],
+          },
+        ],
+      });
+
+      if (filePath) {
+        // Write the file
+        const { writeTextFile } = await import('@tauri-apps/plugin-fs');
+        await writeTextFile(filePath, fhirJson);
+      }
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Failed to export FHIR bundle';
+      console.error('Error exporting FHIR bundle:', e);
+    } finally {
+      isExporting = false;
+    }
+  }
+
+  function handleClickOutside(event: MouseEvent) {
+    const target = event.target as HTMLElement;
+    if (!target.closest('.export-dropdown')) {
+      showExportMenu = false;
+    }
+  }
+
   function formatDate(dateStr: string): string {
     try {
       const date = new Date(dateStr);
@@ -92,6 +139,8 @@
     }
   }
 </script>
+
+<svelte:window onclick={handleClickOutside} />
 
 <div class="p-8">
   <div class="max-w-4xl mx-auto">
@@ -134,6 +183,41 @@
               >
                 {$t('patients.sendEmail')}
               </a>
+              <!-- Export Dropdown -->
+              <div class="relative export-dropdown">
+                <button
+                  onclick={() => (showExportMenu = !showExportMenu)}
+                  disabled={isExporting}
+                  class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                >
+                  {isExporting ? 'Exporting...' : 'Export'}
+                  <svg
+                    class="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M19 9l-7 7-7-7"
+                    />
+                  </svg>
+                </button>
+                {#if showExportMenu}
+                  <div
+                    class="absolute left-0 mt-2 w-48 bg-white dark:bg-gray-700 rounded-lg shadow-lg border border-gray-200 dark:border-gray-600 z-10"
+                  >
+                    <button
+                      onclick={handleExportFhir}
+                      class="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors"
+                    >
+                      Export FHIR R4
+                    </button>
+                  </div>
+                {/if}
+              </div>
             </div>
             <button
               onclick={() => (showDeleteConfirm = true)}

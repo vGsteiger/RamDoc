@@ -6,6 +6,7 @@ pub mod dashboard;
 pub mod diagnoses;
 pub mod emails;
 pub mod export;
+pub mod fhir_export;
 pub mod files;
 pub mod literature;
 pub mod llm;
