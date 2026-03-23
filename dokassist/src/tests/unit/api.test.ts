@@ -72,6 +72,17 @@ import {
   exportReportToDocx,
   getDashboardData,
   generateSessionSummary,
+  listModels,
+  getModelInfo,
+  downloadAndRegisterModel,
+  deleteModel,
+  setDefaultModel,
+  getDefaultModel,
+  setTaskModel,
+  getTaskModel,
+  listTaskModels,
+  clearTaskModel,
+  getModelForTask,
   type ModelChoice,
   type AppError,
 } from '$lib/api';
@@ -1374,3 +1385,254 @@ describe('generateSessionSummary', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Model Management API
+// ---------------------------------------------------------------------------
+
+describe('listModels', () => {
+  it('calls list_models and returns array of ModelInfo', async () => {
+    const models = [
+      {
+        id: 'model1',
+        name: 'Phi-4 Mini Q4_K_M',
+        filename: 'Phi-4-mini-instruct-Q4_K_M.gguf',
+        sha256: 'abc123',
+        size_bytes: 3000000000,
+        downloaded_at: '2025-01-01T00:00:00Z',
+        last_used: null,
+        is_default: true,
+        is_loaded: false,
+        exists_on_disk: true,
+      },
+    ];
+    mockInvoke.mockResolvedValueOnce(models);
+    const result = await listModels();
+    expect(mockInvoke).toHaveBeenCalledWith('list_models');
+    expect(result).toEqual(models);
+  });
+});
+
+describe('getModelInfo', () => {
+  it('calls get_model_info with modelId', async () => {
+    const model = {
+      id: 'model1',
+      name: 'Phi-4 Mini Q4_K_M',
+      filename: 'Phi-4-mini-instruct-Q4_K_M.gguf',
+      sha256: 'abc123',
+      size_bytes: 3000000000,
+      downloaded_at: '2025-01-01T00:00:00Z',
+      last_used: null,
+      is_default: true,
+      is_loaded: false,
+      exists_on_disk: true,
+    };
+    mockInvoke.mockResolvedValueOnce(model);
+    const result = await getModelInfo('model1');
+    expect(mockInvoke).toHaveBeenCalledWith('get_model_info', { modelId: 'model1' });
+    expect(result).toEqual(model);
+  });
+});
+
+describe('downloadAndRegisterModel', () => {
+  it('calls download_and_register_model with the model payload', async () => {
+    const model: ModelChoice = {
+      name: 'Phi-4 Mini Q4_K_M',
+      filename: 'Phi-4-mini-instruct-Q4_K_M.gguf',
+      size_bytes: 3 * 1024 ** 3,
+      reason: 'Unter 16 GB RAM: Phi-4 Mini für minimale Ressourcen',
+    };
+    const registered = {
+      id: 'model1',
+      name: model.name,
+      filename: model.filename,
+      sha256: 'abc123def456',
+      size_bytes: model.size_bytes,
+      downloaded_at: '2025-01-01T00:00:00Z',
+      last_used: null,
+      is_default: false,
+    };
+    mockInvoke.mockResolvedValueOnce(registered);
+    const result = await downloadAndRegisterModel(model);
+    expect(mockInvoke).toHaveBeenCalledWith('download_and_register_model', { model });
+    expect(result).toEqual(registered);
+  });
+
+  it('propagates invoke errors on download failure', async () => {
+    const model: ModelChoice = {
+      name: 'Phi-4 Mini Q4_K_M',
+      filename: 'Phi-4-mini-instruct-Q4_K_M.gguf',
+      size_bytes: 3 * 1024 ** 3,
+      reason: '',
+    };
+    mockInvoke.mockRejectedValueOnce({
+      code: 'NETWORK_ERROR',
+      message: 'Failed to download model',
+    });
+    await expect(downloadAndRegisterModel(model)).rejects.toMatchObject({
+      code: 'NETWORK_ERROR',
+    });
+  });
+});
+
+describe('deleteModel', () => {
+  it('calls delete_model with modelId', async () => {
+    mockInvoke.mockResolvedValueOnce(undefined);
+    await deleteModel('model1');
+    expect(mockInvoke).toHaveBeenCalledWith('delete_model', { modelId: 'model1' });
+  });
+
+  it('propagates error when deleting loaded model', async () => {
+    mockInvoke.mockRejectedValueOnce({
+      code: 'VALIDATION_ERROR',
+      message: 'Cannot delete currently loaded model',
+    });
+    await expect(deleteModel('model1')).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+    });
+  });
+});
+
+describe('setDefaultModel', () => {
+  it('calls set_default_model with modelId', async () => {
+    mockInvoke.mockResolvedValueOnce(undefined);
+    await setDefaultModel('model1');
+    expect(mockInvoke).toHaveBeenCalledWith('set_default_model', { modelId: 'model1' });
+  });
+});
+
+describe('getDefaultModel', () => {
+  it('calls get_default_model and returns the default model', async () => {
+    const model = {
+      id: 'model1',
+      name: 'Phi-4 Mini Q4_K_M',
+      filename: 'Phi-4-mini-instruct-Q4_K_M.gguf',
+      sha256: 'abc123',
+      size_bytes: 3000000000,
+      downloaded_at: '2025-01-01T00:00:00Z',
+      last_used: null,
+      is_default: true,
+    };
+    mockInvoke.mockResolvedValueOnce(model);
+    const result = await getDefaultModel();
+    expect(mockInvoke).toHaveBeenCalledWith('get_default_model');
+    expect(result).toEqual(model);
+  });
+
+  it('returns null when no default model is set', async () => {
+    mockInvoke.mockResolvedValueOnce(null);
+    const result = await getDefaultModel();
+    expect(mockInvoke).toHaveBeenCalledWith('get_default_model');
+    expect(result).toBeNull();
+  });
+});
+
+describe('setTaskModel', () => {
+  it('calls set_task_model with taskType and modelId', async () => {
+    mockInvoke.mockResolvedValueOnce(undefined);
+    await setTaskModel('summary', 'model1');
+    expect(mockInvoke).toHaveBeenCalledWith('set_task_model', {
+      taskType: 'summary',
+      modelId: 'model1',
+    });
+  });
+});
+
+describe('getTaskModel', () => {
+  it('calls get_task_model with taskType and returns the assigned model', async () => {
+    const model = {
+      id: 'model1',
+      name: 'Phi-4 Mini Q4_K_M',
+      filename: 'Phi-4-mini-instruct-Q4_K_M.gguf',
+      sha256: 'abc123',
+      size_bytes: 3000000000,
+      downloaded_at: '2025-01-01T00:00:00Z',
+      last_used: null,
+      is_default: false,
+    };
+    mockInvoke.mockResolvedValueOnce(model);
+    const result = await getTaskModel('summary');
+    expect(mockInvoke).toHaveBeenCalledWith('get_task_model', { taskType: 'summary' });
+    expect(result).toEqual(model);
+  });
+
+  it('returns null when no model is assigned to the task', async () => {
+    mockInvoke.mockResolvedValueOnce(null);
+    const result = await getTaskModel('letter');
+    expect(mockInvoke).toHaveBeenCalledWith('get_task_model', { taskType: 'letter' });
+    expect(result).toBeNull();
+  });
+});
+
+describe('listTaskModels', () => {
+  it('calls list_task_models and returns all task-model assignments', async () => {
+    const taskModels = [
+      {
+        task_type: 'summary',
+        model_id: 'model1',
+        created_at: '2025-01-01T00:00:00Z',
+        updated_at: '2025-01-01T00:00:00Z',
+      },
+      {
+        task_type: 'report',
+        model_id: 'model2',
+        created_at: '2025-01-02T00:00:00Z',
+        updated_at: '2025-01-02T00:00:00Z',
+      },
+    ];
+    mockInvoke.mockResolvedValueOnce(taskModels);
+    const result = await listTaskModels();
+    expect(mockInvoke).toHaveBeenCalledWith('list_task_models');
+    expect(result).toEqual(taskModels);
+  });
+});
+
+describe('clearTaskModel', () => {
+  it('calls clear_task_model with taskType', async () => {
+    mockInvoke.mockResolvedValueOnce(undefined);
+    await clearTaskModel('summary');
+    expect(mockInvoke).toHaveBeenCalledWith('clear_task_model', { taskType: 'summary' });
+  });
+});
+
+describe('getModelForTask', () => {
+  it('calls get_model_for_task with taskType and returns task-specific model', async () => {
+    const model = {
+      id: 'model1',
+      name: 'Phi-4 Mini Q4_K_M',
+      filename: 'Phi-4-mini-instruct-Q4_K_M.gguf',
+      sha256: 'abc123',
+      size_bytes: 3000000000,
+      downloaded_at: '2025-01-01T00:00:00Z',
+      last_used: null,
+      is_default: false,
+    };
+    mockInvoke.mockResolvedValueOnce(model);
+    const result = await getModelForTask('summary');
+    expect(mockInvoke).toHaveBeenCalledWith('get_model_for_task', { taskType: 'summary' });
+    expect(result).toEqual(model);
+  });
+
+  it('returns default model when no task-specific model is set', async () => {
+    const defaultModel = {
+      id: 'model2',
+      name: 'Default Model',
+      filename: 'default.gguf',
+      sha256: 'def456',
+      size_bytes: 5000000000,
+      downloaded_at: '2025-01-01T00:00:00Z',
+      last_used: null,
+      is_default: true,
+    };
+    mockInvoke.mockResolvedValueOnce(defaultModel);
+    const result = await getModelForTask('letter');
+    expect(mockInvoke).toHaveBeenCalledWith('get_model_for_task', { taskType: 'letter' });
+    expect(result).toEqual(defaultModel);
+  });
+
+  it('returns null when no task-specific or default model exists', async () => {
+    mockInvoke.mockResolvedValueOnce(null);
+    const result = await getModelForTask('report');
+    expect(mockInvoke).toHaveBeenCalledWith('get_model_for_task', { taskType: 'report' });
+    expect(result).toBeNull();
+  });
+});
