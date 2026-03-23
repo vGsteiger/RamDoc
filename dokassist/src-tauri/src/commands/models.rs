@@ -1,10 +1,9 @@
 use crate::error::AppError;
-use crate::llm::{download, LlmEngine, ModelChoice};
+use crate::llm::{download, ModelChoice};
 use crate::models::model::{self, Model, TaskModel, TaskType};
 use crate::state::AppState;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, State};
 use uuid::Uuid;
 
 /// Response for list_models command with additional context
@@ -116,18 +115,9 @@ pub async fn download_and_register_model(
     let dest_path = dest_dir.join(&model.filename);
     let url = download::model_url(&model.filename)?;
 
-    // Download with progress
-    download::download_model_with_progress(&app, &url, &dest_path, &model.filename).await?;
-
-    // After successful download, get the actual SHA-256 from the file
-    let sha256 = {
-        use ring::digest::{Context as DigestContext, SHA256};
-        let bytes = tokio::fs::read(&dest_path).await?;
-        let mut context = DigestContext::new(&SHA256);
-        context.update(&bytes);
-        let digest = context.finish();
-        hex::encode(digest.as_ref())
-    };
+    // Download with progress and get verified SHA-256
+    let sha256 =
+        download::download_model_with_progress(&app, &url, &dest_path, &model.filename).await?;
 
     let size_bytes = tokio::fs::metadata(&dest_path).await?.len() as i64;
 

@@ -30,6 +30,7 @@ CREATE INDEX IF NOT EXISTS idx_models_last_used ON models(last_used DESC);
 -- Trigger to update updated_at on task_models
 CREATE TRIGGER IF NOT EXISTS task_models_updated_at
 AFTER UPDATE ON task_models
+WHEN NEW.updated_at = OLD.updated_at
 BEGIN
     UPDATE task_models SET updated_at = datetime('now') WHERE task_type = NEW.task_type;
 END;

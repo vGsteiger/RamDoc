@@ -109,7 +109,8 @@ pub async fn download_model(
 
     let dest_path = dest_dir.join(&model.filename);
     let url = download::model_url(&model.filename)?;
-    download::download_model_with_progress(&app, &url, &dest_path, &model.filename).await
+    download::download_model_with_progress(&app, &url, &dest_path, &model.filename).await?;
+    Ok(())
 }
 
 /// Load a GGUF model from ~/DokAssist/models/ into memory (Metal-accelerated).

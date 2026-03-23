@@ -112,6 +112,7 @@
 
   onDestroy(() => {
     unlisten?.();
+    doneUnsubscribe?.();
     updateUnlisten?.();
   });
 
@@ -201,6 +202,8 @@
   }
 
   // Model management handlers
+  let doneUnsubscribe: UnlistenFn | null = null;
+
   async function handleDownloadNewModel(model: ModelChoice) {
     phase = 'downloading';
     downloadProgress = 0;
@@ -210,21 +213,22 @@
       downloadProgress = Math.round(e.payload * 100);
     });
 
-    const doneUnsub = await listen('model-download-done', () => {
-      doneUnsub();
+    doneUnsubscribe = await listen('model-download-done', () => {
+      // Event fired, cleanup handled in finally
     });
 
     try {
       await downloadAndRegisterModel(model);
-      unlisten();
-      unlisten = null;
       phase = 'idle';
       await loadInstalledModels();
     } catch (e) {
-      unlisten?.();
-      unlisten = null;
       phase = 'error';
       errorMsg = parseError(e).message;
+    } finally {
+      unlisten?.();
+      unlisten = null;
+      doneUnsubscribe?.();
+      doneUnsubscribe = null;
     }
   }
 
@@ -234,6 +238,7 @@
     try {
       await loadModel(filename);
       status = await getEngineStatus();
+      await loadInstalledModels(); // Refresh list to show loaded badge
       phase = 'done';
     } catch (e) {
       phase = 'error';
@@ -657,7 +662,7 @@
 <!-- Enhanced Model Management Section -->
 <section>
   <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-200 mb-4">
-    Model Management
+    {$t('settings.modelManagement')}
   </h2>
 
   <!-- Currently loaded model status -->
@@ -668,11 +673,13 @@
       ></div>
       <div class="flex-1">
         <p class="text-sm font-medium text-gray-900 dark:text-gray-100">
-          {status?.is_loaded ? `Loaded: ${status.model_name}` : 'No model loaded'}
+          {status?.is_loaded
+            ? $t('settings.loadedModel').replace('{name}', status.model_name ?? '')
+            : $t('settings.noModelLoaded')}
         </p>
         {#if status?.total_ram_bytes}
           <p class="text-xs text-gray-600 dark:text-gray-400">
-            System RAM: {formatBytes(status.total_ram_bytes)}
+            {$t('settings.systemRam').replace('{ram}', formatBytes(status.total_ram_bytes))}
           </p>
         {/if}
       </div>
@@ -682,14 +689,14 @@
   <!-- Installed Models List -->
   <div class="mb-6">
     <h3 class="text-md font-semibold text-gray-900 dark:text-gray-200 mb-3">
-      Installed Models
+      {$t('settings.installedModels')}
     </h3>
 
     {#if loadingModels}
-      <p class="text-sm text-gray-600 dark:text-gray-400">Loading models...</p>
+      <p class="text-sm text-gray-600 dark:text-gray-400">{$t('settings.loadingModels')}</p>
     {:else if installedModels.length === 0}
       <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
-        No models installed. Download a model below to get started.
+        {$t('settings.noModelsInstalled')}
       </p>
     {:else}
       <div class="space-y-3">
@@ -704,17 +711,18 @@
                     {model.name}
                   </p>
                   {#if model.is_default}
-                    <span
-                      class="px-2 py-0.5 text-xs rounded bg-blue-500 text-white"
-                    >
-                      Default
+                    <span class="px-2 py-0.5 text-xs rounded bg-blue-500 text-white">
+                      {$t('settings.defaultBadge')}
                     </span>
                   {/if}
                   {#if model.is_loaded}
-                    <span
-                      class="px-2 py-0.5 text-xs rounded bg-green-500 text-white"
-                    >
-                      Loaded
+                    <span class="px-2 py-0.5 text-xs rounded bg-green-500 text-white">
+                      {$t('settings.loadedBadge')}
+                    </span>
+                  {/if}
+                  {#if !model.exists_on_disk}
+                    <span class="px-2 py-0.5 text-xs rounded bg-red-500 text-white">
+                      {$t('settings.modelMissingOnDisk')}
                     </span>
                   {/if}
                 </div>
@@ -723,28 +731,31 @@
                 </p>
                 {#if model.last_used}
                   <p class="text-xs text-gray-500 dark:text-gray-500 mt-1">
-                    Last used: {new Date(model.last_used).toLocaleDateString()}
+                    {$t('settings.lastUsed').replace(
+                      '{date}',
+                      new Date(model.last_used).toLocaleDateString()
+                    )}
                   </p>
                 {/if}
               </div>
             </div>
 
             <div class="flex gap-2 mt-3">
-              {#if !model.is_loaded}
+              {#if model.exists_on_disk && !model.is_loaded}
                 <button
                   onclick={() => handleLoadModel(model.filename)}
                   disabled={phase === 'loading'}
                   class="px-3 py-1.5 text-xs rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors"
                 >
-                  Load
+                  {$t('settings.load')}
                 </button>
               {/if}
-              {#if !model.is_default}
+              {#if model.exists_on_disk && !model.is_default}
                 <button
                   onclick={() => handleSetDefaultModel(model.id)}
                   class="px-3 py-1.5 text-xs rounded-lg bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 transition-colors"
                 >
-                  Set Default
+                  {$t('settings.setDefault')}
                 </button>
               {/if}
               {#if !model.is_loaded}
@@ -752,7 +763,7 @@
                   onclick={() => handleDeleteModel(model.id)}
                   class="px-3 py-1.5 text-xs rounded-lg bg-red-600 hover:bg-red-500 text-white transition-colors"
                 >
-                  Delete
+                  {$t('settings.delete')}
                 </button>
               {/if}
             </div>
@@ -766,7 +777,7 @@
   {#if recommended}
     <div class="mb-6">
       <h3 class="text-md font-semibold text-gray-900 dark:text-gray-200 mb-3">
-        Recommended Model
+        {$t('settings.recommendedModelSection')}
       </h3>
       <div
         class="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-4"
@@ -780,7 +791,7 @@
               {recommended.reason}
             </p>
             <p class="text-xs text-gray-500 dark:text-gray-500 mt-1">
-              Size: {formatBytes(recommended.size_bytes)}
+              {$t('settings.size').replace('{size}', formatBytes(recommended.size_bytes))}
             </p>
           </div>
         </div>
@@ -790,7 +801,7 @@
             <div
               class="flex justify-between text-xs text-gray-600 dark:text-gray-400 mb-1"
             >
-              <span>Downloading...</span>
+              <span>{$t('settings.downloadingLabel')}</span>
               <span>{downloadProgress ?? 0}%</span>
             </div>
             <div class="w-full bg-gray-300 dark:bg-gray-700 rounded-full h-2">
@@ -811,7 +822,9 @@
           disabled={phase === 'downloading' || phase === 'loading'}
           class="px-4 py-2 text-sm rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors"
         >
-          {phase === 'downloading' ? 'Downloading...' : 'Download Model'}
+          {phase === 'downloading'
+            ? $t('settings.downloadingLabel')
+            : $t('settings.downloadModel')}
         </button>
       </div>
     </div>
@@ -820,15 +833,15 @@
   <!-- Task-Specific Model Assignment -->
   <div class="mb-6">
     <h3 class="text-md font-semibold text-gray-900 dark:text-gray-200 mb-3">
-      Task-Specific Models
+      {$t('settings.taskSpecificModels')}
     </h3>
     <p class="text-xs text-gray-600 dark:text-gray-400 mb-4">
-      Assign different models to specific tasks for optimal performance.
+      {$t('settings.taskSpecificModelsDesc')}
     </p>
 
     {#if installedModels.length > 0}
       <div class="space-y-3">
-        {#each ['default', 'summary', 'letter', 'report'] as taskType}
+        {#each ['summary', 'letter', 'report'] as taskType}
           <div
             class="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-4"
           >
@@ -836,7 +849,7 @@
               for="task-{taskType}"
               class="block text-sm font-medium text-gray-900 dark:text-gray-100 mb-2 capitalize"
             >
-              {taskType === 'default' ? 'Default (fallback)' : taskType}
+              {$t(`settings.${taskType}`)}
             </label>
             <select
               id="task-{taskType}"
@@ -844,7 +857,7 @@
               onchange={(e) => handleSetTaskModel(taskType, e.currentTarget.value)}
               class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
-              <option value="">-- Use default model --</option>
+              <option value="">{$t('settings.useDefaultModel')}</option>
               {#each installedModels as model}
                 <option value={model.id}>
                   {model.name} ({formatBytes(model.size_bytes)})
@@ -856,7 +869,7 @@
       </div>
     {:else}
       <p class="text-xs text-gray-600 dark:text-gray-400">
-        Install at least one model to configure task-specific assignments.
+        {$t('settings.installModelFirst')}
       </p>
     {/if}
   </div>
