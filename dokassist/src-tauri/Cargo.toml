@@ -65,6 +65,9 @@ zip = "4"
 printpdf = "0.9"
 docx-rs = "0.4"
 
+# CSV Import
+csv = "1"
+
 [features]
 # Enable Metal GPU acceleration for llama.cpp on Apple Silicon.
 # Pass --features metal to cargo / tauri build when targeting aarch64-apple-darwin.

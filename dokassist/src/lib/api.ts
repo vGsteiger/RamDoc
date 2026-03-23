@@ -1379,3 +1379,50 @@ export async function getDashboardData(): Promise<DashboardData> {
   return await invoke<DashboardData>("get_dashboard_data");
 }
 
+// ---------------------------------------------------------------------------
+// CSV Import API
+// ---------------------------------------------------------------------------
+
+export interface ColumnMapping {
+  csv_header: string;
+  patient_field: string;
+}
+
+export interface CsvWarning {
+  row: number;
+  column: string | null;
+  message: string;
+}
+
+export interface CsvPreview {
+  headers: string[];
+  sample_rows: string[][];
+  total_rows: number;
+  detected_mappings: ColumnMapping[];
+  warnings: CsvWarning[];
+}
+
+export interface ImportResult {
+  success: boolean;
+  imported_count: number;
+  failed_count: number;
+  warnings: CsvWarning[];
+  errors: CsvWarning[];
+}
+
+export async function parseCsvPreview(filePath: string): Promise<CsvPreview> {
+  return await invoke<CsvPreview>('parse_csv_preview', {
+    filePath,
+  });
+}
+
+export async function importCsvData(
+  filePath: string,
+  columnMappings: ColumnMapping[]
+): Promise<ImportResult> {
+  return await invoke<ImportResult>('import_csv_data', {
+    filePath,
+    columnMappings,
+  });
+}
+

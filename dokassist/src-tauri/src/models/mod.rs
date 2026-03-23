@@ -3,6 +3,7 @@ pub mod diagnosis;
 pub mod email;
 pub mod fhir;
 pub mod file_record;
+pub mod import;
 pub mod letter;
 pub mod literature;
 pub mod medication;

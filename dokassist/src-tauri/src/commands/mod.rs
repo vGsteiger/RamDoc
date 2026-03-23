@@ -8,6 +8,7 @@ pub mod emails;
 pub mod export;
 pub mod fhir_export;
 pub mod files;
+pub mod import;
 pub mod letters;
 pub mod literature;
 pub mod llm;

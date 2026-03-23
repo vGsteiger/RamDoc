@@ -176,6 +176,8 @@ pub fn run() {
             commands::models::list_task_models,
             commands::models::clear_task_model,
             commands::models::get_model_for_task,
+            commands::import::parse_csv_preview,
+            commands::import::import_csv_data,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
