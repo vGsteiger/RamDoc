@@ -1,6 +1,6 @@
 {
   "name": "dokassist",
-  "version": "0.7.14",
+  "version": "0.8.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -26,9 +26,9 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/svelte": "^5.3.1",
     "@vitest/coverage-v8": "^4.0.18",
-    "eslint": "^9.0.0",
+    "eslint": "^10.1.0",
     "eslint-plugin-svelte": "^3.16.0",
-    "globals": "^16.0.0",
+    "globals": "^17.4.0",
     "jsdom": "^29.0.1",
     "prettier": "^3.0.0",
     "prettier-plugin-svelte": "^3.0.0",

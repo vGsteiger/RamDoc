@@ -71,6 +71,7 @@ import {
   exportReportToPdf,
   exportReportToDocx,
   getDashboardData,
+  generateSessionSummary,
   type ModelChoice,
   type AppError,
 } from '$lib/api';
@@ -1324,3 +1325,52 @@ describe('getDashboardData', () => {
     expect(result).toEqual(dashboardData);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Session Summary Generation
+// ---------------------------------------------------------------------------
+
+describe('generateSessionSummary', () => {
+  it('calls generate_session_summary with patientContext and sessionNotes', async () => {
+    const summary = 'Generated clinical summary';
+    mockInvoke.mockResolvedValueOnce(summary);
+    const result = await generateSessionSummary(
+      'Patient: John Doe, DOB: 1980-01-01',
+      'Patient reports feeling anxious'
+    );
+    expect(mockInvoke).toHaveBeenCalledWith('generate_session_summary', {
+      patientContext: 'Patient: John Doe, DOB: 1980-01-01',
+      sessionNotes: 'Patient reports feeling anxious',
+      systemPrompt: undefined,
+    });
+    expect(result).toBe(summary);
+  });
+
+  it('calls generate_session_summary with optional systemPrompt', async () => {
+    const summary = 'Generated clinical summary';
+    mockInvoke.mockResolvedValueOnce(summary);
+    await generateSessionSummary(
+      'Patient: John Doe',
+      'Session notes',
+      'Use professional psychiatric terminology'
+    );
+    expect(mockInvoke).toHaveBeenCalledWith('generate_session_summary', {
+      patientContext: 'Patient: John Doe',
+      sessionNotes: 'Session notes',
+      systemPrompt: 'Use professional psychiatric terminology',
+    });
+  });
+
+  it('handles empty session notes', async () => {
+    const summary = 'No notes provided';
+    mockInvoke.mockResolvedValueOnce(summary);
+    const result = await generateSessionSummary('Patient: John Doe', '');
+    expect(mockInvoke).toHaveBeenCalledWith('generate_session_summary', {
+      patientContext: 'Patient: John Doe',
+      sessionNotes: '',
+      systemPrompt: undefined,
+    });
+    expect(result).toBe(summary);
+  });
+});
+

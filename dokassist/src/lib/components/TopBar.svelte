@@ -25,10 +25,8 @@
 
   onMount(() => {
     const handleKeydown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        searchInput?.focus();
-      }
+      // Cmd+K is now handled globally for command palette
+      // Only handle Escape here
       if (e.key === 'Escape') {
         closeDropdown();
       }

@@ -105,6 +105,34 @@ pub async fn list_scores_by_scale(
 }
 
 #[tauri::command]
+pub async fn list_scores_for_patient(
+    state: State<'_, AppState>,
+    patient_id: String,
+    limit: Option<u32>,
+    offset: Option<u32>,
+) -> Result<Vec<OutcomeScore>, AppError> {
+    let pool = state.get_db()?;
+    let conn = pool.conn()?;
+
+    let scores = outcome_score::list_scores_for_patient(
+        &conn,
+        &patient_id,
+        limit.unwrap_or(100),
+        offset.unwrap_or(0),
+    )?;
+
+    audit::log(
+        &conn,
+        AuditAction::View,
+        "outcome_score",
+        None,
+        Some(&format!("patient_id={}", patient_id)),
+    )?;
+
+    Ok(scores)
+}
+
+#[tauri::command]
 pub async fn update_outcome_score(
     state: State<'_, AppState>,
     id: String,

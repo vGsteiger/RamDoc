@@ -13,6 +13,7 @@ pub struct Session {
     pub scheduled_time: Option<String>,
     pub notes: Option<String>,
     pub amdp_data: Option<String>,
+    pub clinical_summary: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -36,6 +37,7 @@ pub struct UpdateSession {
     pub scheduled_time: Option<String>,
     pub notes: Option<String>,
     pub amdp_data: Option<String>,
+    pub clinical_summary: Option<String>,
 }
 
 fn row_to_session(row: &Row) -> Result<Session, rusqlite::Error> {
@@ -48,8 +50,9 @@ fn row_to_session(row: &Row) -> Result<Session, rusqlite::Error> {
         scheduled_time: row.get(5)?,
         notes: row.get(6)?,
         amdp_data: row.get(7)?,
-        created_at: row.get(8)?,
-        updated_at: row.get(9)?,
+        clinical_summary: row.get(8)?,
+        created_at: row.get(9)?,
+        updated_at: row.get(10)?,
     })
 }
 
@@ -78,7 +81,7 @@ pub fn get_session(conn: &Connection, id: &str) -> Result<Session, AppError> {
     let session = conn
         .query_row(
             "SELECT id, patient_id, session_date, session_type, duration_minutes, scheduled_time, notes, amdp_data,
-                    created_at, updated_at
+                    clinical_summary, created_at, updated_at
              FROM sessions WHERE id = ?",
             params![id],
             row_to_session,
@@ -127,6 +130,14 @@ pub fn update_session(
         updates.push("amdp_data = ?");
         values.push(Box::new(amdp_data));
     }
+    if let Some(clinical_summary) = input.clinical_summary {
+        if clinical_summary.is_empty() {
+            updates.push("clinical_summary = NULL");
+        } else {
+            updates.push("clinical_summary = ?");
+            values.push(Box::new(clinical_summary));
+        }
+    }
 
     if updates.is_empty() {
         return get_session(conn, id);
@@ -164,7 +175,7 @@ pub fn list_all_sessions(
 ) -> Result<Vec<SessionWithPatient>, AppError> {
     let mut stmt = conn.prepare(
         "SELECT s.id, s.patient_id, s.session_date, s.session_type, s.duration_minutes,
-                s.scheduled_time, s.notes, s.amdp_data, s.created_at, s.updated_at,
+                s.scheduled_time, s.notes, s.amdp_data, s.clinical_summary, s.created_at, s.updated_at,
                 p.first_name || ' ' || p.last_name AS patient_name
          FROM sessions s
          JOIN patients p ON s.patient_id = p.id
@@ -176,7 +187,7 @@ pub fn list_all_sessions(
         .query_map(params![limit, offset], |row| {
             Ok(SessionWithPatient {
                 session: row_to_session(row)?,
-                patient_name: row.get(10)?,
+                patient_name: row.get(11)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -192,7 +203,7 @@ pub fn list_sessions_for_patient(
 ) -> Result<Vec<Session>, AppError> {
     let mut stmt = conn.prepare(
         "SELECT id, patient_id, session_date, session_type, duration_minutes, scheduled_time, notes, amdp_data,
-                created_at, updated_at
+                clinical_summary, created_at, updated_at
          FROM sessions
          WHERE patient_id = ?
          ORDER BY session_date DESC

@@ -105,8 +105,8 @@ jobs:
         name: dokassist-${{ matrix.platform }}
         path: |
           dokassist/src-tauri/target/*/release/bundle/dmg/*.dmg
-          dokassist/src-tauri/target/*/release/bundle/macos/*.app.tar.gz
-          dokassist/src-tauri/target/*/release/bundle/macos/*.app.tar.gz.sig
+          dokassist/src-tauri/target/*/release/bundle/macos/*.tar.gz
+          dokassist/src-tauri/target/*/release/bundle/macos/*.tar.gz.sig
         retention-days: 7
         if-no-files-found: warn
 

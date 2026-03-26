@@ -740,6 +740,7 @@ fn test_pkg10_session_crud() {
         notes: Some("Updated notes".to_string()),
         session_date: None,
         amdp_data: None,
+        clinical_summary: None,
     };
 
     let updated_session =

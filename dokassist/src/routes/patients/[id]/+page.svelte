@@ -9,11 +9,15 @@
     deletePatient,
     exportFhirBundle,
     exportPatientPdf,
+    listScoresForPatient,
     type Patient,
     type UpdatePatient,
+    type OutcomeScore,
   } from '$lib/api';
   import PatientForm from '$lib/components/PatientForm.svelte';
+  import OutcomeScoreTrendChart from '$lib/components/OutcomeScoreTrendChart.svelte';
   import { t } from '$lib/translations';
+  import { ChevronDown, ChevronUp } from 'lucide-svelte';
 
   let patient = $state<Patient | null>(null);
   let isLoading = $state(true);
@@ -25,10 +29,15 @@
   let showExportMenu = $state(false);
   let error = $state('');
 
+  let outcomeScores = $state<OutcomeScore[]>([]);
+  let isLoadingScores = $state(false);
+  let showTrendChart = $state(true);
+
   let patientId = $derived($page.params.id);
 
   onMount(async () => {
     await loadPatient();
+    await loadOutcomeScores();
   });
 
   async function loadPatient() {
@@ -47,6 +56,19 @@
       console.error('Error loading patient:', e);
     } finally {
       isLoading = false;
+    }
+  }
+
+  async function loadOutcomeScores() {
+    if (!patientId) return;
+
+    try {
+      isLoadingScores = true;
+      outcomeScores = await listScoresForPatient(patientId);
+    } catch (e) {
+      console.error('Error loading outcome scores:', e);
+    } finally {
+      isLoadingScores = false;
     }
   }
 
@@ -262,6 +284,45 @@
 
           <!-- Patient Details -->
           <div class="space-y-6">
+            <!-- Outcome Score Trend Visualization -->
+            {#if outcomeScores.length > 0}
+              <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
+                <button
+                  onclick={() => (showTrendChart = !showTrendChart)}
+                  class="flex items-center justify-between w-full mb-4 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                >
+                  <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                    Outcome Score Trends
+                  </h3>
+                  {#if showTrendChart}
+                    <ChevronUp class="w-5 h-5" />
+                  {:else}
+                    <ChevronDown class="w-5 h-5" />
+                  {/if}
+                </button>
+
+                {#if showTrendChart}
+                  <div class="space-y-6">
+                    {#each ['PHQ-9', 'GAD-7', 'BDI-II'] as scaleType}
+                      {@const scoresForScale = outcomeScores.filter((s) => s.scale_type === scaleType)}
+                      {#if scoresForScale.length > 0}
+                        <div class="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4">
+                          <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                            {scaleType}
+                            <span class="text-xs font-normal text-gray-500 dark:text-gray-400">
+                              ({scoresForScale.length}
+                              {scoresForScale.length === 1 ? 'measurement' : 'measurements'})
+                            </span>
+                          </h4>
+                          <OutcomeScoreTrendChart scores={scoresForScale} {scaleType} />
+                        </div>
+                      {/if}
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+            {/if}
+
             <!-- Basic Info -->
             <div class="grid grid-cols-2 gap-6">
               <div>
