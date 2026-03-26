@@ -740,6 +740,18 @@ export async function listScoresByScale(
   });
 }
 
+export async function listScoresForPatient(
+  patientId: string,
+  limit?: number,
+  offset?: number,
+): Promise<OutcomeScore[]> {
+  return await invoke<OutcomeScore[]>("list_scores_for_patient", {
+    patientId,
+    limit,
+    offset,
+  });
+}
+
 export async function updateOutcomeScore(
   id: string,
   input: UpdateOutcomeScore,

@@ -99,6 +99,7 @@ pub fn run() {
             commands::outcome_scores::get_outcome_score,
             commands::outcome_scores::list_scores_for_session,
             commands::outcome_scores::list_scores_by_scale,
+            commands::outcome_scores::list_scores_for_patient,
             commands::outcome_scores::update_outcome_score,
             commands::outcome_scores::delete_outcome_score,
             commands::search::search_patients,
