@@ -162,8 +162,8 @@ jobs:
 
         # Locate Apple Silicon DMG (distribution) and .app.tar.gz + .sig (updater)
         ARM_DMG=$(find ./artifacts -name "*aarch64*.dmg" | head -n1)
-        ARM_TAR=$(find ./artifacts -name "*aarch64*.app.tar.gz" | head -n1)
-        ARM_SIG=$(find ./artifacts -name "*aarch64*.app.tar.gz.sig" | head -n1)
+        ARM_TAR=$(find ./artifacts -name "*.app.tar.gz" | head -n1)
+        ARM_SIG=$(find ./artifacts -name "*.app.tar.gz.sig" | head -n1)
 
         ARM_URL=""
         ARM_SIG_CONTENT=""

@@ -32,9 +32,8 @@ pub async fn list_models(state: State<'_, AppState>) -> Result<Vec<ModelInfo>, A
     // Check which model is currently loaded
     let loaded_filename = {
         let llm = state.llm.lock().unwrap();
-        llm.as_ref().and_then(|engine| {
-            Some(engine.status().downloaded_filename?)
-        })
+        llm.as_ref()
+            .and_then(|engine| engine.status().downloaded_filename)
     };
 
     // Convert to ModelInfo with additional context
@@ -73,9 +72,8 @@ pub async fn get_model_info(
 
     let loaded_filename = {
         let llm = state.llm.lock().unwrap();
-        llm.as_ref().and_then(|engine| {
-            Some(engine.status().downloaded_filename?)
-        })
+        llm.as_ref()
+            .and_then(|engine| engine.status().downloaded_filename)
     };
 
     let model_path = state.data_dir.join("models").join(&m.filename);
@@ -103,9 +101,7 @@ pub async fn download_and_register_model(
 ) -> Result<Model, AppError> {
     // Validate filename
     if model.filename.is_empty() || model.filename.contains('/') || model.filename.contains('\\') {
-        return Err(AppError::Validation(
-            "Invalid model filename".to_string(),
-        ));
+        return Err(AppError::Validation("Invalid model filename".to_string()));
     }
 
     // Download the model first
@@ -149,38 +145,40 @@ pub async fn download_and_register_model(
 
 /// Delete a model (removes file and database record)
 #[tauri::command]
-pub async fn delete_model(
-    state: State<'_, AppState>,
-    model_id: String,
-) -> Result<(), AppError> {
+pub async fn delete_model(state: State<'_, AppState>, model_id: String) -> Result<(), AppError> {
     let db = state.get_db()?;
-    let conn = db.conn()?;
 
-    // Get the model to find its filename
-    let model = model::get_model(&conn, &model_id)?;
+    // Use a block so conn (MutexGuard, not Send) is dropped before any await points
+    let model_path = {
+        let conn = db.conn()?;
+        let model = model::get_model(&conn, &model_id)?;
 
-    // Check if this model is currently loaded
-    let is_loaded = {
-        let llm = state.llm.lock().unwrap();
-        llm.as_ref()
-            .and_then(|engine| engine.status().downloaded_filename)
-            .as_ref()
-            == Some(&model.filename)
+        let is_loaded = {
+            let llm = state.llm.lock().unwrap();
+            llm.as_ref()
+                .and_then(|engine| engine.status().downloaded_filename)
+                .as_ref()
+                == Some(&model.filename)
+        };
+
+        if is_loaded {
+            return Err(AppError::Validation(
+                "Cannot delete currently loaded model. Please load a different model first."
+                    .to_string(),
+            ));
+        }
+
+        state.data_dir.join("models").join(&model.filename)
+        // conn dropped here
     };
 
-    if is_loaded {
-        return Err(AppError::Validation(
-            "Cannot delete currently loaded model. Please load a different model first.".to_string(),
-        ));
-    }
-
-    // Delete the file
-    let model_path = state.data_dir.join("models").join(&model.filename);
+    // Delete the file (async — conn must not be held)
     if model_path.exists() {
         tokio::fs::remove_file(&model_path).await?;
     }
 
-    // Delete from database
+    // Re-acquire connection for database delete
+    let conn = db.conn()?;
     model::delete_model(&conn, &model_id)?;
 
     Ok(())

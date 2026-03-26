@@ -211,10 +211,7 @@ pub fn set_task_model(
 }
 
 /// Get the model assigned to a specific task type
-pub fn get_task_model(
-    conn: &Connection,
-    task_type: TaskType,
-) -> Result<Option<Model>, AppError> {
+pub fn get_task_model(conn: &Connection, task_type: TaskType) -> Result<Option<Model>, AppError> {
     let task_str = task_type.as_str();
 
     match conn.query_row(
