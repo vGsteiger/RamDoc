@@ -22,7 +22,6 @@
   let isDeleting = $state(false);
   let isExporting = $state(false);
   let showDeleteConfirm = $state(false);
-  let isExporting = $state(false);
   let showExportMenu = $state(false);
   let error = $state('');
 
