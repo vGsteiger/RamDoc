@@ -531,6 +531,7 @@
     "selectType": "Brieftyp auswählen",
     "selectLanguage": "Sprache auswählen",
     "selectTypeRequired": "Bitte wählen Sie einen Brieftyp.",
+    "contentRequired": "Der Briefinhalt darf nicht leer sein.",
     "newLetterTitle": "Brief erstellen",
     "backToLetters": "← Zurück zu Briefen",
     "llmNotConfigured": "LLM nicht konfiguriert",

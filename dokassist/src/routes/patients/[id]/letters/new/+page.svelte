@@ -10,22 +10,20 @@
     getPatient,
     listDiagnoses,
     listMedications,
-    listSessionsForPatient,
     type LetterType,
     type LetterLanguage,
     type Patient,
     type Diagnosis,
     type Medication,
-    type Session,
   } from '$lib/api';
   import { language as appLanguage } from '$lib/stores/language';
 
-  const patientId = $page.params.id;
+  let patientId: string;
+  $: patientId = $page.params.id;
 
   let patient = $state<Patient | null>(null);
   let diagnoses = $state<Diagnosis[]>([]);
   let medications = $state<Medication[]>([]);
-  let recentSessions = $state<Session[]>([]);
 
   let letterType = $state<LetterType>('referral');
   let letterLanguage = $state<LetterLanguage>('de');
@@ -50,13 +48,12 @@
       patient = await getPatient(patientId);
       diagnoses = await listDiagnoses(patientId, 10, 0);
       medications = await listMedications(patientId, 10, 0);
-      recentSessions = await listSessionsForPatient(patientId, 5, 0);
 
       // Auto-fill patient context
       patientContext = formatPatientContext();
 
       // Set default language based on app language
-      letterLanguage = $appLanguage === 'de' ? 'de' : 'de'; // Only de/fr supported for letters
+      letterLanguage = $appLanguage === 'fr' ? 'fr' : 'de'; // Only de/fr supported for letters
 
       isLoading = false;
     } catch (err) {
@@ -102,6 +99,16 @@
       return;
     }
 
+    // Unlisten to previous handlers before registering new ones
+    if (unlistenChunk) {
+      unlistenChunk();
+      unlistenChunk = null;
+    }
+    if (unlistenDone) {
+      unlistenDone();
+      unlistenDone = null;
+    }
+
     isGenerating = true;
     generatedContent = '';
     error = null;
@@ -114,6 +121,15 @@
       unlistenDone = await listen('letter-done', () => {
         isGenerating = false;
         editableContent = generatedContent;
+        // Unlisten after generation completes
+        if (unlistenChunk) {
+          unlistenChunk();
+          unlistenChunk = null;
+        }
+        if (unlistenDone) {
+          unlistenDone();
+          unlistenDone = null;
+        }
       });
 
       await generateLetter(
@@ -133,7 +149,7 @@
 
   async function handleSave() {
     if (!editableContent.trim()) {
-      error = 'Letter content cannot be empty';
+      error = $t('letters.contentRequired');
       return;
     }
 
@@ -311,11 +327,20 @@
             {/if}
           </label>
           <p class="text-sm text-gray-500 mb-2">{$t('letters.reviewBeforeSaving')}</p>
-          <textarea
-            bind:value={editableContent}
-            rows="20"
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-          ></textarea>
+          {#if isGenerating}
+            <textarea
+              value={generatedContent}
+              rows="20"
+              readonly
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono text-sm bg-gray-50"
+            ></textarea>
+          {:else}
+            <textarea
+              bind:value={editableContent}
+              rows="20"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+            ></textarea>
+          {/if}
         </div>
 
         <!-- Save/Cancel Buttons -->

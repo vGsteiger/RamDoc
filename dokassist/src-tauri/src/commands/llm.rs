@@ -1,7 +1,7 @@
 use crate::error::AppError;
 use crate::llm::{
     self, download, embed::EmbedEngine, EngineStatus, LetterType, LlmEngine, ModelChoice, ReportType,
-    SYSTEM_PROMPT_DE, SYSTEM_PROMPT_FR, letter_generation_prompt,
+    SYSTEM_PROMPT_DE, SYSTEM_PROMPT_FR,
 };
 use crate::state::{AppState, AuthState};
 use serde::Serialize;

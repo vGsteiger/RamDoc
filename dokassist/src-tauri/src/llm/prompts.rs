@@ -251,8 +251,14 @@ pub fn letter_generation_prompt(
         greeting.to_string()
     };
 
+    let (context_label, summary_label, recipient_label) = match language {
+        "de" => ("Patientenkontext", "Klinische Zusammenfassung", "Empfänger-Anrede"),
+        "fr" => ("Contexte du patient", "Résumé clinique", "Salutation au destinataire"),
+        _ => ("Patient context", "Clinical summary", "Recipient greeting"),
+    };
+
     let combined_data = format!(
-        "Patientenkontext:\n{safe_context}\n\nKlinische Zusammenfassung:\n{safe_summary}\n\nEmpfänger-Anrede: {recipient_greeting}"
+        "{context_label}:\n{safe_context}\n\n{summary_label}:\n{safe_summary}\n\n{recipient_label}: {recipient_greeting}"
     );
 
     let delimited = build_delimited_prompt(type_instructions, &combined_data);

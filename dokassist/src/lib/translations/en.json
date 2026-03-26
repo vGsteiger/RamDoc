@@ -532,6 +532,7 @@
     "selectType": "Select Letter Type",
     "selectLanguage": "Select Language",
     "selectTypeRequired": "Please select a letter type.",
+    "contentRequired": "Letter content cannot be empty.",
     "newLetterTitle": "Generate Letter",
     "backToLetters": "← Back to Letters",
     "llmNotConfigured": "LLM Not Configured",
