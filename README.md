@@ -2,7 +2,7 @@
   <img src="dokassist/src-tauri/icons/icon.png" alt="RamDoc Logo" width="128" height="128">
 </p>
 
-# RamDoc / DokAssist
+# RamDoc
 
 [![Rust CI](https://github.com/vGsteiger/RamDoc/actions/workflows/rust-ci.yml/badge.svg)](https://github.com/vGsteiger/RamDoc/actions/workflows/rust-ci.yml)
 [![Frontend CI](https://github.com/vGsteiger/RamDoc/actions/workflows/frontend-ci.yml/badge.svg)](https://github.com/vGsteiger/RamDoc/actions/workflows/frontend-ci.yml)
@@ -11,7 +11,7 @@
 [![Tauri Build](https://github.com/vGsteiger/RamDoc/actions/workflows/tauri-build.yml/badge.svg)](https://github.com/vGsteiger/RamDoc/actions/workflows/tauri-build.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**DokAssist** is a 100% local, encrypted macOS application for Swiss patient record management.
+**RamDoc** is a 100% local, encrypted macOS application for Swiss patient record management.
 This repository (**RamDoc**) hosts the full open-source code.
 
 ## Releases / Download
@@ -38,7 +38,7 @@ commit prefixes such as `feat:` / `fix:`).
 
 ## Security
 
-DokAssist is designed with a defence-in-depth approach:
+RamDoc is designed with a defence-in-depth approach:
 
 | Concern | Implementation |
 |---------|----------------|
