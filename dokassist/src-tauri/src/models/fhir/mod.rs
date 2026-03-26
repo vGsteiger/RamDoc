@@ -184,7 +184,10 @@ impl Bundle {
         Self {
             resource_type: "Bundle".to_string(),
             bundle_type: "document".to_string(),
-            entry: entries.into_iter().map(|r| BundleEntry { resource: r }).collect(),
+            entry: entries
+                .into_iter()
+                .map(|r| BundleEntry { resource: r })
+                .collect(),
         }
     }
 }
@@ -224,7 +227,9 @@ impl CodeableConcept {
         };
         Self {
             coding: Some(vec![Coding {
-                system: Some("http://terminology.hl7.org/CodeSystem/condition-clinical".to_string()),
+                system: Some(
+                    "http://terminology.hl7.org/CodeSystem/condition-clinical".to_string(),
+                ),
                 code: Some(code.to_string()),
                 display: Some(code.to_string()),
             }]),

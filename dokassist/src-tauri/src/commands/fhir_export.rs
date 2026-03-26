@@ -1,11 +1,11 @@
 use crate::audit::{self, AuditAction};
 use crate::error::AppError;
-use crate::models::{diagnosis, medication, outcome_score, patient, session};
 use crate::models::fhir::{
     Address, Annotation, Bundle, CodeableConcept, Condition, ContactPoint, Dosage, HumanName,
     Identifier, MedicationStatement, Observation, Patient as FhirPatient, Period, Reference,
     Resource,
 };
+use crate::models::{diagnosis, medication, outcome_score, patient, session};
 use crate::state::AppState;
 use rusqlite::Connection;
 use tauri::State;
@@ -143,11 +143,10 @@ fn build_fhir_condition(diag: &diagnosis::Diagnosis, patient_id: &str) -> Condit
 
     let abatement_date_time = diag.resolved_date.clone();
 
-    let note = diag.notes.as_ref().map(|n| {
-        vec![Annotation {
-            text: n.clone(),
-        }]
-    });
+    let note = diag
+        .notes
+        .as_ref()
+        .map(|n| vec![Annotation { text: n.clone() }]);
 
     Condition {
         resource_type: "Condition".to_string(),
@@ -191,11 +190,10 @@ fn build_fhir_medication_statement(
         text: Some(dosage_text),
     }]);
 
-    let note = med.notes.as_ref().map(|n| {
-        vec![Annotation {
-            text: n.clone(),
-        }]
-    });
+    let note = med
+        .notes
+        .as_ref()
+        .map(|n| vec![Annotation { text: n.clone() }]);
 
     MedicationStatement {
         resource_type: "MedicationStatement".to_string(),
@@ -252,15 +250,15 @@ fn build_fhir_observation(score: &outcome_score::OutcomeScore, patient_id: &str)
 
     let effective_date_time = Some(score.administered_at.clone());
 
-    let interpretation = score.interpretation.as_ref().map(|interp| {
-        vec![CodeableConcept::interpretation(interp)]
-    });
+    let interpretation = score
+        .interpretation
+        .as_ref()
+        .map(|interp| vec![CodeableConcept::interpretation(interp)]);
 
-    let note = score.notes.as_ref().map(|n| {
-        vec![Annotation {
-            text: n.clone(),
-        }]
-    });
+    let note = score
+        .notes
+        .as_ref()
+        .map(|n| vec![Annotation { text: n.clone() }]);
 
     Observation {
         resource_type: "Observation".to_string(),
@@ -326,10 +324,7 @@ mod tests {
         // Check name
         assert_eq!(fhir_patient.name.len(), 1);
         assert_eq!(fhir_patient.name[0].family, Some("Müller".to_string()));
-        assert_eq!(
-            fhir_patient.name[0].given,
-            Some(vec!["Hans".to_string()])
-        );
+        assert_eq!(fhir_patient.name[0].given, Some(vec!["Hans".to_string()]));
 
         // Check telecom
         let telecom = fhir_patient.telecom.unwrap();
@@ -366,9 +361,15 @@ mod tests {
 
         // Check ICD-10 coding
         let coding = condition.code.coding.as_ref().unwrap();
-        assert_eq!(coding[0].system, Some("http://hl7.org/fhir/sid/icd-10".to_string()));
+        assert_eq!(
+            coding[0].system,
+            Some("http://hl7.org/fhir/sid/icd-10".to_string())
+        );
         assert_eq!(coding[0].code, Some("F32.1".to_string()));
-        assert_eq!(coding[0].display, Some("Moderate depressive episode".to_string()));
+        assert_eq!(
+            coding[0].display,
+            Some("Moderate depressive episode".to_string())
+        );
 
         // Check clinical status
         let clinical_coding = condition.clinical_status.coding.as_ref().unwrap();
