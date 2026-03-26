@@ -1,9 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { globalSearch, type SearchResult, type Patient } from '$lib/api';
+  import { globalSearch, lockApp, type SearchResult, type Patient } from '$lib/api';
   import { t } from '$lib/translations';
-  import { lockApp } from '$lib/api';
   import { authStatus } from '$lib/stores/auth';
   import { themePreference } from '$lib/stores/theme';
   import { language } from '$lib/stores/language';
@@ -203,7 +202,7 @@
       (p) =>
         p.first_name.toLowerCase().includes(query) ||
         p.last_name.toLowerCase().includes(query) ||
-        p.ahv_number.includes(query)
+        (p.ahv_number ?? '').includes(query)
     );
 
     return {
@@ -241,25 +240,39 @@
       return;
     }
 
-    // Only trigger FTS5 search if query is long enough
-    if (query.length >= 2) {
-      searchTimeout = setTimeout(async () => {
-        isSearching = true;
-        try {
-          searchResults = await globalSearch(query, 10);
-        } catch (err) {
-          console.error('Search error:', err);
-          searchResults = [];
-        } finally {
-          isSearching = false;
-        }
-      }, 300);
+    // Clear stale results if query is too short
+    if (query.length < 2) {
+      searchResults = [];
+      isSearching = false;
+      return;
     }
+
+    // Only trigger FTS5 search if query is long enough
+    searchTimeout = setTimeout(async () => {
+      isSearching = true;
+      try {
+        searchResults = await globalSearch(query, 10);
+      } catch (err) {
+        console.error('Search error:', err);
+        searchResults = [];
+      } finally {
+        isSearching = false;
+      }
+    }, 300);
   }
 
   // Handle keyboard navigation
   function handleKeydown(e: KeyboardEvent) {
     const items = allItems();
+
+    // Guard against empty items
+    if (items.length === 0) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+      return;
+    }
 
     switch (e.key) {
       case 'ArrowDown':
@@ -284,19 +297,24 @@
   }
 
   // Execute the selected item
-  function executeItem(
+  async function executeItem(
     item:
       | { type: 'action'; item: Action }
       | { type: 'patient'; item: Patient }
       | { type: 'search'; item: SearchResult }
   ) {
-    if (item.type === 'action') {
-      item.item.handler();
-    } else if (item.type === 'patient') {
-      goto(`/patients/${item.item.id}`);
-      onClose();
-    } else if (item.type === 'search') {
-      navigateToSearchResult(item.item);
+    try {
+      if (item.type === 'action') {
+        await item.item.handler();
+      } else if (item.type === 'patient') {
+        goto(`/patients/${item.item.id}`);
+        onClose();
+      } else if (item.type === 'search') {
+        navigateToSearchResult(item.item);
+      }
+    } catch (error) {
+      console.error('Failed to execute action:', error);
+      // Optionally show a toast notification here
     }
   }
 
@@ -336,6 +354,14 @@
       searchResults = [];
     }
   });
+
+  // Sanitize HTML snippet to only allow <mark> tags from FTS5
+  function sanitizeSnippet(snippet: string): string {
+    // Replace all tags except <mark> and </mark> with escaped versions
+    return snippet
+      .replace(/<(?!\/?(mark)>)/g, '&lt;')
+      .replace(/(?<!<\/(mark))>/g, '&gt;');
+  }
 
   let categoryLabel = $derived<Record<string, string>>({
     navigation: $t('commandPalette.categoryNavigation'),
@@ -489,7 +515,7 @@
                   </div>
                   {#if result.snippet}
                     <div class="text-xs text-gray-500 dark:text-gray-400 line-clamp-1 mt-0.5">
-                      {@html result.snippet}
+                      {@html sanitizeSnippet(result.snippet)}
                     </div>
                   {/if}
                 </button>
