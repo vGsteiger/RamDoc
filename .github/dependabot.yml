@@ -11,6 +11,7 @@ updates:
       - vGsteiger
     open-pull-requests-limit: 5
     rebase-strategy: auto
+    automerge: true
 
   - package-ecosystem: npm
     directory: /dokassist
@@ -23,6 +24,7 @@ updates:
       - vGsteiger
     open-pull-requests-limit: 5
     rebase-strategy: auto
+    automerge: true
 
   - package-ecosystem: github-actions
     directory: /
@@ -35,3 +37,4 @@ updates:
       - vGsteiger
     open-pull-requests-limit: 5
     rebase-strategy: auto
+    automerge: true
