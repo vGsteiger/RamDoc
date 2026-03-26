@@ -126,6 +126,8 @@ pub fn model_url(filename: &str) -> Result<String, AppError> {
 /// Download a model file, resuming from where it left off if a partial file exists.
 /// Emits `"model-download-progress"` (f64 0.0–1.0) and `"model-download-done"` Tauri events.
 ///
+/// Returns the verified SHA-256 hex digest of the downloaded file.
+///
 /// CRIT-3: Fetches the expected SHA-256 from HuggingFace's LFS pointer before downloading,
 ///         then verifies the completed file against it.
 /// HIGH-2: Aborts download if total bytes exceed MAX_DOWNLOAD_BYTES.
@@ -134,7 +136,7 @@ pub async fn download_model_with_progress(
     url: &str,
     dest_path: &Path,
     filename: &str,
-) -> Result<(), AppError> {
+) -> Result<String, AppError> {
     let client = reqwest::Client::new();
 
     // CRIT-3: Fetch expected SHA-256 from HuggingFace LFS pointer before the download begins.
@@ -251,7 +253,7 @@ pub async fn download_model_with_progress(
     log::info!("SHA-256 verified for '{}': {}", filename, computed_hex);
 
     let _ = app.emit("model-download-done", ());
-    Ok(())
+    Ok(computed_hex)
 }
 
 #[cfg(test)]

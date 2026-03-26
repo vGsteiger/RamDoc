@@ -141,6 +141,13 @@ fn run_migrations(conn: &Connection) -> Result<(), AppError> {
         conn.execute("PRAGMA user_version = 10;", [])?;
     }
 
+    // Migration 11: Model registry for multi-model management
+    if version < 11 {
+        log::info!("Running migration 011: Model registry");
+        conn.execute_batch(include_str!("migrations/011_model_registry.sql"))?;
+        conn.execute("PRAGMA user_version = 11;", [])?;
+    }
+
     log::info!("Database migrations complete");
     Ok(())
 }
@@ -199,6 +206,6 @@ mod tests {
         let version: i32 = conn
             .query_row("PRAGMA user_version;", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 10);
+        assert_eq!(version, 11);
     }
 }

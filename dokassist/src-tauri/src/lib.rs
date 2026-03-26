@@ -154,6 +154,17 @@ pub fn run() {
             commands::literature::process_literature,
             commands::literature::search_literature,
             commands::literature::get_literature_document_chunks,
+            commands::models::list_models,
+            commands::models::get_model_info,
+            commands::models::download_and_register_model,
+            commands::models::delete_model,
+            commands::models::set_default_model,
+            commands::models::get_default_model,
+            commands::models::set_task_model,
+            commands::models::get_task_model,
+            commands::models::list_task_models,
+            commands::models::clear_task_model,
+            commands::models::get_model_for_task,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {

@@ -18,10 +18,21 @@
     validateBackupArchive,
     getEmbedStatus,
     initializeEmbedEngine,
+    listModels,
+    downloadAndRegisterModel,
+    deleteModel,
+    setDefaultModel,
+    getDefaultModel,
+    setTaskModel,
+    getTaskModel,
+    listTaskModels,
+    clearTaskModel,
     type LlmEngineStatus,
     type ModelChoice,
     type UpdateInfo,
     type EmbedStatus,
+    type ModelInfo,
+    type TaskModel,
   } from '$lib/api';
   import { themePreference } from '$lib/stores/theme';
   import { language } from '$lib/stores/language';
@@ -34,6 +45,13 @@
   let errorMsg = $state('');
   let unlisten: UnlistenFn | null = null;
   let appVersion = $state('');
+
+  // Model management state
+  let installedModels = $state<ModelInfo[]>([]);
+  let taskModels = $state<TaskModel[]>([]);
+  let selectedTaskModel = $state<Record<string, string>>({});
+  let modelManagementError = $state('');
+  let loadingModels = $state(false);
 
   // Embedding model state
   let embedStatus = $state<EmbedStatus | null>(null);
@@ -57,7 +75,27 @@
     ]);
     if (status.is_loaded) phase = 'done';
     if (embedStatus.is_loaded) embedPhase = 'done';
+
+    // Load installed models and task assignments
+    await loadInstalledModels();
   });
+
+  async function loadInstalledModels() {
+    try {
+      loadingModels = true;
+      [installedModels, taskModels] = await Promise.all([listModels(), listTaskModels()]);
+
+      // Build a map of task -> model_id for easy lookup
+      selectedTaskModel = taskModels.reduce((acc, tm) => {
+        acc[tm.task_type] = tm.model_id;
+        return acc;
+      }, {} as Record<string, string>);
+    } catch (e) {
+      modelManagementError = parseError(e).message;
+    } finally {
+      loadingModels = false;
+    }
+  }
 
   async function handleInitEmbed() {
     embedPhase = 'loading';
@@ -74,6 +112,7 @@
 
   onDestroy(() => {
     unlisten?.();
+    doneUnsubscribe?.();
     updateUnlisten?.();
   });
 
@@ -159,6 +198,83 @@
     } catch (e) {
       phase = 'error';
       errorMsg = parseError(e).message;
+    }
+  }
+
+  // Model management handlers
+  let doneUnsubscribe: UnlistenFn | null = null;
+
+  async function handleDownloadNewModel(model: ModelChoice) {
+    phase = 'downloading';
+    downloadProgress = 0;
+    errorMsg = '';
+
+    unlisten = await listen<number>('model-download-progress', (e) => {
+      downloadProgress = Math.round(e.payload * 100);
+    });
+
+    doneUnsubscribe = await listen('model-download-done', () => {
+      // Event fired, cleanup handled in finally
+    });
+
+    try {
+      await downloadAndRegisterModel(model);
+      phase = 'idle';
+      await loadInstalledModels();
+    } catch (e) {
+      phase = 'error';
+      errorMsg = parseError(e).message;
+    } finally {
+      unlisten?.();
+      unlisten = null;
+      doneUnsubscribe?.();
+      doneUnsubscribe = null;
+    }
+  }
+
+  async function handleLoadModel(filename: string) {
+    phase = 'loading';
+    errorMsg = '';
+    try {
+      await loadModel(filename);
+      status = await getEngineStatus();
+      await loadInstalledModels(); // Refresh list to show loaded badge
+      phase = 'done';
+    } catch (e) {
+      phase = 'error';
+      errorMsg = parseError(e).message;
+    }
+  }
+
+  async function handleDeleteModel(modelId: string) {
+    try {
+      await deleteModel(modelId);
+      await loadInstalledModels();
+    } catch (e) {
+      modelManagementError = parseError(e).message;
+    }
+  }
+
+  async function handleSetDefaultModel(modelId: string) {
+    try {
+      await setDefaultModel(modelId);
+      await loadInstalledModels();
+    } catch (e) {
+      modelManagementError = parseError(e).message;
+    }
+  }
+
+  async function handleSetTaskModel(taskType: string, modelId: string) {
+    try {
+      if (modelId === '') {
+        // Clear the task model assignment
+        await clearTaskModel(taskType);
+      } else {
+        await setTaskModel(taskType, modelId);
+      }
+      await loadInstalledModels();
+    } catch (e) {
+      modelManagementError = parseError(e).message;
     }
   }
 
@@ -543,64 +659,148 @@
     </div>
   </section>
 
-  <section>
-    <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-200 mb-4">
-      {$t('settings.llmModelSection')}
-    </h2>
+<!-- Enhanced Model Management Section -->
+<section>
+  <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-200 mb-4">
+    {$t('settings.modelManagement')}
+  </h2>
 
-    <!-- Current status -->
-    <div class="bg-gray-100 dark:bg-gray-800 rounded-lg p-4 mb-6 flex items-center gap-3">
+  <!-- Currently loaded model status -->
+  <div class="bg-gray-100 dark:bg-gray-800 rounded-lg p-4 mb-6">
+    <div class="flex items-center gap-3 mb-4">
       <div
-        class="w-3 h-3 rounded-full shrink-0 {status?.is_loaded
-          ? 'bg-green-500'
-          : status?.is_downloaded
-            ? 'bg-amber-400'
-            : 'bg-red-500'}"
+        class="w-3 h-3 rounded-full shrink-0 {status?.is_loaded ? 'bg-green-500' : 'bg-gray-400'}"
       ></div>
-      <div>
-        {#if status?.is_loaded}
-          <p class="text-sm text-gray-900 dark:text-gray-100 font-medium">{status.model_name}</p>
+      <div class="flex-1">
+        <p class="text-sm font-medium text-gray-900 dark:text-gray-100">
+          {status?.is_loaded
+            ? $t('settings.loadedModel').replace('{name}', status.model_name ?? '')
+            : $t('settings.noModelLoaded')}
+        </p>
+        {#if status?.total_ram_bytes}
           <p class="text-xs text-gray-600 dark:text-gray-400">
-            {$t('settings.modelLoadedInfo').replace('{ram}', formatBytes(status.total_ram_bytes))}
+            {$t('settings.systemRam').replace('{ram}', formatBytes(status.total_ram_bytes))}
           </p>
-        {:else if status?.is_downloaded}
-          <p class="text-sm text-gray-900 dark:text-gray-100 font-medium">
-            {$t('settings.modelDownloadedNotLoaded')}
-          </p>
-          <p class="text-xs text-gray-600 dark:text-gray-400">
-            {$t('settings.modelDownloadedInfo')
-              .replace('{name}', status.downloaded_filename ?? '')
-              .replace('{ram}', formatBytes(status.total_ram_bytes))}
-          </p>
-        {:else}
-          <p class="text-sm text-gray-900 dark:text-gray-100 font-medium">
-            {$t('settings.noModelDownloaded')}
-          </p>
-          {#if status}
-            <p class="text-xs text-gray-600 dark:text-gray-400">
-              {$t('settings.ramAvailable').replace('{ram}', formatBytes(status.total_ram_bytes))}
-            </p>
-          {/if}
         {/if}
       </div>
     </div>
+  </div>
 
-    <!-- Recommended model card -->
-    {#if recommended && !status?.is_loaded}
-      <div
-        class="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-4 mb-4"
-      >
-        <div class="flex items-start justify-between gap-4 mb-1">
-          <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{recommended.name}</p>
-          <span class="text-xs text-gray-600 dark:text-gray-400 shrink-0"
-            >{formatBytes(recommended.size_bytes)}</span
+  <!-- Installed Models List -->
+  <div class="mb-6">
+    <h3 class="text-md font-semibold text-gray-900 dark:text-gray-200 mb-3">
+      {$t('settings.installedModels')}
+    </h3>
+
+    {#if loadingModels}
+      <p class="text-sm text-gray-600 dark:text-gray-400">{$t('settings.loadingModels')}</p>
+    {:else if installedModels.length === 0}
+      <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+        {$t('settings.noModelsInstalled')}
+      </p>
+    {:else}
+      <div class="space-y-3">
+        {#each installedModels as model}
+          <div
+            class="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-4"
           >
+            <div class="flex items-start justify-between mb-2">
+              <div class="flex-1">
+                <div class="flex items-center gap-2 mb-1">
+                  <p class="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    {model.name}
+                  </p>
+                  {#if model.is_default}
+                    <span class="px-2 py-0.5 text-xs rounded bg-blue-500 text-white">
+                      {$t('settings.defaultBadge')}
+                    </span>
+                  {/if}
+                  {#if model.is_loaded}
+                    <span class="px-2 py-0.5 text-xs rounded bg-green-500 text-white">
+                      {$t('settings.loadedBadge')}
+                    </span>
+                  {/if}
+                  {#if !model.exists_on_disk}
+                    <span class="px-2 py-0.5 text-xs rounded bg-red-500 text-white">
+                      {$t('settings.modelMissingOnDisk')}
+                    </span>
+                  {/if}
+                </div>
+                <p class="text-xs text-gray-600 dark:text-gray-400">
+                  {model.filename} • {formatBytes(model.size_bytes)}
+                </p>
+                {#if model.last_used}
+                  <p class="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                    {$t('settings.lastUsed').replace(
+                      '{date}',
+                      new Date(model.last_used).toLocaleDateString()
+                    )}
+                  </p>
+                {/if}
+              </div>
+            </div>
+
+            <div class="flex gap-2 mt-3">
+              {#if model.exists_on_disk && !model.is_loaded}
+                <button
+                  onclick={() => handleLoadModel(model.filename)}
+                  disabled={phase === 'loading'}
+                  class="px-3 py-1.5 text-xs rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors"
+                >
+                  {$t('settings.load')}
+                </button>
+              {/if}
+              {#if model.exists_on_disk && !model.is_default}
+                <button
+                  onclick={() => handleSetDefaultModel(model.id)}
+                  class="px-3 py-1.5 text-xs rounded-lg bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 transition-colors"
+                >
+                  {$t('settings.setDefault')}
+                </button>
+              {/if}
+              {#if !model.is_loaded}
+                <button
+                  onclick={() => handleDeleteModel(model.id)}
+                  class="px-3 py-1.5 text-xs rounded-lg bg-red-600 hover:bg-red-500 text-white transition-colors"
+                >
+                  {$t('settings.delete')}
+                </button>
+              {/if}
+            </div>
+          </div>
+        {/each}
+      </div>
+    {/if}
+  </div>
+
+  <!-- Download New Model -->
+  {#if recommended}
+    <div class="mb-6">
+      <h3 class="text-md font-semibold text-gray-900 dark:text-gray-200 mb-3">
+        {$t('settings.recommendedModelSection')}
+      </h3>
+      <div
+        class="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-4"
+      >
+        <div class="flex items-start justify-between gap-4 mb-2">
+          <div>
+            <p class="text-sm font-medium text-gray-900 dark:text-gray-100">
+              {recommended.name}
+            </p>
+            <p class="text-xs text-gray-600 dark:text-gray-400 mt-1">
+              {recommended.reason}
+            </p>
+            <p class="text-xs text-gray-500 dark:text-gray-500 mt-1">
+              {$t('settings.size').replace('{size}', formatBytes(recommended.size_bytes))}
+            </p>
+          </div>
         </div>
-        <p class="text-xs text-gray-600 dark:text-gray-400 mb-4">{recommended.reason}</p>
 
         {#if phase === 'downloading'}
           <div class="mb-3">
-            <div class="flex justify-between text-xs text-gray-600 dark:text-gray-400 mb-1">
+            <div
+              class="flex justify-between text-xs text-gray-600 dark:text-gray-400 mb-1"
+            >
               <span>{$t('settings.downloadingLabel')}</span>
               <span>{downloadProgress ?? 0}%</span>
             </div>
@@ -611,65 +811,77 @@
               ></div>
             </div>
           </div>
-        {:else if phase === 'loading'}
-          <p class="text-xs text-blue-400 mb-3">{$t('settings.loadingModelLabel')}</p>
         {/if}
 
         {#if phase === 'error'}
           <p class="text-xs text-red-400 mb-3">{errorMsg}</p>
         {/if}
 
-        {#if status?.is_downloaded}
-          <div class="flex gap-2">
-            <button
-              onclick={handleLoad}
-              disabled={phase === 'downloading' || phase === 'loading'}
-              class="px-4 py-2 text-sm rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors"
-            >
-              {phase === 'loading' ? $t('common.loading') : $t('settings.loadModel')}
-            </button>
-            <button
-              onclick={handleDownload}
-              disabled={phase === 'downloading' || phase === 'loading'}
-              class="px-4 py-2 text-sm rounded-lg bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 dark:text-gray-100 transition-colors"
-            >
-              {phase === 'downloading'
-                ? $t('settings.downloadingLabel')
-                : $t('settings.redownload')}
-            </button>
-          </div>
-        {:else}
-          <div class="flex gap-2">
-            <button
-              onclick={handleDownload}
-              disabled={phase === 'downloading' || phase === 'loading'}
-              class="px-4 py-2 text-sm rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors"
-            >
-              {phase === 'downloading'
-                ? $t('settings.downloadingLabel')
-                : $t('settings.downloadAndLoad')}
-            </button>
-            <button
-              onclick={handleLoad}
-              disabled={phase === 'downloading' || phase === 'loading'}
-              class="px-4 py-2 text-sm rounded-lg bg-gray-300 dark:bg-gray-700 hover:bg-gray-400 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 dark:text-gray-100 transition-colors"
-            >
-              {phase === 'loading' ? $t('common.loading') : $t('settings.loadExisting')}
-            </button>
-          </div>
-          <p class="text-xs text-gray-600 dark:text-gray-400 mt-2">
-            {$t('settings.loadExistingHint')}
-          </p>
-        {/if}
+        <button
+          onclick={() => handleDownloadNewModel(recommended)}
+          disabled={phase === 'downloading' || phase === 'loading'}
+          class="px-4 py-2 text-sm rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors"
+        >
+          {phase === 'downloading'
+            ? $t('settings.downloadingLabel')
+            : $t('settings.downloadModel')}
+        </button>
       </div>
-    {/if}
+    </div>
+  {/if}
 
-    {#if phase === 'done' && status?.is_loaded}
-      <p class="text-sm text-green-400">
-        {$t('settings.modelReadyMsg')}
+  <!-- Task-Specific Model Assignment -->
+  <div class="mb-6">
+    <h3 class="text-md font-semibold text-gray-900 dark:text-gray-200 mb-3">
+      {$t('settings.taskSpecificModels')}
+    </h3>
+    <p class="text-xs text-gray-600 dark:text-gray-400 mb-4">
+      {$t('settings.taskSpecificModelsDesc')}
+    </p>
+
+    {#if installedModels.length > 0}
+      <div class="space-y-3">
+        {#each ['summary', 'letter', 'report'] as taskType}
+          <div
+            class="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-4"
+          >
+            <label
+              for="task-{taskType}"
+              class="block text-sm font-medium text-gray-900 dark:text-gray-100 mb-2 capitalize"
+            >
+              {$t(`settings.${taskType}`)}
+            </label>
+            <select
+              id="task-{taskType}"
+              value={selectedTaskModel[taskType] || ''}
+              onchange={(e) => handleSetTaskModel(taskType, e.currentTarget.value)}
+              class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="">{$t('settings.useDefaultModel')}</option>
+              {#each installedModels as model}
+                <option value={model.id}>
+                  {model.name} ({formatBytes(model.size_bytes)})
+                </option>
+              {/each}
+            </select>
+          </div>
+        {/each}
+      </div>
+    {:else}
+      <p class="text-xs text-gray-600 dark:text-gray-400">
+        {$t('settings.installModelFirst')}
       </p>
     {/if}
-  </section>
+  </div>
+
+  {#if modelManagementError}
+    <div
+      class="bg-red-100 dark:bg-red-900/20 border border-red-300 dark:border-red-800 rounded-lg p-3 mb-4"
+    >
+      <p class="text-sm text-red-600 dark:text-red-400">{modelManagementError}</p>
+    </div>
+  {/if}
+</section>
 
   <section class="mt-10">
     <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-200 mb-4">

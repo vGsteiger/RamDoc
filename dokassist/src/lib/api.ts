@@ -146,6 +146,85 @@ export async function loadModel(modelFilename: string): Promise<void> {
   return await invoke<void>('load_model', { modelFilename });
 }
 
+// === Model Management ===
+
+export interface Model {
+  id: string;
+  name: string;
+  filename: string;
+  sha256: string;
+  size_bytes: number;
+  downloaded_at: string;
+  last_used: string | null;
+  is_default: boolean;
+}
+
+export interface ModelInfo {
+  id: string;
+  name: string;
+  filename: string;
+  sha256: string;
+  size_bytes: number;
+  downloaded_at: string;
+  last_used: string | null;
+  is_default: boolean;
+  is_loaded: boolean;
+  exists_on_disk: boolean;
+}
+
+export interface TaskModel {
+  task_type: string;
+  model_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function listModels(): Promise<ModelInfo[]> {
+  return await invoke<ModelInfo[]>('list_models');
+}
+
+export async function getModelInfo(modelId: string): Promise<ModelInfo> {
+  return await invoke<ModelInfo>('get_model_info', { modelId });
+}
+
+export async function downloadAndRegisterModel(model: ModelChoice): Promise<Model> {
+  return await invoke<Model>('download_and_register_model', { model });
+}
+
+export async function deleteModel(modelId: string): Promise<void> {
+  return await invoke<void>('delete_model', { modelId });
+}
+
+export async function setDefaultModel(modelId: string): Promise<void> {
+  return await invoke<void>('set_default_model', { modelId });
+}
+
+export async function getDefaultModel(): Promise<Model | null> {
+  return await invoke<Model | null>('get_default_model');
+}
+
+export async function setTaskModel(taskType: string, modelId: string): Promise<void> {
+  return await invoke<void>('set_task_model', { taskType, modelId });
+}
+
+export async function getTaskModel(taskType: string): Promise<Model | null> {
+  return await invoke<Model | null>('get_task_model', { taskType });
+}
+
+export async function listTaskModels(): Promise<TaskModel[]> {
+  return await invoke<TaskModel[]>('list_task_models');
+}
+
+export async function clearTaskModel(taskType: string): Promise<void> {
+  return await invoke<void>('clear_task_model', { taskType });
+}
+
+export async function getModelForTask(taskType: string): Promise<Model | null> {
+  return await invoke<Model | null>('get_model_for_task', { taskType });
+}
+
+// === File Management ===
+
 export interface FileRecord {
   id: string;
   patient_id: string;
