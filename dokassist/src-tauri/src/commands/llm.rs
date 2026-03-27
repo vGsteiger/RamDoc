@@ -383,10 +383,11 @@ pub async fn generate_letter(
     }
 
     let engine = {
-        let llm = state.llm.lock().unwrap();
-        let engine = llm
-            .as_ref()
-            .ok_or_else(|| AppError::Llm("Model not loaded".to_string()))?;
+    let llm = state.llm.lock().unwrap();
+    let engine = llm
+        .as_ref()
+        .ok_or_else(|| AppError::Llm("Model not loaded".to_string()))?;
+
         Arc::clone(engine)
     };
 
@@ -417,4 +418,57 @@ pub async fn generate_letter(
 
     let _ = app.emit("letter-done", ());
     Ok(letter)
+}
+
+
+/// Query a patient's history using RAG with streaming output.
+/// Emits `"patient-history-chunk"` events for each token and `"patient-history-done"` on completion.
+/// `system_prompt`: optional override; falls back to the built-in German prompt.
+#[tauri::command]
+pub async fn query_patient_history(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    patient_id: String,
+    question: String,
+    system_prompt: Option<String>,
+) -> Result<String, AppError> {
+    // Check authentication before processing patient data
+    check_auth(&state)?;
+
+    // Acquire database connection and assemble patient context
+    let patient_context = {
+        let pool = state.get_db()?;
+        let conn = pool.conn()?;
+        llm::patient_context::assemble_patient_context(&conn, &patient_id)?
+    };
+
+    // Acquire the engine handle under the mutex, but do not run inference while holding the lock.
+    let engine = {
+        let llm = state.llm.lock().unwrap();
+        let engine = llm
+            .as_ref()
+            .ok_or_else(|| AppError::Llm("Model not loaded".to_string()))?;
+        // Clone the Arc so we can release the lock before inference.
+        Arc::clone(engine)
+    };
+
+    // Resolve the system prompt into an owned String we can move into the blocking task.
+    let prompt: String = system_prompt.unwrap_or_else(|| SYSTEM_PROMPT_DE.to_string());
+
+    // Run the potentially long-running patient history query on a blocking thread.
+    let app_clone = app.clone();
+    let response = tokio::task::spawn_blocking(move || {
+        llm::generate_patient_history_response_streaming_with_prompt(
+            &app_clone,
+            &engine,
+            &patient_context,
+            &question,
+            &prompt,
+        )
+    })
+    .await
+    .map_err(|e| AppError::Llm(format!("spawn_blocking error: {e}")))??;
+
+    let _ = app.emit("patient-history-done", ());
+    Ok(response)
 }

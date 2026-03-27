@@ -156,3 +156,42 @@ pub fn generate_letter_streaming_with_prompt(
 
     Ok(full_letter)
 }
+
+/// Generate a response to a patient history query using RAG with streaming.
+pub fn generate_patient_history_response_streaming(
+    app: &tauri::AppHandle,
+    engine: &LlmEngine,
+    patient_context: &str,
+    question: &str,
+) -> Result<String, AppError> {
+    generate_patient_history_response_streaming_with_prompt(
+        app,
+        engine,
+        patient_context,
+        question,
+        prompts::SYSTEM_PROMPT_DE,
+    )
+}
+
+/// Generate a response to a patient history query using a caller-supplied system prompt.
+/// Emits `"patient-history-chunk"` Tauri events for each token as it is produced.
+/// Returns the full completed response string.
+pub fn generate_patient_history_response_streaming_with_prompt(
+    app: &tauri::AppHandle,
+    engine: &LlmEngine,
+    patient_context: &str,
+    question: &str,
+    system_prompt: &str,
+) -> Result<String, AppError> {
+    let user_message = prompts::patient_history_query_prompt(patient_context, question);
+
+    let mut full_response = String::new();
+
+    engine.generate_streaming(system_prompt, &user_message, 2048, 0.7, |token| {
+        full_response.push_str(token);
+        let _ = app.emit("patient-history-chunk", token);
+        true
+    })?;
+
+    Ok(full_response)
+}

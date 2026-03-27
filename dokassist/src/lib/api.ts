@@ -978,6 +978,18 @@ export async function generateSessionSummary(
   });
 }
 
+export async function queryPatientHistory(
+  patientId: string,
+  question: string,
+  systemPrompt?: string,
+): Promise<string> {
+  return await invoke<string>('query_patient_history', {
+    patientId,
+    question,
+    systemPrompt,
+  });
+}
+
 export async function exportReportToPdf(reportId: string): Promise<number[]> {
   return await invoke<number[]>('export_report_to_pdf', { reportId });
 }

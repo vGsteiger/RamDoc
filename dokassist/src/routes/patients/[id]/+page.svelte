@@ -16,6 +16,7 @@
   } from '$lib/api';
   import PatientForm from '$lib/components/PatientForm.svelte';
   import OutcomeScoreTrendChart from '$lib/components/OutcomeScoreTrendChart.svelte';
+  import PatientHistoryQuery from '$lib/components/PatientHistoryQuery.svelte';
   import { t } from '$lib/translations';
   import { ChevronDown, ChevronUp } from 'lucide-svelte';
 
@@ -280,6 +281,11 @@
             >
               {$t('patients.deletePatient')}
             </button>
+          </div>
+
+          <!-- Patient History Query Interface -->
+          <div class="mb-6">
+            <PatientHistoryQuery patientId={patientId} />
           </div>
 
           <!-- Patient Details -->
