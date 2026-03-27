@@ -136,61 +136,30 @@ jobs:
           print("Download OK — file appears to be XML.")
           PYEOF
 
-      - name: Debug single bundle structure
-        run: |
-          python3 -c "
-          from lxml import etree
-          parser = etree.XMLParser(recover=True, huge_tree=True)
-          tree = etree.parse('aips_de.xml', parser)
-          root = tree.getroot()
-          ns = {'n': 'https://simisinfo.refdata.ch/MedicinalDocuments/1.0/'}
-  
-          # Show full structure of first SmPC bundle
-          for bundle in root.findall('n:MedicinalDocumentsBundle', ns):
-              typ = bundle.findtext('n:Type', '', ns)
-              if typ == 'SmPC':
-                  print('=== SmPC Bundle ===')
-                  for el in bundle:
-                      tag = el.tag.split('}')[-1]
-                      if len(list(el)) == 0:
-                          print(f'  {tag} = {(el.text or \"\").strip()[:120]}')
-                      else:
-                          print(f'  {tag}:')
-                          for sub in el:
-                              stag = sub.tag.split('}')[-1]
-                              if len(list(sub)) == 0:
-                                  print(f'    {stag} = {(sub.text or \"\").strip()[:120]}')
-                              else:
-                                  print(f'    {stag}:')
-                                  for subsub in sub:
-                                      sstag = subsub.tag.split('}')[-1]
-                                      print(f'      {sstag} = {(subsub.text or \"\").strip()[:120]}')
-                  break
-  
-          print()
-          # Also count types
-          types = {}
-          for bundle in root.findall('n:MedicinalDocumentsBundle', ns):
-              t = bundle.findtext('n:Type', 'unknown', ns)
-              types[t] = types.get(t, 0) + 1
-          print(f'Bundle type counts: {types}')
-          print(f'Total bundles: {sum(types.values())}')
-          "
-
       - name: Validate AIPS XML
         run: |
           python3 -c "
           from lxml import etree
 
-          # The AIPS XML embeds HTML content which may use entities like
-          # '&nbsp;' that are not defined in plain XML.
-          # Use recover mode to handle these gracefully.
           parser = etree.XMLParser(recover=True, huge_tree=True)
           tree = etree.parse('aips_de.xml', parser)
-          count = len(tree.findall('.//{*}medicalInformation'))
-          print(f'AIPS XML OK — {count} medicalInformation entries')
-          if count < 100:
-              raise SystemExit('Too few entries — AIPS download may have failed')
+          root = tree.getroot()
+          tag = root.tag.split('}')[-1] if '}' in root.tag else root.tag
+
+          # New format (Aug 2025+): MedicinalDocumentsBundles
+          if tag == 'MedicinalDocumentsBundles':
+              ns = {'n': 'https://simisinfo.refdata.ch/MedicinalDocuments/1.0/'}
+              count = len(root.findall('n:MedicinalDocumentsBundle', ns))
+              print(f'AIPS XML OK (new format) — {count} MedicinalDocumentsBundle entries')
+              if count < 100:
+                  raise SystemExit('Too few entries — AIPS download may have failed')
+
+          # Legacy format (pre-Aug 2025): medicalInformations
+          else:
+              count = len(tree.findall('.//{*}medicalInformation'))
+              print(f'AIPS XML OK (legacy format) — {count} medicalInformation entries')
+              if count < 100:
+                  raise SystemExit('Too few entries — AIPS download may have failed')
           "
 
       - name: Build reference SQLite
