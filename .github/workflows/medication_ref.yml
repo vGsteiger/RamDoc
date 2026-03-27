@@ -198,10 +198,9 @@ jobs:
           echo "" | minisign -S -s medication_ref.key -m medication_ref_de.sqlite
           rm -f medication_ref.key
 
-          # Verify our own signature as a sanity check (using the public key from the secret)
-          echo "${{ secrets.MEDICATION_REF_PUBLIC_KEY }}" > medication_ref.pub
-          minisign -V -p medication_ref.pub -m medication_ref_de.sqlite
-          rm -f medication_ref.pub
+          # Verify our own signature as a sanity check.
+          # -P accepts the public key as an inline base64 string (no file needed).
+          minisign -V -P "${{ secrets.MEDICATION_REF_PUBLIC_KEY }}" -m medication_ref_de.sqlite
           echo "Signature verified OK"
 
       - name: Create or update GitHub Release and upload assets
