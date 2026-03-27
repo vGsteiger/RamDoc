@@ -224,6 +224,29 @@ pub fn list_scores_by_scale(
     Ok(scores)
 }
 
+pub fn list_scores_for_patient(
+    conn: &Connection,
+    patient_id: &str,
+    limit: u32,
+    offset: u32,
+) -> Result<Vec<OutcomeScore>, AppError> {
+    let mut stmt = conn.prepare(
+        "SELECT os.id, os.session_id, os.scale_type, os.score, os.interpretation, os.subscores,
+                os.administered_at, os.notes, os.created_at, os.updated_at
+         FROM outcome_scores os
+         JOIN sessions s ON os.session_id = s.id
+         WHERE s.patient_id = ?
+         ORDER BY os.administered_at DESC
+         LIMIT ? OFFSET ?",
+    )?;
+
+    let scores = stmt
+        .query_map(params![patient_id, limit, offset], row_to_outcome_score)?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(scores)
+}
+
 pub fn update_outcome_score(
     conn: &Connection,
     id: &str,

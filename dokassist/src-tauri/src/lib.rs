@@ -44,6 +44,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             commands::audit::query_audit_log,
@@ -99,6 +101,7 @@ pub fn run() {
             commands::outcome_scores::get_outcome_score,
             commands::outcome_scores::list_scores_for_session,
             commands::outcome_scores::list_scores_by_scale,
+            commands::outcome_scores::list_scores_for_patient,
             commands::outcome_scores::update_outcome_score,
             commands::outcome_scores::delete_outcome_score,
             commands::search::search_patients,
@@ -112,7 +115,9 @@ pub fn run() {
             commands::llm::load_model,
             commands::llm::extract_file_metadata,
             commands::llm::generate_report,
+            commands::llm::generate_letter,
             commands::llm::improve_text,
+            commands::llm::generate_session_summary,
             commands::llm::get_embed_status,
             commands::llm::initialize_embed_engine,
             commands::reports::create_report,
@@ -128,10 +133,18 @@ pub fn run() {
             commands::emails::update_email,
             commands::emails::delete_email,
             commands::emails::mark_email_as_sent,
+            commands::letters::create_letter,
+            commands::letters::get_letter,
+            commands::letters::list_letters,
+            commands::letters::update_letter,
+            commands::letters::delete_letter,
+            commands::letters::mark_letter_as_finalized,
+            commands::letters::mark_letter_as_sent,
             commands::updater::check_for_updates,
             commands::updater::install_update,
             commands::updater::get_app_version,
             commands::export::export_all_patient_data,
+            commands::fhir_export::export_fhir_bundle,
             commands::export::export_patient_pdf,
             commands::backup::create_vault_backup,
             commands::backup::restore_vault_backup,
@@ -152,6 +165,17 @@ pub fn run() {
             commands::literature::process_literature,
             commands::literature::search_literature,
             commands::literature::get_literature_document_chunks,
+            commands::models::list_models,
+            commands::models::get_model_info,
+            commands::models::download_and_register_model,
+            commands::models::delete_model,
+            commands::models::set_default_model,
+            commands::models::get_default_model,
+            commands::models::set_task_model,
+            commands::models::get_task_model,
+            commands::models::list_task_models,
+            commands::models::clear_task_model,
+            commands::models::get_model_for_task,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {

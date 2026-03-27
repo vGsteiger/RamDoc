@@ -18,7 +18,7 @@ fn get_todays_sessions(conn: &Connection) -> Result<Vec<SessionWithPatient>, App
 
     let mut stmt = conn.prepare(
         "SELECT s.id, s.patient_id, s.session_date, s.session_type, s.duration_minutes,
-                s.scheduled_time, s.notes, s.amdp_data, s.created_at, s.updated_at,
+                s.scheduled_time, s.notes, s.amdp_data, s.clinical_summary, s.created_at, s.updated_at,
                 p.first_name || ' ' || p.last_name AS patient_name
          FROM sessions s
          JOIN patients p ON s.patient_id = p.id
@@ -38,10 +38,11 @@ fn get_todays_sessions(conn: &Connection) -> Result<Vec<SessionWithPatient>, App
                     scheduled_time: row.get(5)?,
                     notes: row.get(6)?,
                     amdp_data: row.get(7)?,
-                    created_at: row.get(8)?,
-                    updated_at: row.get(9)?,
+                    clinical_summary: row.get(8)?,
+                    created_at: row.get(9)?,
+                    updated_at: row.get(10)?,
                 },
-                patient_name: row.get(10)?,
+                patient_name: row.get(11)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -95,7 +96,7 @@ fn get_sessions_with_incomplete_notes(
 ) -> Result<Vec<SessionWithPatient>, AppError> {
     let mut stmt = conn.prepare(
         "SELECT s.id, s.patient_id, s.session_date, s.session_type, s.duration_minutes,
-                s.scheduled_time, s.notes, s.amdp_data, s.created_at, s.updated_at,
+                s.scheduled_time, s.notes, s.amdp_data, s.clinical_summary, s.created_at, s.updated_at,
                 p.first_name || ' ' || p.last_name AS patient_name
          FROM sessions s
          JOIN patients p ON s.patient_id = p.id
@@ -116,10 +117,11 @@ fn get_sessions_with_incomplete_notes(
                     scheduled_time: row.get(5)?,
                     notes: row.get(6)?,
                     amdp_data: row.get(7)?,
-                    created_at: row.get(8)?,
-                    updated_at: row.get(9)?,
+                    clinical_summary: row.get(8)?,
+                    created_at: row.get(9)?,
+                    updated_at: row.get(10)?,
                 },
-                patient_name: row.get(10)?,
+                patient_name: row.get(11)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;

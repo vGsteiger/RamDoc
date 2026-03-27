@@ -52,6 +52,40 @@ import {
   installUpdate,
   getAppVersion,
   exportAllPatientData,
+  exportFhirBundle,
+  createVaultBackup,
+  restoreVaultBackup,
+  validateBackupArchive,
+  exportPatientPdf,
+  processFile,
+  createEmail,
+  getEmail,
+  listEmails,
+  updateEmail,
+  deleteEmail,
+  markEmailAsSent,
+  createTreatmentPlan,
+  getTreatmentPlan,
+  listTreatmentPlansForPatient,
+  updateTreatmentPlan,
+  deleteTreatmentPlan,
+  createTreatmentGoal,
+  getTreatmentGoal,
+  listTreatmentGoalsForPlan,
+  updateTreatmentGoal,
+  deleteTreatmentGoal,
+  createTreatmentIntervention,
+  getTreatmentIntervention,
+  listTreatmentInterventionsForPlan,
+  updateTreatmentIntervention,
+  deleteTreatmentIntervention,
+  createOutcomeScore,
+  getOutcomeScore,
+  listScoresForSession,
+  listScoresByScale,
+  listScoresForPatient,
+  updateOutcomeScore,
+  deleteOutcomeScore,
   runAgentTurn,
   createChatSession,
   getOrCreatePatientChatSession,
@@ -71,6 +105,27 @@ import {
   exportReportToPdf,
   exportReportToDocx,
   getDashboardData,
+  generateSessionSummary,
+  listModels,
+  getModelInfo,
+  downloadAndRegisterModel,
+  deleteModel,
+  setDefaultModel,
+  getDefaultModel,
+  setTaskModel,
+  getTaskModel,
+  listTaskModels,
+  clearTaskModel,
+  getModelForTask,
+  createLetter,
+  getLetter,
+  listLetters,
+  updateLetter,
+  deleteLetter,
+  markLetterAsFinalized,
+  markLetterAsSent,
+  generateLetter,
+  type Letter,
   type ModelChoice,
   type AppError,
 } from '$lib/api';
@@ -973,6 +1028,45 @@ describe('exportAllPatientData', () => {
   });
 });
 
+describe('exportFhirBundle', () => {
+  it('calls export_fhir_bundle with patientId and returns JSON string', async () => {
+    mockInvoke.mockResolvedValueOnce('{"resourceType":"Bundle"}');
+    const result = await exportFhirBundle('patient1');
+    expect(mockInvoke).toHaveBeenCalledWith('export_fhir_bundle', { patientId: 'patient1' });
+    expect(result).toBe('{"resourceType":"Bundle"}');
+  });
+});
+
+describe('createVaultBackup', () => {
+  it('calls create_vault_backup and returns byte array', async () => {
+    const bytes = [1, 2, 3];
+    mockInvoke.mockResolvedValueOnce(bytes);
+    const result = await createVaultBackup();
+    expect(mockInvoke).toHaveBeenCalledWith('create_vault_backup');
+    expect(result).toEqual(bytes);
+  });
+});
+
+describe('restoreVaultBackup', () => {
+  it('calls restore_vault_backup with encrypted bytes and returns BackupInfo', async () => {
+    const info = { schema_version: 1, created_at: '2026-01-01T00:00:00Z', db_schema_version: 12, file_count: 5 };
+    mockInvoke.mockResolvedValueOnce(info);
+    const result = await restoreVaultBackup([1, 2, 3]);
+    expect(mockInvoke).toHaveBeenCalledWith('restore_vault_backup', { encryptedBackup: [1, 2, 3] });
+    expect(result).toEqual(info);
+  });
+});
+
+describe('validateBackupArchive', () => {
+  it('calls validate_backup_archive and returns BackupInfo', async () => {
+    const info = { schema_version: 1, created_at: '2026-01-01T00:00:00Z', db_schema_version: 12, file_count: 3 };
+    mockInvoke.mockResolvedValueOnce(info);
+    const result = await validateBackupArchive([4, 5, 6]);
+    expect(mockInvoke).toHaveBeenCalledWith('validate_backup_archive', { encryptedBackup: [4, 5, 6] });
+    expect(result).toEqual(info);
+  });
+});
+
 describe('exportReportToPdf', () => {
   it('calls export_report_to_pdf with reportId and returns byte array', async () => {
     const bytes = [37, 80, 68, 70]; // %PDF magic bytes
@@ -1322,5 +1416,766 @@ describe('getDashboardData', () => {
     const result = await getDashboardData();
     expect(mockInvoke).toHaveBeenCalledWith('get_dashboard_data');
     expect(result).toEqual(dashboardData);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Session Summary Generation
+// ---------------------------------------------------------------------------
+
+describe('generateSessionSummary', () => {
+  it('calls generate_session_summary with patientContext and sessionNotes', async () => {
+    const summary = 'Generated clinical summary';
+    mockInvoke.mockResolvedValueOnce(summary);
+    const result = await generateSessionSummary(
+      'Patient: John Doe, DOB: 1980-01-01',
+      'Patient reports feeling anxious'
+    );
+    expect(mockInvoke).toHaveBeenCalledWith('generate_session_summary', {
+      patientContext: 'Patient: John Doe, DOB: 1980-01-01',
+      sessionNotes: 'Patient reports feeling anxious',
+      systemPrompt: undefined,
+    });
+    expect(result).toBe(summary);
+  });
+
+  it('calls generate_session_summary with optional systemPrompt', async () => {
+    const summary = 'Generated clinical summary';
+    mockInvoke.mockResolvedValueOnce(summary);
+    await generateSessionSummary(
+      'Patient: John Doe',
+      'Session notes',
+      'Use professional psychiatric terminology'
+    );
+    expect(mockInvoke).toHaveBeenCalledWith('generate_session_summary', {
+      patientContext: 'Patient: John Doe',
+      sessionNotes: 'Session notes',
+      systemPrompt: 'Use professional psychiatric terminology',
+    });
+  });
+
+  it('handles empty session notes', async () => {
+    const summary = 'No notes provided';
+    mockInvoke.mockResolvedValueOnce(summary);
+    const result = await generateSessionSummary('Patient: John Doe', '');
+    expect(mockInvoke).toHaveBeenCalledWith('generate_session_summary', {
+      patientContext: 'Patient: John Doe',
+      sessionNotes: '',
+      systemPrompt: undefined,
+    });
+    expect(result).toBe(summary);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Model Management API
+// ---------------------------------------------------------------------------
+
+describe('listModels', () => {
+  it('calls list_models and returns array of ModelInfo', async () => {
+    const models = [
+      {
+        id: 'model1',
+        name: 'Phi-4 Mini Q4_K_M',
+        filename: 'Phi-4-mini-instruct-Q4_K_M.gguf',
+        sha256: 'abc123',
+        size_bytes: 3000000000,
+        downloaded_at: '2025-01-01T00:00:00Z',
+        last_used: null,
+        is_default: true,
+        is_loaded: false,
+        exists_on_disk: true,
+      },
+    ];
+    mockInvoke.mockResolvedValueOnce(models);
+    const result = await listModels();
+    expect(mockInvoke).toHaveBeenCalledWith('list_models');
+    expect(result).toEqual(models);
+  });
+});
+
+describe('getModelInfo', () => {
+  it('calls get_model_info with modelId', async () => {
+    const model = {
+      id: 'model1',
+      name: 'Phi-4 Mini Q4_K_M',
+      filename: 'Phi-4-mini-instruct-Q4_K_M.gguf',
+      sha256: 'abc123',
+      size_bytes: 3000000000,
+      downloaded_at: '2025-01-01T00:00:00Z',
+      last_used: null,
+      is_default: true,
+      is_loaded: false,
+      exists_on_disk: true,
+    };
+    mockInvoke.mockResolvedValueOnce(model);
+    const result = await getModelInfo('model1');
+    expect(mockInvoke).toHaveBeenCalledWith('get_model_info', { modelId: 'model1' });
+    expect(result).toEqual(model);
+  });
+});
+
+describe('downloadAndRegisterModel', () => {
+  it('calls download_and_register_model with the model payload', async () => {
+    const model: ModelChoice = {
+      name: 'Phi-4 Mini Q4_K_M',
+      filename: 'Phi-4-mini-instruct-Q4_K_M.gguf',
+      size_bytes: 3 * 1024 ** 3,
+      reason: 'Unter 16 GB RAM: Phi-4 Mini für minimale Ressourcen',
+    };
+    const registered = {
+      id: 'model1',
+      name: model.name,
+      filename: model.filename,
+      sha256: 'abc123def456',
+      size_bytes: model.size_bytes,
+      downloaded_at: '2025-01-01T00:00:00Z',
+      last_used: null,
+      is_default: false,
+    };
+    mockInvoke.mockResolvedValueOnce(registered);
+    const result = await downloadAndRegisterModel(model);
+    expect(mockInvoke).toHaveBeenCalledWith('download_and_register_model', { model });
+    expect(result).toEqual(registered);
+  });
+
+  it('propagates invoke errors on download failure', async () => {
+    const model: ModelChoice = {
+      name: 'Phi-4 Mini Q4_K_M',
+      filename: 'Phi-4-mini-instruct-Q4_K_M.gguf',
+      size_bytes: 3 * 1024 ** 3,
+      reason: '',
+    };
+    mockInvoke.mockRejectedValueOnce({
+      code: 'NETWORK_ERROR',
+      message: 'Failed to download model',
+    });
+    await expect(downloadAndRegisterModel(model)).rejects.toMatchObject({
+      code: 'NETWORK_ERROR',
+    });
+  });
+});
+
+describe('deleteModel', () => {
+  it('calls delete_model with modelId', async () => {
+    mockInvoke.mockResolvedValueOnce(undefined);
+    await deleteModel('model1');
+    expect(mockInvoke).toHaveBeenCalledWith('delete_model', { modelId: 'model1' });
+  });
+
+  it('propagates error when deleting loaded model', async () => {
+    mockInvoke.mockRejectedValueOnce({
+      code: 'VALIDATION_ERROR',
+      message: 'Cannot delete currently loaded model',
+    });
+    await expect(deleteModel('model1')).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+    });
+  });
+});
+
+describe('setDefaultModel', () => {
+  it('calls set_default_model with modelId', async () => {
+    mockInvoke.mockResolvedValueOnce(undefined);
+    await setDefaultModel('model1');
+    expect(mockInvoke).toHaveBeenCalledWith('set_default_model', { modelId: 'model1' });
+  });
+});
+
+describe('getDefaultModel', () => {
+  it('calls get_default_model and returns the default model', async () => {
+    const model = {
+      id: 'model1',
+      name: 'Phi-4 Mini Q4_K_M',
+      filename: 'Phi-4-mini-instruct-Q4_K_M.gguf',
+      sha256: 'abc123',
+      size_bytes: 3000000000,
+      downloaded_at: '2025-01-01T00:00:00Z',
+      last_used: null,
+      is_default: true,
+    };
+    mockInvoke.mockResolvedValueOnce(model);
+    const result = await getDefaultModel();
+    expect(mockInvoke).toHaveBeenCalledWith('get_default_model');
+    expect(result).toEqual(model);
+  });
+
+  it('returns null when no default model is set', async () => {
+    mockInvoke.mockResolvedValueOnce(null);
+    const result = await getDefaultModel();
+    expect(mockInvoke).toHaveBeenCalledWith('get_default_model');
+    expect(result).toBeNull();
+  });
+});
+
+describe('setTaskModel', () => {
+  it('calls set_task_model with taskType and modelId', async () => {
+    mockInvoke.mockResolvedValueOnce(undefined);
+    await setTaskModel('summary', 'model1');
+    expect(mockInvoke).toHaveBeenCalledWith('set_task_model', {
+      taskType: 'summary',
+      modelId: 'model1',
+    });
+  });
+});
+
+describe('getTaskModel', () => {
+  it('calls get_task_model with taskType and returns the assigned model', async () => {
+    const model = {
+      id: 'model1',
+      name: 'Phi-4 Mini Q4_K_M',
+      filename: 'Phi-4-mini-instruct-Q4_K_M.gguf',
+      sha256: 'abc123',
+      size_bytes: 3000000000,
+      downloaded_at: '2025-01-01T00:00:00Z',
+      last_used: null,
+      is_default: false,
+    };
+    mockInvoke.mockResolvedValueOnce(model);
+    const result = await getTaskModel('summary');
+    expect(mockInvoke).toHaveBeenCalledWith('get_task_model', { taskType: 'summary' });
+    expect(result).toEqual(model);
+  });
+
+  it('returns null when no model is assigned to the task', async () => {
+    mockInvoke.mockResolvedValueOnce(null);
+    const result = await getTaskModel('letter');
+    expect(mockInvoke).toHaveBeenCalledWith('get_task_model', { taskType: 'letter' });
+    expect(result).toBeNull();
+  });
+});
+
+describe('listTaskModels', () => {
+  it('calls list_task_models and returns all task-model assignments', async () => {
+    const taskModels = [
+      {
+        task_type: 'summary',
+        model_id: 'model1',
+        created_at: '2025-01-01T00:00:00Z',
+        updated_at: '2025-01-01T00:00:00Z',
+      },
+      {
+        task_type: 'report',
+        model_id: 'model2',
+        created_at: '2025-01-02T00:00:00Z',
+        updated_at: '2025-01-02T00:00:00Z',
+      },
+    ];
+    mockInvoke.mockResolvedValueOnce(taskModels);
+    const result = await listTaskModels();
+    expect(mockInvoke).toHaveBeenCalledWith('list_task_models');
+    expect(result).toEqual(taskModels);
+  });
+});
+
+describe('clearTaskModel', () => {
+  it('calls clear_task_model with taskType', async () => {
+    mockInvoke.mockResolvedValueOnce(undefined);
+    await clearTaskModel('summary');
+    expect(mockInvoke).toHaveBeenCalledWith('clear_task_model', { taskType: 'summary' });
+  });
+});
+
+describe('getModelForTask', () => {
+  it('calls get_model_for_task with taskType and returns task-specific model', async () => {
+    const model = {
+      id: 'model1',
+      name: 'Phi-4 Mini Q4_K_M',
+      filename: 'Phi-4-mini-instruct-Q4_K_M.gguf',
+      sha256: 'abc123',
+      size_bytes: 3000000000,
+      downloaded_at: '2025-01-01T00:00:00Z',
+      last_used: null,
+      is_default: false,
+    };
+    mockInvoke.mockResolvedValueOnce(model);
+    const result = await getModelForTask('summary');
+    expect(mockInvoke).toHaveBeenCalledWith('get_model_for_task', { taskType: 'summary' });
+    expect(result).toEqual(model);
+  });
+
+  it('returns default model when no task-specific model is set', async () => {
+    const defaultModel = {
+      id: 'model2',
+      name: 'Default Model',
+      filename: 'default.gguf',
+      sha256: 'def456',
+      size_bytes: 5000000000,
+      downloaded_at: '2025-01-01T00:00:00Z',
+      last_used: null,
+      is_default: true,
+    };
+    mockInvoke.mockResolvedValueOnce(defaultModel);
+    const result = await getModelForTask('letter');
+    expect(mockInvoke).toHaveBeenCalledWith('get_model_for_task', { taskType: 'letter' });
+    expect(result).toEqual(defaultModel);
+  });
+
+  it('returns null when no task-specific or default model exists', async () => {
+    mockInvoke.mockResolvedValueOnce(null);
+    const result = await getModelForTask('report');
+    expect(mockInvoke).toHaveBeenCalledWith('get_model_for_task', { taskType: 'report' });
+    expect(result).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Letters
+// ---------------------------------------------------------------------------
+
+const LETTER: Letter = {
+  id: 'letter1',
+  patient_id: 'patient1',
+  letter_type: 'referral',
+  template_language: 'de',
+  recipient_name: 'Dr. Müller',
+  recipient_address: 'Hauptstrasse 1, Bern',
+  subject: 'Referral for Patient',
+  content: 'Dear Dr. Müller...',
+  status: 'draft',
+  model_name: null,
+  session_ids: null,
+  created_at: '2026-01-01T00:00:00Z',
+  updated_at: '2026-01-01T00:00:00Z',
+};
+
+describe('createLetter', () => {
+  it('calls create_letter and returns the created letter', async () => {
+    mockInvoke.mockResolvedValueOnce(LETTER);
+    const input = {
+      patient_id: 'patient1',
+      letter_type: 'referral' as const,
+      template_language: 'de' as const,
+      subject: 'Referral for Patient',
+      content: 'Dear Dr. Müller...',
+    };
+    const result = await createLetter(input);
+    expect(mockInvoke).toHaveBeenCalledWith('create_letter', { input });
+    expect(result).toEqual(LETTER);
+  });
+});
+
+describe('getLetter', () => {
+  it('calls get_letter and returns the letter', async () => {
+    mockInvoke.mockResolvedValueOnce(LETTER);
+    const result = await getLetter('letter1');
+    expect(mockInvoke).toHaveBeenCalledWith('get_letter', { id: 'letter1' });
+    expect(result).toEqual(LETTER);
+  });
+});
+
+describe('listLetters', () => {
+  it('calls list_letters and returns a list', async () => {
+    mockInvoke.mockResolvedValueOnce([LETTER]);
+    const result = await listLetters('patient1', 10, 0);
+    expect(mockInvoke).toHaveBeenCalledWith('list_letters', {
+      patientId: 'patient1',
+      limit: 10,
+      offset: 0,
+    });
+    expect(result).toEqual([LETTER]);
+  });
+});
+
+describe('updateLetter', () => {
+  it('calls update_letter and returns updated letter', async () => {
+    const updated = { ...LETTER, subject: 'Updated Subject' };
+    mockInvoke.mockResolvedValueOnce(updated);
+    const result = await updateLetter('letter1', { subject: 'Updated Subject' });
+    expect(mockInvoke).toHaveBeenCalledWith('update_letter', {
+      id: 'letter1',
+      input: { subject: 'Updated Subject' },
+    });
+    expect(result.subject).toBe('Updated Subject');
+  });
+});
+
+describe('deleteLetter', () => {
+  it('calls delete_letter', async () => {
+    mockInvoke.mockResolvedValueOnce(undefined);
+    await deleteLetter('letter1');
+    expect(mockInvoke).toHaveBeenCalledWith('delete_letter', { id: 'letter1' });
+  });
+});
+
+describe('markLetterAsFinalized', () => {
+  it('calls mark_letter_as_finalized and returns letter', async () => {
+    const finalized = { ...LETTER, status: 'finalized' as const };
+    mockInvoke.mockResolvedValueOnce(finalized);
+    const result = await markLetterAsFinalized('letter1');
+    expect(mockInvoke).toHaveBeenCalledWith('mark_letter_as_finalized', { id: 'letter1' });
+    expect(result.status).toBe('finalized');
+  });
+});
+
+describe('markLetterAsSent', () => {
+  it('calls mark_letter_as_sent and returns letter', async () => {
+    const sent = { ...LETTER, status: 'sent' as const };
+    mockInvoke.mockResolvedValueOnce(sent);
+    const result = await markLetterAsSent('letter1');
+    expect(mockInvoke).toHaveBeenCalledWith('mark_letter_as_sent', { id: 'letter1' });
+    expect(result.status).toBe('sent');
+  });
+});
+
+describe('generateLetter', () => {
+  it('calls generate_letter and returns generated content', async () => {
+    mockInvoke.mockResolvedValueOnce('Dear Dr. Müller, I am writing to refer...');
+    const result = await generateLetter('referral', 'de', 'Patient context', 'Clinical summary', 'Dr. Müller');
+    expect(mockInvoke).toHaveBeenCalledWith('generate_letter', {
+      letterType: 'referral',
+      language: 'de',
+      patientContext: 'Patient context',
+      clinicalSummary: 'Clinical summary',
+      recipientName: 'Dr. Müller',
+      systemPrompt: undefined,
+    });
+    expect(result).toBe('Dear Dr. Müller, I am writing to refer...');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Email (missing coverage)
+// ---------------------------------------------------------------------------
+
+const EMAIL = {
+  id: 'email1',
+  patient_id: 'patient1',
+  recipient_email: 'dr.mueller@example.com',
+  subject: 'Patient Referral',
+  body: 'Dear Dr. Müller...',
+  status: 'draft',
+  sent_at: null,
+  created_at: '2026-01-01T00:00:00Z',
+  updated_at: '2026-01-01T00:00:00Z',
+};
+
+describe('createEmail', () => {
+  it('calls create_email and returns created email', async () => {
+    mockInvoke.mockResolvedValueOnce(EMAIL);
+    const input = { patient_id: 'patient1', recipient_email: 'dr@example.com', subject: 'Test', body: 'Body' };
+    const result = await createEmail(input);
+    expect(mockInvoke).toHaveBeenCalledWith('create_email', { input });
+    expect(result).toEqual(EMAIL);
+  });
+});
+
+describe('getEmail', () => {
+  it('calls get_email and returns email', async () => {
+    mockInvoke.mockResolvedValueOnce(EMAIL);
+    const result = await getEmail('email1');
+    expect(mockInvoke).toHaveBeenCalledWith('get_email', { id: 'email1' });
+    expect(result).toEqual(EMAIL);
+  });
+});
+
+describe('listEmails', () => {
+  it('calls list_emails and returns list', async () => {
+    mockInvoke.mockResolvedValueOnce([EMAIL]);
+    const result = await listEmails('patient1', 10, 0);
+    expect(mockInvoke).toHaveBeenCalledWith('list_emails', { patientId: 'patient1', limit: 10, offset: 0 });
+    expect(result).toEqual([EMAIL]);
+  });
+});
+
+describe('updateEmail', () => {
+  it('calls update_email and returns updated email', async () => {
+    const updated = { ...EMAIL, subject: 'Updated' };
+    mockInvoke.mockResolvedValueOnce(updated);
+    const result = await updateEmail('email1', { subject: 'Updated' });
+    expect(mockInvoke).toHaveBeenCalledWith('update_email', { id: 'email1', input: { subject: 'Updated' } });
+    expect(result.subject).toBe('Updated');
+  });
+});
+
+describe('deleteEmail', () => {
+  it('calls delete_email with id', async () => {
+    mockInvoke.mockResolvedValueOnce(undefined);
+    await deleteEmail('email1');
+    expect(mockInvoke).toHaveBeenCalledWith('delete_email', { id: 'email1' });
+  });
+});
+
+describe('markEmailAsSent', () => {
+  it('calls mark_email_as_sent and returns updated email', async () => {
+    const sent = { ...EMAIL, status: 'sent', sent_at: '2026-03-27T09:00:00Z' };
+    mockInvoke.mockResolvedValueOnce(sent);
+    const result = await markEmailAsSent('email1');
+    expect(mockInvoke).toHaveBeenCalledWith('mark_email_as_sent', { id: 'email1' });
+    expect(result.status).toBe('sent');
+  });
+});
+
+describe('exportPatientPdf', () => {
+  it('calls export_patient_pdf with patientId and returns byte array', async () => {
+    const bytes = [37, 80, 68, 70];
+    mockInvoke.mockResolvedValueOnce(bytes);
+    const result = await exportPatientPdf('patient1');
+    expect(mockInvoke).toHaveBeenCalledWith('export_patient_pdf', { patientId: 'patient1' });
+    expect(result).toEqual(bytes);
+  });
+});
+
+describe('processFile', () => {
+  it('calls process_file with fileId', async () => {
+    mockInvoke.mockResolvedValueOnce(undefined);
+    await processFile('file1');
+    expect(mockInvoke).toHaveBeenCalledWith('process_file', { fileId: 'file1' });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Treatment Plans
+// ---------------------------------------------------------------------------
+
+const TREATMENT_PLAN = {
+  id: 'plan1',
+  patient_id: 'patient1',
+  title: 'CBT Plan',
+  description: null,
+  start_date: '2026-01-01',
+  end_date: null,
+  status: 'active',
+  created_at: '2026-01-01T00:00:00Z',
+  updated_at: '2026-01-01T00:00:00Z',
+};
+
+describe('createTreatmentPlan', () => {
+  it('calls create_treatment_plan and returns plan', async () => {
+    mockInvoke.mockResolvedValueOnce(TREATMENT_PLAN);
+    const result = await createTreatmentPlan({ patient_id: 'patient1', title: 'CBT Plan', start_date: '2026-01-01' });
+    expect(mockInvoke).toHaveBeenCalledWith('create_treatment_plan', { input: { patient_id: 'patient1', title: 'CBT Plan', start_date: '2026-01-01' } });
+    expect(result).toEqual(TREATMENT_PLAN);
+  });
+});
+
+describe('getTreatmentPlan', () => {
+  it('calls get_treatment_plan and returns plan', async () => {
+    mockInvoke.mockResolvedValueOnce(TREATMENT_PLAN);
+    const result = await getTreatmentPlan('plan1');
+    expect(mockInvoke).toHaveBeenCalledWith('get_treatment_plan', { id: 'plan1' });
+    expect(result).toEqual(TREATMENT_PLAN);
+  });
+});
+
+describe('listTreatmentPlansForPatient', () => {
+  it('calls list_treatment_plans_for_patient and returns list', async () => {
+    mockInvoke.mockResolvedValueOnce([TREATMENT_PLAN]);
+    const result = await listTreatmentPlansForPatient('patient1', 10, 0);
+    expect(mockInvoke).toHaveBeenCalledWith('list_treatment_plans_for_patient', { patientId: 'patient1', limit: 10, offset: 0 });
+    expect(result).toEqual([TREATMENT_PLAN]);
+  });
+});
+
+describe('updateTreatmentPlan', () => {
+  it('calls update_treatment_plan and returns updated plan', async () => {
+    mockInvoke.mockResolvedValueOnce({ ...TREATMENT_PLAN, title: 'Updated' });
+    const result = await updateTreatmentPlan('plan1', { title: 'Updated' });
+    expect(mockInvoke).toHaveBeenCalledWith('update_treatment_plan', { id: 'plan1', input: { title: 'Updated' } });
+    expect(result.title).toBe('Updated');
+  });
+});
+
+describe('deleteTreatmentPlan', () => {
+  it('calls delete_treatment_plan', async () => {
+    mockInvoke.mockResolvedValueOnce(undefined);
+    await deleteTreatmentPlan('plan1');
+    expect(mockInvoke).toHaveBeenCalledWith('delete_treatment_plan', { id: 'plan1' });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Treatment Goals
+// ---------------------------------------------------------------------------
+
+const TREATMENT_GOAL = {
+  id: 'goal1',
+  treatment_plan_id: 'plan1',
+  description: 'Reduce anxiety',
+  target_date: null,
+  status: 'active',
+  sort_order: 0,
+  created_at: '2026-01-01T00:00:00Z',
+  updated_at: '2026-01-01T00:00:00Z',
+};
+
+describe('createTreatmentGoal', () => {
+  it('calls create_treatment_goal and returns goal', async () => {
+    mockInvoke.mockResolvedValueOnce(TREATMENT_GOAL);
+    const result = await createTreatmentGoal({ treatment_plan_id: 'plan1', description: 'Reduce anxiety' });
+    expect(mockInvoke).toHaveBeenCalledWith('create_treatment_goal', { input: { treatment_plan_id: 'plan1', description: 'Reduce anxiety' } });
+    expect(result).toEqual(TREATMENT_GOAL);
+  });
+});
+
+describe('getTreatmentGoal', () => {
+  it('calls get_treatment_goal', async () => {
+    mockInvoke.mockResolvedValueOnce(TREATMENT_GOAL);
+    const result = await getTreatmentGoal('goal1');
+    expect(mockInvoke).toHaveBeenCalledWith('get_treatment_goal', { id: 'goal1' });
+    expect(result).toEqual(TREATMENT_GOAL);
+  });
+});
+
+describe('listTreatmentGoalsForPlan', () => {
+  it('calls list_treatment_goals_for_plan', async () => {
+    mockInvoke.mockResolvedValueOnce([TREATMENT_GOAL]);
+    const result = await listTreatmentGoalsForPlan('plan1', 10, 0);
+    expect(mockInvoke).toHaveBeenCalledWith('list_treatment_goals_for_plan', { planId: 'plan1', limit: 10, offset: 0 });
+    expect(result).toEqual([TREATMENT_GOAL]);
+  });
+});
+
+describe('updateTreatmentGoal', () => {
+  it('calls update_treatment_goal', async () => {
+    mockInvoke.mockResolvedValueOnce({ ...TREATMENT_GOAL, description: 'Updated' });
+    const result = await updateTreatmentGoal('goal1', { description: 'Updated' });
+    expect(mockInvoke).toHaveBeenCalledWith('update_treatment_goal', { id: 'goal1', input: { description: 'Updated' } });
+    expect(result.description).toBe('Updated');
+  });
+});
+
+describe('deleteTreatmentGoal', () => {
+  it('calls delete_treatment_goal', async () => {
+    mockInvoke.mockResolvedValueOnce(undefined);
+    await deleteTreatmentGoal('goal1');
+    expect(mockInvoke).toHaveBeenCalledWith('delete_treatment_goal', { id: 'goal1' });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Treatment Interventions
+// ---------------------------------------------------------------------------
+
+const INTERVENTION = {
+  id: 'int1',
+  treatment_plan_id: 'plan1',
+  type: 'exposure',
+  description: 'Gradual exposure therapy',
+  frequency: 'weekly',
+  created_at: '2026-01-01T00:00:00Z',
+  updated_at: '2026-01-01T00:00:00Z',
+};
+
+describe('createTreatmentIntervention', () => {
+  it('calls create_treatment_intervention', async () => {
+    mockInvoke.mockResolvedValueOnce(INTERVENTION);
+    const result = await createTreatmentIntervention({ treatment_plan_id: 'plan1', type: 'exposure', description: 'Gradual exposure therapy' });
+    expect(mockInvoke).toHaveBeenCalledWith('create_treatment_intervention', { input: { treatment_plan_id: 'plan1', type: 'exposure', description: 'Gradual exposure therapy' } });
+    expect(result).toEqual(INTERVENTION);
+  });
+});
+
+describe('getTreatmentIntervention', () => {
+  it('calls get_treatment_intervention', async () => {
+    mockInvoke.mockResolvedValueOnce(INTERVENTION);
+    const result = await getTreatmentIntervention('int1');
+    expect(mockInvoke).toHaveBeenCalledWith('get_treatment_intervention', { id: 'int1' });
+    expect(result).toEqual(INTERVENTION);
+  });
+});
+
+describe('listTreatmentInterventionsForPlan', () => {
+  it('calls list_treatment_interventions_for_plan', async () => {
+    mockInvoke.mockResolvedValueOnce([INTERVENTION]);
+    const result = await listTreatmentInterventionsForPlan('plan1', 10, 0);
+    expect(mockInvoke).toHaveBeenCalledWith('list_treatment_interventions_for_plan', { planId: 'plan1', limit: 10, offset: 0 });
+    expect(result).toEqual([INTERVENTION]);
+  });
+});
+
+describe('updateTreatmentIntervention', () => {
+  it('calls update_treatment_intervention', async () => {
+    mockInvoke.mockResolvedValueOnce({ ...INTERVENTION, type: 'cbt' });
+    const result = await updateTreatmentIntervention('int1', { type: 'cbt' });
+    expect(mockInvoke).toHaveBeenCalledWith('update_treatment_intervention', { id: 'int1', input: { type: 'cbt' } });
+    expect(result.type).toBe('cbt');
+  });
+});
+
+describe('deleteTreatmentIntervention', () => {
+  it('calls delete_treatment_intervention', async () => {
+    mockInvoke.mockResolvedValueOnce(undefined);
+    await deleteTreatmentIntervention('int1');
+    expect(mockInvoke).toHaveBeenCalledWith('delete_treatment_intervention', { id: 'int1' });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Outcome Scores
+// ---------------------------------------------------------------------------
+
+const OUTCOME_SCORE = {
+  id: 'score1',
+  session_id: 'sess1',
+  scale_type: 'PHQ9',
+  score: 12,
+  interpretation: 'moderate',
+  subscores: null,
+  administered_at: '2026-01-01',
+  notes: null,
+  created_at: '2026-01-01T00:00:00Z',
+  updated_at: '2026-01-01T00:00:00Z',
+};
+
+describe('createOutcomeScore', () => {
+  it('calls create_outcome_score and returns score', async () => {
+    mockInvoke.mockResolvedValueOnce(OUTCOME_SCORE);
+    const result = await createOutcomeScore({ session_id: 'sess1', scale_type: 'PHQ9', score: 12, administered_at: '2026-01-01' });
+    expect(mockInvoke).toHaveBeenCalledWith('create_outcome_score', { input: { session_id: 'sess1', scale_type: 'PHQ9', score: 12, administered_at: '2026-01-01' } });
+    expect(result).toEqual(OUTCOME_SCORE);
+  });
+});
+
+describe('getOutcomeScore', () => {
+  it('calls get_outcome_score', async () => {
+    mockInvoke.mockResolvedValueOnce(OUTCOME_SCORE);
+    const result = await getOutcomeScore('score1');
+    expect(mockInvoke).toHaveBeenCalledWith('get_outcome_score', { id: 'score1' });
+    expect(result).toEqual(OUTCOME_SCORE);
+  });
+});
+
+describe('listScoresForSession', () => {
+  it('calls list_scores_for_session', async () => {
+    mockInvoke.mockResolvedValueOnce([OUTCOME_SCORE]);
+    const result = await listScoresForSession('sess1', 10, 0);
+    expect(mockInvoke).toHaveBeenCalledWith('list_scores_for_session', { sessionId: 'sess1', limit: 10, offset: 0 });
+    expect(result).toEqual([OUTCOME_SCORE]);
+  });
+});
+
+describe('listScoresByScale', () => {
+  it('calls list_scores_by_scale', async () => {
+    mockInvoke.mockResolvedValueOnce([OUTCOME_SCORE]);
+    const result = await listScoresByScale('PHQ9', 10, 0);
+    expect(mockInvoke).toHaveBeenCalledWith('list_scores_by_scale', { scaleType: 'PHQ9', limit: 10, offset: 0 });
+    expect(result).toEqual([OUTCOME_SCORE]);
+  });
+});
+
+describe('listScoresForPatient', () => {
+  it('calls list_scores_for_patient', async () => {
+    mockInvoke.mockResolvedValueOnce([OUTCOME_SCORE]);
+    const result = await listScoresForPatient('patient1', 10, 0);
+    expect(mockInvoke).toHaveBeenCalledWith('list_scores_for_patient', { patientId: 'patient1', limit: 10, offset: 0 });
+    expect(result).toEqual([OUTCOME_SCORE]);
+  });
+});
+
+describe('updateOutcomeScore', () => {
+  it('calls update_outcome_score', async () => {
+    mockInvoke.mockResolvedValueOnce({ ...OUTCOME_SCORE, score: 8 });
+    const result = await updateOutcomeScore('score1', { score: 8 });
+    expect(mockInvoke).toHaveBeenCalledWith('update_outcome_score', { id: 'score1', input: { score: 8 } });
+    expect(result.score).toBe(8);
+  });
+});
+
+describe('deleteOutcomeScore', () => {
+  it('calls delete_outcome_score', async () => {
+    mockInvoke.mockResolvedValueOnce(undefined);
+    await deleteOutcomeScore('score1');
+    expect(mockInvoke).toHaveBeenCalledWith('delete_outcome_score', { id: 'score1' });
   });
 });

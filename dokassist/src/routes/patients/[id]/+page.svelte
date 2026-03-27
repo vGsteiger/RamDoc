@@ -2,16 +2,22 @@
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
+  import { save } from '@tauri-apps/plugin-dialog';
   import {
     getPatient,
     updatePatient,
     deletePatient,
+    exportFhirBundle,
     exportPatientPdf,
+    listScoresForPatient,
     type Patient,
     type UpdatePatient,
+    type OutcomeScore,
   } from '$lib/api';
   import PatientForm from '$lib/components/PatientForm.svelte';
+  import OutcomeScoreTrendChart from '$lib/components/OutcomeScoreTrendChart.svelte';
   import { t } from '$lib/translations';
+  import { ChevronDown, ChevronUp } from 'lucide-svelte';
 
   let patient = $state<Patient | null>(null);
   let isLoading = $state(true);
@@ -20,12 +26,18 @@
   let isDeleting = $state(false);
   let isExporting = $state(false);
   let showDeleteConfirm = $state(false);
+  let showExportMenu = $state(false);
   let error = $state('');
+
+  let outcomeScores = $state<OutcomeScore[]>([]);
+  let isLoadingScores = $state(false);
+  let showTrendChart = $state(true);
 
   let patientId = $derived($page.params.id);
 
   onMount(async () => {
     await loadPatient();
+    await loadOutcomeScores();
   });
 
   async function loadPatient() {
@@ -44,6 +56,19 @@
       console.error('Error loading patient:', e);
     } finally {
       isLoading = false;
+    }
+  }
+
+  async function loadOutcomeScores() {
+    if (!patientId) return;
+
+    try {
+      isLoadingScores = true;
+      outcomeScores = await listScoresForPatient(patientId);
+    } catch (e) {
+      console.error('Error loading outcome scores:', e);
+    } finally {
+      isLoadingScores = false;
     }
   }
 
@@ -81,6 +106,43 @@
     isEditing = false;
   }
 
+  async function handleExportFhir() {
+    if (!patientId || !patient) return;
+
+    try {
+      isExporting = true;
+      showExportMenu = false;
+      error = '';
+
+      // Get FHIR bundle JSON
+      const fhirJson = await exportFhirBundle(patientId);
+
+      // Prompt user to save file
+      const fileName = `FHIR_${patient.last_name}_${patient.first_name}_${new Date().toISOString().split('T')[0]}.json`;
+      const filePath = await save({
+        defaultPath: fileName,
+        filters: [
+          {
+            name: 'FHIR Bundle',
+            extensions: ['json'],
+          },
+        ],
+      });
+
+      if (filePath) {
+        // Write the file
+        const { writeTextFile } = await import('@tauri-apps/plugin-fs');
+        await writeTextFile(filePath, fhirJson);
+      }
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Failed to export FHIR bundle';
+      console.error('Error exporting FHIR bundle:', e);
+    } finally {
+      isExporting = false;
+    }
+  }
+  
+  
   async function handleExportPdf() {
     if (!patientId || !patient) return;
 
@@ -106,6 +168,13 @@
     }
   }
 
+  function handleClickOutside(event: MouseEvent) {
+    const target = event.target as HTMLElement;
+    if (!target.closest('.export-dropdown')) {
+      showExportMenu = false;
+    }
+  }
+
   function formatDate(dateStr: string): string {
     try {
       const date = new Date(dateStr);
@@ -119,6 +188,8 @@
     }
   }
 </script>
+
+<svelte:window onclick={handleClickOutside} />
 
 <div class="p-8">
   <div class="max-w-4xl mx-auto">
@@ -160,14 +231,48 @@
                 class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors inline-flex items-center"
               >
                 {$t('patients.sendEmail')}
-              </a>
-              <button
-                onclick={handleExportPdf}
-                disabled={isExporting}
-                class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isExporting ? "Exporting..." : "Export PDF"}
-              </button>
+              </a>              <!-- Export Dropdown -->
+              <div class="relative export-dropdown">
+                <button
+                  onclick={() => (showExportMenu = !showExportMenu)}
+                  disabled={isExporting}
+                  class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                >
+                  {isExporting ? 'Exporting...' : 'Export'}
+                  <svg
+                    class="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M19 9l-7 7-7-7"
+                    />
+                  </svg>
+                </button>
+                {#if showExportMenu}
+                  <div
+                    class="absolute left-0 mt-2 w-48 bg-white dark:bg-gray-700 rounded-lg shadow-lg border border-gray-200 dark:border-gray-600 z-10"
+                  >
+                    <button
+                      onclick={handleExportFhir}
+                      class="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors"
+                    >
+                      Export FHIR R4
+                    </button>
+                    <button
+                      onclick={handleExportPdf}
+                      disabled={isExporting}
+                      class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isExporting ? "Exporting..." : "Export PDF"}
+                    </button>
+                  </div>
+                {/if}
+              </div>
             </div>
             <button
               onclick={() => (showDeleteConfirm = true)}
@@ -179,6 +284,45 @@
 
           <!-- Patient Details -->
           <div class="space-y-6">
+            <!-- Outcome Score Trend Visualization -->
+            {#if outcomeScores.length > 0}
+              <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
+                <button
+                  onclick={() => (showTrendChart = !showTrendChart)}
+                  class="flex items-center justify-between w-full mb-4 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                >
+                  <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                    Outcome Score Trends
+                  </h3>
+                  {#if showTrendChart}
+                    <ChevronUp class="w-5 h-5" />
+                  {:else}
+                    <ChevronDown class="w-5 h-5" />
+                  {/if}
+                </button>
+
+                {#if showTrendChart}
+                  <div class="space-y-6">
+                    {#each ['PHQ-9', 'GAD-7', 'BDI-II'] as scaleType}
+                      {@const scoresForScale = outcomeScores.filter((s) => s.scale_type === scaleType)}
+                      {#if scoresForScale.length > 0}
+                        <div class="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4">
+                          <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                            {scaleType}
+                            <span class="text-xs font-normal text-gray-500 dark:text-gray-400">
+                              ({scoresForScale.length}
+                              {scoresForScale.length === 1 ? 'measurement' : 'measurements'})
+                            </span>
+                          </h4>
+                          <OutcomeScoreTrendChart scores={scoresForScale} {scaleType} />
+                        </div>
+                      {/if}
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+            {/if}
+
             <!-- Basic Info -->
             <div class="grid grid-cols-2 gap-6">
               <div>

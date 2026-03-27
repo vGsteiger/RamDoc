@@ -1,6 +1,6 @@
 {
   "name": "dokassist",
-  "version": "0.7.14",
+  "version": "0.8.3",
   "private": true,
   "type": "module",
   "scripts": {
@@ -26,9 +26,9 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/svelte": "^5.3.1",
     "@vitest/coverage-v8": "^4.0.18",
-    "eslint": "^9.0.0",
+    "eslint": "^10.1.0",
     "eslint-plugin-svelte": "^3.16.0",
-    "globals": "^16.0.0",
+    "globals": "^17.4.0",
     "jsdom": "^29.0.1",
     "prettier": "^3.0.0",
     "prettier-plugin-svelte": "^3.0.0",
@@ -38,8 +38,15 @@
     "vite": "^7.3.1",
     "vitest": "^4.0.18"
   },
+  "pnpm": {
+    "overrides": {
+      "cookie": "^0.7.0"
+    }
+  },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/plugin-dialog": "^2.6.0",
+    "@tauri-apps/plugin-fs": "^2.4.5",
     "@tauri-apps/plugin-shell": "^2.0.0",
     "@tauri-apps/plugin-updater": "^2.0.0",
     "lucide-svelte": "^1.0.1"

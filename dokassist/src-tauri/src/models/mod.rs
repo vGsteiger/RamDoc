@@ -1,9 +1,12 @@
 pub mod chat;
 pub mod diagnosis;
 pub mod email;
+pub mod fhir;
 pub mod file_record;
+pub mod letter;
 pub mod literature;
 pub mod medication;
+pub mod model;
 pub mod outcome_score;
 pub mod patient;
 pub mod report;
