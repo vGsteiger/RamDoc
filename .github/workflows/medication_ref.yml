@@ -136,6 +136,31 @@ jobs:
           print("Download OK — file appears to be XML.")
           PYEOF
 
+      - name: Debug AIPS XML structure
+        run: |
+          python3 -c "
+          from lxml import etree
+          parser = etree.XMLParser(recover=True, huge_tree=True)
+          tree = etree.parse('aips_de.xml', parser)
+          root = tree.getroot()
+          print(f'Root tag: {root.tag}')
+          print(f'Root attribs: {root.attrib}')
+          print(f'Namespaces: {root.nsmap}')
+          print()
+          print('Direct children (first 10):')
+          for i, child in enumerate(root):
+              if i >= 10:
+                  print(f'  ... ({len(list(root))} total children)')
+                  break
+              print(f'  tag={child.tag} attribs={dict(child.attrib)}')
+              for j, sub in enumerate(child):
+                  if j >= 5:
+                      print(f'    ... ({len(list(child))} sub-elements)')
+                      break
+                  text = (sub.text or '')[:80]
+                  print(f'    tag={sub.tag} text={text!r}')
+          "
+
       - name: Validate AIPS XML
         run: |
           python3 -c "
