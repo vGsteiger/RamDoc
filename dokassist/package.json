@@ -38,6 +38,11 @@
     "vite": "^7.3.1",
     "vitest": "^4.0.18"
   },
+  "pnpm": {
+    "overrides": {
+      "cookie": "^0.7.0"
+    }
+  },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-dialog": "^2.6.0",

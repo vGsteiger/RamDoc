@@ -351,6 +351,7 @@ pub async fn generate_session_summary(
 /// Generate a formal letter (referral, insurance authorization, or therapy extension) with streaming output.
 /// Emits `"letter-chunk"` events for each token and `"letter-done"` on completion.
 /// `system_prompt`: optional override; falls back to the built-in German or French prompt based on language.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn generate_letter(
     app: AppHandle,

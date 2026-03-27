@@ -21,7 +21,7 @@
     "version": "Version",
     "versionAvailable": "is now available",
     "releaseNotes": "Release Notes:",
-    "downloadingAndInstalling": "and installing update...",
+    "downloadingAndInstalling": "Downloading and installing update...",
     "autoRestart": "The app will restart automatically after installation.",
     "download": "Download",
     "noUpdatesAvailable": "You're up to date!",

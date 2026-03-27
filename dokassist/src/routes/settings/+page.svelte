@@ -497,8 +497,7 @@
             {#if installingUpdate}
               <div class="mb-3">
                 <div class="flex justify-between text-xs text-gray-600 dark:text-gray-400 mb-1">
-                  <span>{$t('settings.downloading')} {$t('settings.downloadingAndInstalling')}</span
-                  >
+                  <span>{$t('settings.downloadingAndInstalling')}</span>
                   <span>{updateProgress}%</span>
                 </div>
                 <div class="w-full bg-gray-300 dark:bg-gray-700 rounded-full h-2">

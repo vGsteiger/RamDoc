@@ -106,8 +106,8 @@ pub async fn install_update(app: AppHandle) -> Result<(), AppError> {
                     .await
                 {
                     Ok(_) => {
-                        log::info!("Update installed successfully");
-                        Ok(())
+                        log::info!("Update installed successfully, restarting");
+                        app.restart();
                     }
                     Err(e) => {
                         log::error!("Failed to download and install update: {}", e);

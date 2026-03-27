@@ -127,6 +127,7 @@ pub fn generate_session_summary_streaming_with_prompt(
 /// Generate a letter using a caller-supplied system prompt.
 /// Emits `"letter-chunk"` Tauri events for each token as it is produced.
 /// Returns the full completed letter string.
+#[allow(clippy::too_many_arguments)]
 pub fn generate_letter_streaming_with_prompt(
     app: &tauri::AppHandle,
     engine: &LlmEngine,
