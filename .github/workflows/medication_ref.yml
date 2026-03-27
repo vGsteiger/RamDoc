@@ -173,7 +173,15 @@ jobs:
         run: |
           curl -fsSLO https://github.com/jedisct1/minisign/releases/download/0.11/minisign-0.11-linux.tar.gz
           tar -xzf minisign-0.11-linux.tar.gz
-          sudo install -m 755 minisign-0.11-linux/x86_64/minisign /usr/local/bin/minisign
+          # Find the binary wherever it landed in the archive
+          MINISIGN_BIN=$(find . -name minisign -type f | head -1)
+          if [ -z "$MINISIGN_BIN" ]; then
+            echo "ERROR: minisign binary not found in archive. Contents:"
+            tar -tzf minisign-0.11-linux.tar.gz
+            exit 1
+          fi
+          echo "Found minisign at: $MINISIGN_BIN"
+          sudo install -m 755 "$MINISIGN_BIN" /usr/local/bin/minisign
           minisign --version
 
       - name: Sign the SQLite with minisign
