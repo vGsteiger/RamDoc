@@ -44,6 +44,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             commands::audit::query_audit_log,
@@ -134,6 +136,7 @@ pub fn run() {
             commands::updater::install_update,
             commands::updater::get_app_version,
             commands::export::export_all_patient_data,
+            commands::fhir_export::export_fhir_bundle,
             commands::export::export_patient_pdf,
             commands::backup::create_vault_backup,
             commands::backup::restore_vault_backup,

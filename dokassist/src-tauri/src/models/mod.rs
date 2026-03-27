@@ -1,6 +1,7 @@
 pub mod chat;
 pub mod diagnosis;
 pub mod email;
+pub mod fhir;
 pub mod file_record;
 pub mod literature;
 pub mod medication;
