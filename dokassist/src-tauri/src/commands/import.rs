@@ -1,12 +1,11 @@
 use crate::ahv::validate_ahv;
 use crate::audit::{self, AuditAction};
-use crate::error::AppError;
 use crate::models::import::{
     ColumnMapping, CsvPatientRow, CsvPreview, CsvWarning, ImportResult,
 };
 use crate::models::patient::CreatePatient;
 use crate::state::AppState;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -71,7 +70,7 @@ pub async fn parse_csv_preview(
                 }
                 Err(e) => {
                     warnings.push(CsvWarning {
-                        row: idx + 2, // +1 for header, +1 for 1-based indexing
+                        row: Some(idx + 2), // +1 for header, +1 for 1-based indexing
                         column: None,
                         message: format!("Failed to parse row: {}", e),
                     });
@@ -92,7 +91,7 @@ pub async fn parse_csv_preview(
 
     if !has_required_fields {
         warnings.push(CsvWarning {
-            row: 0,
+            row: None,
             column: None,
             message: "Could not detect all required fields (AHV, first name, last name, date of birth). Please manually map columns.".to_string(),
         });
@@ -145,7 +144,7 @@ pub async fn import_csv_data(
         }
     }
 
-    // Parse CSV and import patients
+    // Parse CSV and validate all rows first (Phase 1: Validation)
     let mut reader = csv::ReaderBuilder::new()
         .flexible(true)
         .from_path(path)
@@ -158,13 +157,8 @@ pub async fn import_csv_data(
         .map(|h| h.to_string())
         .collect::<Vec<_>>();
 
-    let mut imported_count = 0;
-    let mut failed_count = 0;
-    let mut warnings = Vec::new();
+    let mut validated_rows: Vec<(usize, CsvPatientRow)> = Vec::new();
     let mut errors = Vec::new();
-
-    // Get database connection
-    let conn = state.db.conn().map_err(|e| e.to_string())?;
 
     for (idx, result) in reader.records().enumerate() {
         let row_num = idx + 2; // +1 for header, +1 for 1-based indexing
@@ -177,59 +171,108 @@ pub async fn import_csv_data(
                 // Validate required fields
                 if let Err(e) = validate_patient_row(&patient_row, row_num) {
                     errors.push(e);
-                    failed_count += 1;
                     continue;
                 }
 
-                // Create patient
-                match create_patient_from_row(&conn, patient_row, row_num) {
-                    Ok(patient_id) => {
-                        imported_count += 1;
-
-                        // Log audit entry
-                        let _ = audit::log(
-                            &conn,
-                            AuditAction::Import,
-                            "patient",
-                            Some(&patient_id),
-                            Some(&format!("csv_row: {}", row_num)),
-                        );
-                    }
-                    Err(warning) => {
-                        errors.push(warning);
-                        failed_count += 1;
+                // Validate AHV number
+                if let Some(ref ahv) = patient_row.ahv_number {
+                    if let Err(e) = validate_ahv(ahv) {
+                        errors.push(CsvWarning {
+                            row: Some(row_num),
+                            column: Some("ahv_number".to_string()),
+                            message: format!("Invalid AHV number: {}", e),
+                        });
+                        continue;
                     }
                 }
+
+                // Row is valid, add to list
+                validated_rows.push((row_num, patient_row));
             }
             Err(e) => {
                 errors.push(CsvWarning {
-                    row: row_num,
+                    row: Some(row_num),
                     column: None,
                     message: format!("Failed to parse row: {}", e),
                 });
-                failed_count += 1;
             }
         }
     }
 
-    // Log overall import result
+    // If there are any validation errors, return them without importing anything
+    if !errors.is_empty() {
+        return Ok(ImportResult {
+            success: false,
+            imported_count: 0,
+            failed_count: errors.len(),
+            warnings: Vec::new(),
+            errors,
+        });
+    }
+
+    // Phase 2: Import all validated rows in a transaction
+    let conn = state.db.conn().map_err(|e| e.to_string())?;
+
+    // Begin transaction
+    conn.execute("BEGIN TRANSACTION", [])
+        .map_err(|e| format!("Failed to begin transaction: {}", e))?;
+
+    let mut imported_count = 0;
+    let mut import_errors = Vec::new();
+
+    for (row_num, patient_row) in validated_rows {
+        match create_patient_from_row(&conn, patient_row, row_num) {
+            Ok(patient_id) => {
+                imported_count += 1;
+
+                // Log audit entry
+                let _ = audit::log(
+                    &conn,
+                    AuditAction::Import,
+                    "patient",
+                    Some(&patient_id),
+                    Some(&format!("csv_row: {}", row_num)),
+                );
+            }
+            Err(e) => {
+                import_errors.push(e);
+            }
+        }
+    }
+
+    // If any import errors occurred, rollback the transaction
+    if !import_errors.is_empty() {
+        conn.execute("ROLLBACK", [])
+            .map_err(|e| format!("Failed to rollback transaction: {}", e))?;
+
+        return Ok(ImportResult {
+            success: false,
+            imported_count: 0,
+            failed_count: import_errors.len(),
+            warnings: Vec::new(),
+            errors: import_errors,
+        });
+    }
+
+    // Commit the transaction
+    conn.execute("COMMIT", [])
+        .map_err(|e| format!("Failed to commit transaction: {}", e))?;
+
+    // Log overall import result (after successful commit)
     let _ = audit::log(
         &conn,
         AuditAction::Import,
         "import",
         None,
-        Some(&format!(
-            "imported: {}, failed: {}",
-            imported_count, failed_count
-        )),
+        Some(&format!("imported: {}", imported_count)),
     );
 
     Ok(ImportResult {
-        success: failed_count == 0,
+        success: true,
         imported_count,
-        failed_count,
-        warnings,
-        errors,
+        failed_count: 0,
+        warnings: Vec::new(),
+        errors: Vec::new(),
     })
 }
 
@@ -341,7 +384,7 @@ fn map_csv_row_to_patient(
 fn validate_patient_row(row: &CsvPatientRow, row_num: usize) -> Result<(), CsvWarning> {
     if row.ahv_number.is_none() {
         return Err(CsvWarning {
-            row: row_num,
+            row: Some(row_num),
             column: Some("ahv_number".to_string()),
             message: "Missing required field: AHV number".to_string(),
         });
@@ -349,7 +392,7 @@ fn validate_patient_row(row: &CsvPatientRow, row_num: usize) -> Result<(), CsvWa
 
     if row.first_name.is_none() {
         return Err(CsvWarning {
-            row: row_num,
+            row: Some(row_num),
             column: Some("first_name".to_string()),
             message: "Missing required field: first name".to_string(),
         });
@@ -357,7 +400,7 @@ fn validate_patient_row(row: &CsvPatientRow, row_num: usize) -> Result<(), CsvWa
 
     if row.last_name.is_none() {
         return Err(CsvWarning {
-            row: row_num,
+            row: Some(row_num),
             column: Some("last_name".to_string()),
             message: "Missing required field: last name".to_string(),
         });
@@ -365,7 +408,7 @@ fn validate_patient_row(row: &CsvPatientRow, row_num: usize) -> Result<(), CsvWa
 
     if row.date_of_birth.is_none() {
         return Err(CsvWarning {
-            row: row_num,
+            row: Some(row_num),
             column: Some("date_of_birth".to_string()),
             message: "Missing required field: date of birth".to_string(),
         });
@@ -383,7 +426,7 @@ fn create_patient_from_row(
     // Validate AHV number
     let ahv = row.ahv_number.unwrap(); // Safe because validated
     let normalized_ahv = validate_ahv(&ahv).map_err(|e| CsvWarning {
-        row: row_num,
+        row: Some(row_num),
         column: Some("ahv_number".to_string()),
         message: format!("Invalid AHV number: {}", e),
     })?;
@@ -405,10 +448,176 @@ fn create_patient_from_row(
     };
 
     let patient = crate::models::patient::create_patient(conn, input).map_err(|e| CsvWarning {
-        row: row_num,
+        row: Some(row_num),
         column: None,
         message: format!("Failed to create patient: {}", e),
     })?;
 
     Ok(patient.id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_detect_column_mappings_english() {
+        let headers = vec![
+            "AHV Number".to_string(),
+            "First Name".to_string(),
+            "Last Name".to_string(),
+            "Date of Birth".to_string(),
+            "Gender".to_string(),
+            "Email".to_string(),
+        ];
+
+        let mappings = detect_column_mappings(&headers);
+
+        assert_eq!(mappings.len(), 6);
+        assert!(mappings.iter().any(|m| m.patient_field == "ahv_number"));
+        assert!(mappings.iter().any(|m| m.patient_field == "first_name"));
+        assert!(mappings.iter().any(|m| m.patient_field == "last_name"));
+        assert!(mappings
+            .iter()
+            .any(|m| m.patient_field == "date_of_birth"));
+        assert!(mappings.iter().any(|m| m.patient_field == "gender"));
+        assert!(mappings.iter().any(|m| m.patient_field == "email"));
+    }
+
+    #[test]
+    fn test_detect_column_mappings_german() {
+        let headers = vec![
+            "AHV".to_string(),
+            "Vorname".to_string(),
+            "Nachname".to_string(),
+            "Geburtsdatum".to_string(),
+            "Geschlecht".to_string(),
+            "Telefon".to_string(),
+        ];
+
+        let mappings = detect_column_mappings(&headers);
+
+        assert_eq!(mappings.len(), 6);
+        assert!(mappings.iter().any(|m| m.patient_field == "ahv_number"));
+        assert!(mappings.iter().any(|m| m.patient_field == "first_name"));
+        assert!(mappings.iter().any(|m| m.patient_field == "last_name"));
+        assert!(mappings
+            .iter()
+            .any(|m| m.patient_field == "date_of_birth"));
+        assert!(mappings.iter().any(|m| m.patient_field == "gender"));
+        assert!(mappings.iter().any(|m| m.patient_field == "phone"));
+    }
+
+    #[test]
+    fn test_detect_column_mappings_french() {
+        let headers = vec![
+            "AVS".to_string(),
+            "Prénom".to_string(),
+            "Nom".to_string(),
+            "Sexe".to_string(),
+        ];
+
+        let mappings = detect_column_mappings(&headers);
+
+        assert_eq!(mappings.len(), 4);
+        assert!(mappings.iter().any(|m| m.patient_field == "ahv_number"));
+        assert!(mappings.iter().any(|m| m.patient_field == "first_name"));
+        assert!(mappings.iter().any(|m| m.patient_field == "last_name"));
+        assert!(mappings.iter().any(|m| m.patient_field == "gender"));
+    }
+
+    #[test]
+    fn test_validate_patient_row_success() {
+        let row = CsvPatientRow {
+            ahv_number: Some("7561234567897".to_string()),
+            first_name: Some("Hans".to_string()),
+            last_name: Some("Müller".to_string()),
+            date_of_birth: Some("1980-01-15".to_string()),
+            ..Default::default()
+        };
+
+        let result = validate_patient_row(&row, 2);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_patient_row_missing_ahv() {
+        let row = CsvPatientRow {
+            ahv_number: None,
+            first_name: Some("Hans".to_string()),
+            last_name: Some("Müller".to_string()),
+            date_of_birth: Some("1980-01-15".to_string()),
+            ..Default::default()
+        };
+
+        let result = validate_patient_row(&row, 2);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.row, Some(2));
+        assert_eq!(err.column, Some("ahv_number".to_string()));
+    }
+
+    #[test]
+    fn test_validate_patient_row_missing_first_name() {
+        let row = CsvPatientRow {
+            ahv_number: Some("7561234567897".to_string()),
+            first_name: None,
+            last_name: Some("Müller".to_string()),
+            date_of_birth: Some("1980-01-15".to_string()),
+            ..Default::default()
+        };
+
+        let result = validate_patient_row(&row, 3);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.row, Some(3));
+        assert_eq!(err.column, Some("first_name".to_string()));
+    }
+
+    #[test]
+    fn test_map_csv_row_to_patient() {
+        let headers = vec![
+            "AHV Number".to_string(),
+            "First Name".to_string(),
+            "Last Name".to_string(),
+            "Date of Birth".to_string(),
+        ];
+
+        let mut mapping_map = HashMap::new();
+        mapping_map.insert("AHV Number".to_string(), "ahv_number".to_string());
+        mapping_map.insert("First Name".to_string(), "first_name".to_string());
+        mapping_map.insert("Last Name".to_string(), "last_name".to_string());
+        mapping_map.insert("Date of Birth".to_string(), "date_of_birth".to_string());
+
+        let record = csv::StringRecord::from(vec!["756.1234.5678.97", "Hans", "Müller", "1980-01-15"]);
+
+        let patient_row = map_csv_row_to_patient(&headers, &record, &mapping_map);
+
+        assert_eq!(patient_row.ahv_number, Some("756.1234.5678.97".to_string()));
+        assert_eq!(patient_row.first_name, Some("Hans".to_string()));
+        assert_eq!(patient_row.last_name, Some("Müller".to_string()));
+        assert_eq!(patient_row.date_of_birth, Some("1980-01-15".to_string()));
+    }
+
+    #[test]
+    fn test_map_csv_row_with_empty_values() {
+        let headers = vec![
+            "AHV Number".to_string(),
+            "First Name".to_string(),
+            "Email".to_string(),
+        ];
+
+        let mut mapping_map = HashMap::new();
+        mapping_map.insert("AHV Number".to_string(), "ahv_number".to_string());
+        mapping_map.insert("First Name".to_string(), "first_name".to_string());
+        mapping_map.insert("Email".to_string(), "email".to_string());
+
+        let record = csv::StringRecord::from(vec!["756.1234.5678.97", "Hans", ""]);
+
+        let patient_row = map_csv_row_to_patient(&headers, &record, &mapping_map);
+
+        assert_eq!(patient_row.ahv_number, Some("756.1234.5678.97".to_string()));
+        assert_eq!(patient_row.first_name, Some("Hans".to_string()));
+        assert_eq!(patient_row.email, None); // Empty string should not be set
+    }
 }

@@ -10,7 +10,7 @@ pub struct ColumnMapping {
 /// Warning encountered during CSV parsing or validation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CsvWarning {
-    pub row: usize,
+    pub row: Option<usize>,
     pub column: Option<String>,
     pub message: String,
 }

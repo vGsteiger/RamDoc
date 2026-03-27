@@ -1389,7 +1389,7 @@ export interface ColumnMapping {
 }
 
 export interface CsvWarning {
-  row: number;
+  row: number | null;
   column: string | null;
   message: string;
 }

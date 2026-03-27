@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import { getVersion } from '@tauri-apps/api/app';
+  import { open } from '@tauri-apps/plugin-dialog';
   import { goto } from '$app/navigation';
   import {
     getEngineStatus,
@@ -329,12 +330,12 @@
   let validatedBackupInfo: BackupInfo | null = null;
 
   // CSV Import state
-  let selectedCsvFile: File | null = null;
-  let csvPreview: CsvPreview | null = null;
+  let selectedCsvPath = $state<string | null>(null);
+  let csvPreview = $state<CsvPreview | null>(null);
   let csvError = $state("");
   let importing = $state(false);
-  let importResult: ImportResult | null = null;
-  let columnMappings: ColumnMapping[] = [];
+  let importResult = $state<ImportResult | null>(null);
+  let columnMappings = $state<ColumnMapping[]>([]);
 
   async function handleReset() {
     resetting = true;
@@ -454,41 +455,48 @@
     }
   }
 
-  async function handleSelectCsvFile(event: Event) {
-    const input = event.currentTarget as HTMLInputElement;
-    const file = input.files?.[0];
-    if (!file) {
-      selectedCsvFile = null;
-      csvPreview = null;
-      return;
-    }
-
-    selectedCsvFile = file;
-    csvError = "";
-    csvPreview = null;
-    importResult = null;
-
-    // Parse CSV preview
+  async function handleSelectCsvFile() {
     try {
-      csvPreview = await parseCsvPreview(file.path);
+      const selected = await open({
+        title: 'Select CSV file',
+        filters: [{
+          name: 'CSV',
+          extensions: ['csv']
+        }],
+        multiple: false
+      });
+
+      if (!selected) {
+        selectedCsvPath = null;
+        csvPreview = null;
+        return;
+      }
+
+      selectedCsvPath = selected as string;
+      csvError = "";
+      csvPreview = null;
+      importResult = null;
+
+      // Parse CSV preview
+      csvPreview = await parseCsvPreview(selectedCsvPath);
       columnMappings = csvPreview.detected_mappings;
     } catch (e) {
       csvError = parseError(e).message;
-      selectedCsvFile = null;
+      selectedCsvPath = null;
     }
   }
 
   async function handleImportCsv() {
-    if (!selectedCsvFile || !csvPreview) return;
+    if (!selectedCsvPath || !csvPreview) return;
 
     importing = true;
     csvError = "";
     try {
-      importResult = await importCsvData(selectedCsvFile.path, columnMappings);
+      importResult = await importCsvData(selectedCsvPath, columnMappings);
 
       if (importResult.success) {
         // Clear state on success
-        selectedCsvFile = null;
+        selectedCsvPath = null;
         csvPreview = null;
         columnMappings = [];
       }
@@ -500,12 +508,24 @@
   }
 
   function updateColumnMapping(csvHeader: string, patientField: string) {
-    const existingIndex = columnMappings.findIndex(m => m.csv_header === csvHeader);
+    const existingIndex = columnMappings.findIndex((m) => m.csv_header === csvHeader);
     if (existingIndex >= 0) {
-      columnMappings[existingIndex].patient_field = patientField;
+      columnMappings = columnMappings.map((m, index) =>
+        index === existingIndex ? { ...m, patient_field: patientField } : m
+      );
     } else {
-      columnMappings.push({ csv_header: csvHeader, patient_field: patientField });
+      columnMappings = [
+        ...columnMappings,
+        { csv_header: csvHeader, patient_field: patientField }
+      ];
     }
+  }
+
+  // Check if all required fields are mapped
+  function hasAllRequiredFieldsMapped(): boolean {
+    const requiredFields = ['ahv_number', 'first_name', 'last_name', 'date_of_birth'];
+    const mappedFields = new Set(columnMappings.map(m => m.patient_field).filter(f => f));
+    return requiredFields.every(field => mappedFields.has(field));
   }
 
   const patientFields = [
@@ -1063,17 +1083,17 @@
       </div>
 
       <div class="mb-3">
-        <label
-          class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2"
+        <button
+          onclick={handleSelectCsvFile}
+          class="px-4 py-2 text-sm rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition-colors"
         >
           Select CSV File
-        </label>
-        <input
-          type="file"
-          accept=".csv"
-          onchange={handleSelectCsvFile}
-          class="block w-full text-sm text-gray-900 dark:text-gray-100 border border-gray-400 dark:border-gray-600 rounded-lg cursor-pointer bg-gray-200 dark:bg-gray-900 focus:outline-none"
-        />
+        </button>
+        {#if selectedCsvPath}
+          <p class="text-xs text-gray-600 dark:text-gray-400 mt-2">
+            Selected: {selectedCsvPath.split('/').pop() || selectedCsvPath.split('\\').pop()}
+          </p>
+        {/if}
       </div>
 
       {#if csvPreview}
@@ -1086,7 +1106,7 @@
             <div class="mb-3 text-xs text-amber-400">
               <p class="font-medium mb-1">Warnings:</p>
               {#each csvPreview.warnings as warning}
-                <p>• Row {warning.row}: {warning.message}</p>
+                <p>• {warning.row ? `Row ${warning.row}: ` : ''}{warning.message}</p>
               {/each}
             </div>
           {/if}
@@ -1138,13 +1158,13 @@
 
           <button
             onclick={handleImportCsv}
-            disabled={importing || columnMappings.filter(m => m.patient_field).length < 4}
+            disabled={importing || !hasAllRequiredFieldsMapped()}
             class="px-4 py-2 text-sm rounded-lg bg-green-600 hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors"
           >
             {importing ? "Importing…" : "Import Patients"}
           </button>
 
-          {#if columnMappings.filter(m => m.patient_field).length < 4}
+          {#if !hasAllRequiredFieldsMapped()}
             <p class="text-xs text-amber-400 mt-2">
               * Please map all required fields (AHV Number, First Name, Last Name, Date of Birth)
             </p>
@@ -1166,7 +1186,7 @@
             <div class="mt-2 text-xs text-red-400 max-h-40 overflow-y-auto">
               <p class="font-medium mb-1">Errors:</p>
               {#each importResult.errors.slice(0, 10) as error}
-                <p>• Row {error.row}: {error.message}</p>
+                <p>• {error.row ? `Row ${error.row}: ` : ''}{error.message}</p>
               {/each}
               {#if importResult.errors.length > 10}
                 <p class="text-gray-400 mt-1">... and {importResult.errors.length - 10} more errors</p>
