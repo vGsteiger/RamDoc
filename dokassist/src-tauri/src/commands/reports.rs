@@ -6,6 +6,7 @@ use crate::state::AppState;
 use chrono::{NaiveDate, NaiveDateTime};
 use docx_rs::*;
 use printpdf::*;
+use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 use tauri::State;
 
 #[tauri::command]
@@ -130,8 +131,88 @@ pub async fn export_report_to_pdf(
     Ok(pdf_bytes)
 }
 
+/// Load an external TTF font from the macOS system font directory.
+/// Falls back to None if the font file is not present.
+fn load_system_font(filename: &str) -> Option<ParsedFont> {
+    let path = format!("/System/Library/Fonts/Supplemental/{}", filename);
+    let bytes = std::fs::read(&path).ok()?;
+    ParsedFont::from_bytes(&bytes, 0, &mut Vec::new())
+}
+
+/// A line to render in the PDF, with style information derived from markdown.
+enum PdfLine {
+    Heading { text: String, level: u8 },
+    Body(String),
+    Separator,
+    Blank,
+}
+
+/// Convert markdown content into a flat list of renderable lines.
+fn markdown_to_pdf_lines(markdown: &str) -> Vec<PdfLine> {
+    let mut lines = Vec::new();
+    let parser = Parser::new_ext(markdown, Options::empty());
+
+    let mut current_text = String::new();
+    let mut heading_level: Option<u8> = None;
+    let mut in_strong = false;
+
+    for event in parser {
+        match event {
+            Event::Start(Tag::Heading { level, .. }) => {
+                heading_level = Some(match level {
+                    HeadingLevel::H1 => 1,
+                    HeadingLevel::H2 => 2,
+                    _ => 3,
+                });
+                current_text.clear();
+            }
+            Event::End(TagEnd::Heading(_)) => {
+                let text = current_text.trim().to_string();
+                if !text.is_empty() {
+                    lines.push(PdfLine::Heading {
+                        text,
+                        level: heading_level.unwrap_or(3),
+                    });
+                }
+                heading_level = None;
+                current_text.clear();
+            }
+            Event::Start(Tag::Paragraph) => {
+                current_text.clear();
+            }
+            Event::End(TagEnd::Paragraph) => {
+                let text = current_text.trim().to_string();
+                if !text.is_empty() {
+                    lines.push(PdfLine::Body(text));
+                }
+                lines.push(PdfLine::Blank);
+                current_text.clear();
+            }
+            Event::Start(Tag::Strong) | Event::Start(Tag::Emphasis) => {
+                in_strong = true;
+            }
+            Event::End(TagEnd::Strong) | Event::End(TagEnd::Emphasis) => {
+                in_strong = false;
+            }
+            Event::Text(text) => {
+                current_text.push_str(&text);
+            }
+            Event::SoftBreak | Event::HardBreak => {
+                current_text.push(' ');
+            }
+            Event::Rule => {
+                lines.push(PdfLine::Separator);
+            }
+            _ => {}
+        }
+        let _ = in_strong; // used implicitly via current_text accumulation
+    }
+
+    lines
+}
+
 fn generate_pdf_bytes(report: Report, patient: Patient) -> Result<Vec<u8>, AppError> {
-    use printpdf::{Op, PdfFontHandle, PdfPage, PdfSaveOptions, Point, Pt, TextItem};
+    use printpdf::{Op, PdfPage, PdfSaveOptions, Point, Pt, TextItem};
 
     // Format dates
     let generated_at = NaiveDateTime::parse_from_str(&report.generated_at, "%Y-%m-%d %H:%M:%S%.f")
@@ -143,8 +224,25 @@ fn generate_pdf_bytes(report: Report, patient: Patient) -> Result<Vec<u8>, AppEr
         .map(|d| d.format("%d.%m.%Y").to_string())
         .unwrap_or_else(|_| patient.date_of_birth.clone());
 
-    let font = PdfFontHandle::Builtin(BuiltinFont::Helvetica);
-    let font_bold = PdfFontHandle::Builtin(BuiltinFont::HelveticaBold);
+    let mut doc = PdfDocument::new("Report");
+
+    // Load Unicode-capable fonts; fall back to builtins if not found
+    let (font, font_bold) = if let (Some(regular), Some(bold)) = (
+        load_system_font("Arial.ttf"),
+        load_system_font("Arial Bold.ttf"),
+    ) {
+        let id_regular = doc.add_font(&regular);
+        let id_bold = doc.add_font(&bold);
+        (
+            PdfFontHandle::External(id_regular),
+            PdfFontHandle::External(id_bold),
+        )
+    } else {
+        (
+            PdfFontHandle::Builtin(BuiltinFont::Helvetica),
+            PdfFontHandle::Builtin(BuiltinFont::HelveticaBold),
+        )
+    };
 
     // Helper: emit a single line of text at (x_mm, y_mm) with given font & size
     let text_op = |text: String, size: f32, x: Mm, y: Mm, fh: &PdfFontHandle| -> Vec<Op> {
@@ -164,11 +262,11 @@ fn generate_pdf_bytes(report: Report, patient: Patient) -> Result<Vec<u8>, AppEr
         ]
     };
 
-    let mut doc = PdfDocument::new("Report");
     let page_w = Mm(210.0);
     let page_h = Mm(297.0);
     let left = Mm(20.0);
     let lh = Mm(5.0);
+    let max_chars = 90usize;
 
     let mut all_ops: Vec<Op> = Vec::new();
     let mut pages: Vec<PdfPage> = Vec::new();
@@ -178,82 +276,14 @@ fn generate_pdf_bytes(report: Report, patient: Patient) -> Result<Vec<u8>, AppEr
         pages.push(PdfPage::new(page_w, page_h, ops));
     };
 
-    // Title
-    all_ops.extend(text_op(
-        format_report_type(&report.report_type),
-        24.0,
-        left,
-        y,
-        &font_bold,
-    ));
-    y -= lh * 2.0;
-
-    // Patient information header
-    all_ops.extend(text_op(
-        "Patient Information".to_string(),
-        14.0,
-        left,
-        y,
-        &font_bold,
-    ));
-    y -= lh;
-
-    all_ops.extend(text_op(
-        format!("Name: {} {}", patient.first_name, patient.last_name),
-        11.0,
-        left,
-        y,
-        &font,
-    ));
-    y -= lh;
-
-    all_ops.extend(text_op(
-        format!("Date of Birth: {}", dob),
-        11.0,
-        left,
-        y,
-        &font,
-    ));
-    y -= lh;
-
-    all_ops.extend(text_op(
-        format!("AHV Number: {}", patient.ahv_number),
-        11.0,
-        left,
-        y,
-        &font,
-    ));
-    y -= lh * 2.0;
-
-    // Report metadata
-    all_ops.extend(text_op(
-        format!("Generated: {}", generated_at),
-        10.0,
-        left,
-        y,
-        &font,
-    ));
-    y -= lh * 2.0;
-
-    // Report content header
-    all_ops.extend(text_op(
-        "Report Content".to_string(),
-        14.0,
-        left,
-        y,
-        &font_bold,
-    ));
-    y -= lh;
-
-    // Content lines
-    let max_chars = 90usize;
-    for paragraph in report.content.split('\n') {
-        if paragraph.is_empty() {
-            y -= lh * 0.5;
-            continue;
-        }
-
-        let char_indices: Vec<(usize, char)> = paragraph.char_indices().collect();
+    // Helper: word-wrap a text string and emit lines, mutating y
+    let emit_wrapped = |text: &str,
+                        size: f32,
+                        fh: &PdfFontHandle,
+                        all_ops: &mut Vec<Op>,
+                        pages: &mut Vec<PdfPage>,
+                        y: &mut Mm| {
+        let char_indices: Vec<(usize, char)> = text.char_indices().collect();
         let mut start_idx = 0;
 
         while start_idx < char_indices.len() {
@@ -268,30 +298,109 @@ fn generate_pdf_bytes(report: Report, patient: Patient) -> Result<Vec<u8>, AppEr
                 end_idx
             };
 
-            let byte_start = if start_idx == 0 {
-                0
-            } else {
-                char_indices[start_idx].0
-            };
+            let byte_start = char_indices[start_idx].0;
             let byte_end = if break_idx < char_indices.len() {
                 char_indices[break_idx].0
             } else {
-                paragraph.len()
+                text.len()
             };
-            let chunk = paragraph[byte_start..byte_end].trim().to_string();
+            let chunk = text[byte_start..byte_end].trim().to_string();
 
-            // New page if needed
             if y.0 < 30.0 {
-                flush_page(std::mem::take(&mut all_ops), &mut pages);
-                y = Mm(270.0);
+                flush_page(std::mem::take(all_ops), pages);
+                *y = Mm(270.0);
             }
 
-            all_ops.extend(text_op(chunk, 10.0, left, y, &font));
-            y -= lh;
+            all_ops.extend(text_op(chunk, size, left, *y, fh));
+            *y -= lh;
 
             start_idx = break_idx;
             while start_idx < char_indices.len() && char_indices[start_idx].1.is_whitespace() {
                 start_idx += 1;
+            }
+        }
+    };
+
+    // Title
+    emit_wrapped(
+        &format_report_type(&report.report_type),
+        24.0,
+        &font_bold,
+        &mut all_ops,
+        &mut pages,
+        &mut y,
+    );
+    y -= lh;
+
+    // Patient information header
+    all_ops.extend(text_op(
+        "Patienteninformation".to_string(),
+        14.0,
+        left,
+        y,
+        &font_bold,
+    ));
+    y -= lh;
+
+    emit_wrapped(
+        &format!("Name: {} {}", patient.first_name, patient.last_name),
+        11.0,
+        &font,
+        &mut all_ops,
+        &mut pages,
+        &mut y,
+    );
+    emit_wrapped(
+        &format!("Geburtsdatum: {}", dob),
+        11.0,
+        &font,
+        &mut all_ops,
+        &mut pages,
+        &mut y,
+    );
+    emit_wrapped(
+        &format!("AHV-Nummer: {}", patient.ahv_number),
+        11.0,
+        &font,
+        &mut all_ops,
+        &mut pages,
+        &mut y,
+    );
+    y -= lh;
+
+    emit_wrapped(
+        &format!("Erstellt: {}", generated_at),
+        10.0,
+        &font,
+        &mut all_ops,
+        &mut pages,
+        &mut y,
+    );
+    y -= lh;
+
+    // Report content — parse markdown
+    for line in markdown_to_pdf_lines(&report.content) {
+        if y.0 < 30.0 {
+            flush_page(std::mem::take(&mut all_ops), &mut pages);
+            y = Mm(270.0);
+        }
+        match line {
+            PdfLine::Heading { text, level } => {
+                let size = if level == 1 {
+                    16.0
+                } else if level == 2 {
+                    14.0
+                } else {
+                    12.0
+                };
+                emit_wrapped(&text, size, &font_bold, &mut all_ops, &mut pages, &mut y);
+                y -= lh * 0.3;
+            }
+            PdfLine::Body(text) => {
+                emit_wrapped(&text, 10.0, &font, &mut all_ops, &mut pages, &mut y);
+            }
+            PdfLine::Separator | PdfLine::Blank => {
+                y -= lh * 0.5;
             }
         }
     }
@@ -340,6 +449,115 @@ pub async fn export_report_to_docx(
     Ok(docx_bytes)
 }
 
+/// A segment of text within a paragraph, with optional bold/italic styling.
+struct DocxSpan {
+    text: String,
+    bold: bool,
+    italic: bool,
+}
+
+/// Convert markdown content into DOCX paragraphs, preserving inline bold/italic.
+fn markdown_to_docx(markdown: &str, docx: Docx) -> Docx {
+    let mut docx = docx;
+    let parser = Parser::new_ext(markdown, Options::empty());
+
+    // Accumulator for the current paragraph's spans
+    let mut spans: Vec<DocxSpan> = Vec::new();
+    let mut in_strong = false;
+    let mut in_em = false;
+    let mut heading_level: Option<u8> = None;
+    let mut in_paragraph = false;
+
+    let flush_paragraph = |spans: Vec<DocxSpan>, heading_level: Option<u8>, docx: &mut Docx| {
+        if spans.is_empty() {
+            return;
+        }
+        let mut para = Paragraph::new();
+        let is_heading = heading_level.is_some();
+        for span in spans {
+            let mut run = Run::new().add_text(span.text);
+            if span.bold || is_heading {
+                run = run.bold();
+            }
+            if span.italic {
+                run = run.italic();
+            }
+            let size = match heading_level {
+                Some(1) => 40,
+                Some(2) => 34,
+                Some(3) => 28,
+                _ => 22,
+            };
+            run = run.size(size);
+            para = para.add_run(run);
+        }
+        *docx = std::mem::take(docx).add_paragraph(para);
+    };
+
+    for event in parser {
+        match event {
+            Event::Start(Tag::Heading { level, .. }) => {
+                heading_level = Some(match level {
+                    HeadingLevel::H1 => 1,
+                    HeadingLevel::H2 => 2,
+                    _ => 3,
+                });
+                spans.clear();
+            }
+            Event::End(TagEnd::Heading(_)) => {
+                flush_paragraph(std::mem::take(&mut spans), heading_level, &mut docx);
+                heading_level = None;
+            }
+            Event::Start(Tag::Paragraph) => {
+                in_paragraph = true;
+                spans.clear();
+            }
+            Event::End(TagEnd::Paragraph) => {
+                flush_paragraph(std::mem::take(&mut spans), None, &mut docx);
+                docx = docx.add_paragraph(Paragraph::new());
+                in_paragraph = false;
+            }
+            Event::Start(Tag::Strong) => {
+                in_strong = true;
+            }
+            Event::End(TagEnd::Strong) => {
+                in_strong = false;
+            }
+            Event::Start(Tag::Emphasis) => {
+                in_em = true;
+            }
+            Event::End(TagEnd::Emphasis) => {
+                in_em = false;
+            }
+            Event::Text(text) => {
+                spans.push(DocxSpan {
+                    text: text.to_string(),
+                    bold: in_strong,
+                    italic: in_em,
+                });
+            }
+            Event::SoftBreak | Event::HardBreak => {
+                spans.push(DocxSpan {
+                    text: " ".to_string(),
+                    bold: in_strong,
+                    italic: in_em,
+                });
+            }
+            Event::Rule => {
+                // Horizontal rule → blank paragraph
+                docx = docx.add_paragraph(Paragraph::new());
+            }
+            _ => {}
+        }
+        let _ = in_paragraph; // suppress unused warning
+    }
+
+    // Flush any remaining spans (e.g. content not wrapped in a paragraph tag)
+    flush_paragraph(std::mem::take(&mut spans), None, &mut docx);
+
+    docx
+}
+
 fn generate_docx_bytes(report: Report, patient: Patient) -> Result<Vec<u8>, AppError> {
     // Format dates
     let generated_at = NaiveDateTime::parse_from_str(&report.generated_at, "%Y-%m-%d %H:%M:%S%.f")
@@ -351,7 +569,6 @@ fn generate_docx_bytes(report: Report, patient: Patient) -> Result<Vec<u8>, AppE
         .map(|d| d.format("%d.%m.%Y").to_string())
         .unwrap_or_else(|_| patient.date_of_birth.clone());
 
-    // Create DOCX document
     let mut docx = Docx::new();
 
     // Title
@@ -363,56 +580,33 @@ fn generate_docx_bytes(report: Report, patient: Patient) -> Result<Vec<u8>, AppE
                 .size(48),
         ),
     );
-
-    // Empty line
     docx = docx.add_paragraph(Paragraph::new());
 
-    // Patient information section
+    // Patient information
     docx = docx.add_paragraph(
-        Paragraph::new().add_run(Run::new().add_text("Patient Information").bold().size(28)),
+        Paragraph::new().add_run(Run::new().add_text("Patienteninformation").bold().size(28)),
     );
-
     docx = docx.add_paragraph(Paragraph::new().add_run(Run::new().add_text(format!(
         "Name: {} {}",
         patient.first_name, patient.last_name
     ))));
-
     docx = docx.add_paragraph(
-        Paragraph::new().add_run(Run::new().add_text(format!("Date of Birth: {}", dob))),
+        Paragraph::new().add_run(Run::new().add_text(format!("Geburtsdatum: {}", dob))),
     );
-
     docx = docx.add_paragraph(
         Paragraph::new()
-            .add_run(Run::new().add_text(format!("AHV Number: {}", patient.ahv_number))),
+            .add_run(Run::new().add_text(format!("AHV-Nummer: {}", patient.ahv_number))),
     );
-
-    // Empty line
+    docx = docx.add_paragraph(Paragraph::new());
+    docx = docx.add_paragraph(
+        Paragraph::new().add_run(Run::new().add_text(format!("Erstellt: {}", generated_at))),
+    );
     docx = docx.add_paragraph(Paragraph::new());
 
-    // Report metadata
-    docx = docx.add_paragraph(
-        Paragraph::new().add_run(Run::new().add_text(format!("Generated: {}", generated_at))),
-    );
+    // Report content — parse markdown for proper formatting
+    docx = markdown_to_docx(&report.content, docx);
 
-    // Empty line
-    docx = docx.add_paragraph(Paragraph::new());
-
-    // Report content section
-    docx = docx.add_paragraph(
-        Paragraph::new().add_run(Run::new().add_text("Report Content").bold().size(28)),
-    );
-
-    // Add report content, preserving paragraphs
-    for paragraph_text in report.content.split('\n') {
-        if paragraph_text.trim().is_empty() {
-            docx = docx.add_paragraph(Paragraph::new());
-        } else {
-            docx =
-                docx.add_paragraph(Paragraph::new().add_run(Run::new().add_text(paragraph_text)));
-        }
-    }
-
-    // Convert DOCX to bytes (pack requires Write + Seek, so use Cursor)
+    // Convert DOCX to bytes
     let mut cursor = std::io::Cursor::new(Vec::new());
     docx.build()
         .pack(&mut cursor)

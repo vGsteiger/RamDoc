@@ -1,6 +1,8 @@
 <script lang="ts">
   import { untrack } from 'svelte';
-  import type { CreateMedication, UpdateMedication, Medication } from '$lib/api';
+  import type { CreateMedication, UpdateMedication, Medication, SubstanceSummary } from '$lib/api';
+  import MedicationAutocomplete from './MedicationAutocomplete.svelte';
+  import MedicationInfoPanel from './MedicationInfoPanel.svelte';
 
   interface Props {
     medication?: Medication;
@@ -19,6 +21,7 @@
   );
   let endDate = $state(untrack(() => medication?.end_date || ''));
   let notes = $state(untrack(() => medication?.notes || ''));
+  let selectedSubstanceId = $state<string | null>(null);
 
   $effect(() => {
     if (medication) {
@@ -28,8 +31,15 @@
       startDate = medication.start_date || new Date().toISOString().split('T')[0];
       endDate = medication.end_date || '';
       notes = medication.notes || '';
+      // Clear any reference panel when editing an existing record
+      selectedSubstanceId = null;
     }
   });
+
+  function handleSubstanceSelect(summary: SubstanceSummary) {
+    substance = summary.name_de;
+    selectedSubstanceId = summary.id;
+  }
 
   function handleSubmit(event: Event) {
     event.preventDefault();
@@ -39,7 +49,6 @@
     }
 
     if (medication) {
-      // Update existing medication
       const update: UpdateMedication = {
         substance: substance !== medication.substance ? substance : undefined,
         dosage: dosage !== medication.dosage ? dosage : undefined,
@@ -50,7 +59,6 @@
       };
       onSave({ id: medication.id, update });
     } else if (patientId) {
-      // Create new medication
       const input: CreateMedication = {
         patient_id: patientId,
         substance,
@@ -67,33 +75,38 @@
 
 <form onsubmit={handleSubmit} class="space-y-4">
   <div>
-    <label for="substance" class="block text-sm font-medium text-gray-300 mb-1">
+    <label for="substance" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
       Wirkstoff *
     </label>
-    <input
+    <MedicationAutocomplete
       id="substance"
-      type="text"
-      bind:value={substance}
+      value={substance}
+      onInput={(v) => {
+        substance = v;
+        selectedSubstanceId = null;
+      }}
+      onSelect={handleSubstanceSelect}
       required
       placeholder="z.B. Sertralin"
-      class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      class="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
     />
+    <MedicationInfoPanel substanceId={selectedSubstanceId} />
   </div>
 
   <div>
-    <label for="dosage" class="block text-sm font-medium text-gray-300 mb-1"> Dosierung * </label>
+    <label for="dosage" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"> Dosierung * </label>
     <input
       id="dosage"
       type="text"
       bind:value={dosage}
       required
       placeholder="z.B. 50 mg"
-      class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      class="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
     />
   </div>
 
   <div>
-    <label for="frequency" class="block text-sm font-medium text-gray-300 mb-1">
+    <label for="frequency" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
       Häufigkeit *
     </label>
     <input
@@ -102,13 +115,13 @@
       bind:value={frequency}
       required
       placeholder="z.B. 1x täglich"
-      class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      class="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
     />
   </div>
 
   <div class="grid grid-cols-2 gap-4">
     <div>
-      <label for="start-date" class="block text-sm font-medium text-gray-300 mb-1">
+      <label for="start-date" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
         Startdatum *
       </label>
       <input
@@ -116,29 +129,29 @@
         type="date"
         bind:value={startDate}
         required
-        class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        class="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
     </div>
 
     <div>
-      <label for="end-date" class="block text-sm font-medium text-gray-300 mb-1"> Enddatum </label>
+      <label for="end-date" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"> Enddatum </label>
       <input
         id="end-date"
         type="date"
         bind:value={endDate}
-        class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        class="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
     </div>
   </div>
 
   <div>
-    <label for="notes" class="block text-sm font-medium text-gray-300 mb-1"> Notizen </label>
+    <label for="notes" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"> Notizen </label>
     <textarea
       id="notes"
       bind:value={notes}
       rows="3"
       placeholder="Zusätzliche Informationen..."
-      class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+      class="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
     ></textarea>
   </div>
 
@@ -146,7 +159,7 @@
     <button
       type="button"
       onclick={onCancel}
-      class="px-4 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600 transition-colors"
+      class="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
     >
       Abbrechen
     </button>

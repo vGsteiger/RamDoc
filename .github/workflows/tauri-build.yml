@@ -105,8 +105,8 @@ jobs:
         name: dokassist-${{ matrix.platform }}
         path: |
           dokassist/src-tauri/target/*/release/bundle/dmg/*.dmg
-          dokassist/src-tauri/target/*/release/bundle/macos/*.app.tar.gz
-          dokassist/src-tauri/target/*/release/bundle/macos/*.app.tar.gz.sig
+          dokassist/src-tauri/target/*/release/bundle/macos/*.tar.gz
+          dokassist/src-tauri/target/*/release/bundle/macos/*.tar.gz.sig
         retention-days: 7
         if-no-files-found: warn
 
@@ -162,8 +162,8 @@ jobs:
 
         # Locate Apple Silicon DMG (distribution) and .app.tar.gz + .sig (updater)
         ARM_DMG=$(find ./artifacts -name "*aarch64*.dmg" | head -n1)
-        ARM_TAR=$(find ./artifacts -name "*aarch64*.app.tar.gz" | head -n1)
-        ARM_SIG=$(find ./artifacts -name "*aarch64*.app.tar.gz.sig" | head -n1)
+        ARM_TAR=$(find ./artifacts -name "*.app.tar.gz" | head -n1)
+        ARM_SIG=$(find ./artifacts -name "*.app.tar.gz.sig" | head -n1)
 
         ARM_URL=""
         ARM_SIG_CONTENT=""
@@ -185,7 +185,7 @@ jobs:
           echo "Warning: No aarch64 .app.tar.gz found in artifacts"
         fi
 
-        [ -f "$ARM_SIG" ] && ARM_SIG_CONTENT=$(cat "$ARM_SIG")
+        [ -f "$ARM_SIG" ] && ARM_SIG_CONTENT=$(tr -d '\r\n' < "$ARM_SIG")
 
         # Generate and upload latest.json for Tauri updater
         # NOTE: Tauri v2 requires plain semver (no "v" prefix)

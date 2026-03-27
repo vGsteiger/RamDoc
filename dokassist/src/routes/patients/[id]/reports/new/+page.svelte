@@ -6,11 +6,17 @@
   import {
     getEngineStatus,
     getPatient,
+    listDiagnosesForPatient,
+    listMedicationsForPatient,
+    listSessionsForPatient,
     createReport,
     parseError,
     type LlmEngineStatus,
     type CreateReport,
     type Patient,
+    type Diagnosis,
+    type Medication,
+    type Session,
     type AppError,
   } from '$lib/api';
   import { invoke } from '@tauri-apps/api/core';
@@ -176,6 +182,44 @@
     editableContent = '';
   }
 
+  function formatClinicalContext(
+    diagnoses: Diagnosis[],
+    medications: Medication[],
+    sessions: Session[]
+  ): string {
+    const lines: string[] = [];
+
+    if (diagnoses.length > 0) {
+      lines.push('\nDiagnosen:');
+      for (const d of diagnoses) {
+        const status =
+          d.status === 'active' ? 'aktiv' : d.status === 'chronic' ? 'chronisch' : d.status;
+        lines.push(`- ${d.icd10_code} ${d.description} (${status}, seit ${d.diagnosed_date})`);
+      }
+    }
+
+    const currentMeds = medications.filter((m) => !m.end_date);
+    if (currentMeds.length > 0) {
+      lines.push('\nAktuelle Medikamente:');
+      for (const m of currentMeds) {
+        lines.push(`- ${m.substance} ${m.dosage}, ${m.frequency}`);
+      }
+    }
+
+    if (sessions.length > 0) {
+      lines.push('\nLetzte Sitzungen:');
+      for (const s of sessions) {
+        let line = `- ${s.session_date}: ${s.session_type}`;
+        if (s.duration_minutes) line += ` (${s.duration_minutes} min)`;
+        const summary = s.clinical_summary || s.notes;
+        if (summary) line += ` — ${summary.slice(0, 400)}`;
+        lines.push(line);
+      }
+    }
+
+    return lines.join('\n');
+  }
+
   function formatPatientContext(p: Patient): string {
     const lines: string[] = [];
     lines.push(`Name: ${p.first_name} ${p.last_name}`);
@@ -195,8 +239,14 @@
   onMount(async () => {
     await checkLlmStatus();
     try {
-      const patient = await getPatient(patientId);
-      patientContext = formatPatientContext(patient);
+      const [patient, diagnoses, medications, sessions] = await Promise.all([
+        getPatient(patientId),
+        listDiagnosesForPatient(patientId, 20),
+        listMedicationsForPatient(patientId, 20),
+        listSessionsForPatient(patientId, 5),
+      ]);
+      patientContext =
+        formatPatientContext(patient) + formatClinicalContext(diagnoses, medications, sessions);
     } catch (e) {
       // Non-fatal: user can still fill in patient context manually
       console.error('Failed to load patient data:', e);

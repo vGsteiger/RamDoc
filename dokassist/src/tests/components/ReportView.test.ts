@@ -51,7 +51,7 @@ describe('ReportView — loading', () => {
   it('shows loading state initially', () => {
     mockInvoke.mockReturnValue(new Promise(() => {}));
     render(ReportView);
-    expect(screen.getByText('Loading report...')).toBeInTheDocument();
+    expect(screen.getByText('Loading reports...')).toBeInTheDocument();
   });
 
   it('renders the report content after loading', async () => {
@@ -80,8 +80,8 @@ describe('ReportView — export buttons', () => {
     mockInvoke.mockResolvedValueOnce(REPORT);
     render(ReportView);
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /export pdf/i })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /export docx/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /export as pdf/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /export as docx/i })).toBeInTheDocument();
     });
   });
 
@@ -89,8 +89,8 @@ describe('ReportView — export buttons', () => {
     mockInvoke.mockResolvedValueOnce(REPORT);
     render(ReportView);
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /export pdf/i })).not.toBeDisabled();
-      expect(screen.getByRole('button', { name: /export docx/i })).not.toBeDisabled();
+      expect(screen.getByRole('button', { name: /export as pdf/i })).not.toBeDisabled();
+      expect(screen.getByRole('button', { name: /export as docx/i })).not.toBeDisabled();
     });
   });
 
@@ -99,8 +99,8 @@ describe('ReportView — export buttons', () => {
     render(ReportView);
     await waitFor(() => screen.getByRole('button', { name: /edit/i }));
     await fireEvent.click(screen.getByRole('button', { name: /edit/i }));
-    expect(screen.getByRole('button', { name: /export pdf/i })).toBeDisabled();
-    expect(screen.getByRole('button', { name: /export docx/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /export as pdf/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /export as docx/i })).toBeDisabled();
   });
 });
 
@@ -115,8 +115,8 @@ describe('ReportView — Export PDF', () => {
       .mockResolvedValueOnce([37, 80, 68, 70]); // export_report_to_pdf
 
     render(ReportView);
-    await waitFor(() => screen.getByRole('button', { name: /export pdf/i }));
-    await fireEvent.click(screen.getByRole('button', { name: /export pdf/i }));
+    await waitFor(() => screen.getByRole('button', { name: /export as pdf/i }));
+    await fireEvent.click(screen.getByRole('button', { name: /export as pdf/i }));
 
     await waitFor(() => {
       expect(mockInvoke).toHaveBeenCalledWith('export_report_to_pdf', { reportId: 'report-1' });
@@ -127,8 +127,8 @@ describe('ReportView — Export PDF', () => {
     mockInvoke.mockResolvedValueOnce(REPORT).mockResolvedValueOnce([37, 80, 68, 70]);
 
     render(ReportView);
-    await waitFor(() => screen.getByRole('button', { name: /export pdf/i }));
-    await fireEvent.click(screen.getByRole('button', { name: /export pdf/i }));
+    await waitFor(() => screen.getByRole('button', { name: /export as pdf/i }));
+    await fireEvent.click(screen.getByRole('button', { name: /export as pdf/i }));
 
     await waitFor(() => {
       expect(URL.createObjectURL).toHaveBeenCalled();
@@ -142,8 +142,8 @@ describe('ReportView — Export PDF', () => {
       .mockRejectedValueOnce(new Error('PDF generation failed'));
 
     render(ReportView);
-    await waitFor(() => screen.getByRole('button', { name: /export pdf/i }));
-    await fireEvent.click(screen.getByRole('button', { name: /export pdf/i }));
+    await waitFor(() => screen.getByRole('button', { name: /export as pdf/i }));
+    await fireEvent.click(screen.getByRole('button', { name: /export as pdf/i }));
 
     await waitFor(() => {
       expect(screen.getByText(/PDF generation failed/)).toBeInTheDocument();
@@ -160,8 +160,8 @@ describe('ReportView — Export DOCX', () => {
     mockInvoke.mockResolvedValueOnce(REPORT).mockResolvedValueOnce([80, 75, 3, 4]); // export_report_to_docx
 
     render(ReportView);
-    await waitFor(() => screen.getByRole('button', { name: /export docx/i }));
-    await fireEvent.click(screen.getByRole('button', { name: /export docx/i }));
+    await waitFor(() => screen.getByRole('button', { name: /export as docx/i }));
+    await fireEvent.click(screen.getByRole('button', { name: /export as docx/i }));
 
     await waitFor(() => {
       expect(mockInvoke).toHaveBeenCalledWith('export_report_to_docx', { reportId: 'report-1' });
@@ -172,8 +172,8 @@ describe('ReportView — Export DOCX', () => {
     mockInvoke.mockResolvedValueOnce(REPORT).mockResolvedValueOnce([80, 75, 3, 4]);
 
     render(ReportView);
-    await waitFor(() => screen.getByRole('button', { name: /export docx/i }));
-    await fireEvent.click(screen.getByRole('button', { name: /export docx/i }));
+    await waitFor(() => screen.getByRole('button', { name: /export as docx/i }));
+    await fireEvent.click(screen.getByRole('button', { name: /export as docx/i }));
 
     await waitFor(() => {
       expect(URL.createObjectURL).toHaveBeenCalled();
@@ -187,8 +187,8 @@ describe('ReportView — Export DOCX', () => {
       .mockRejectedValueOnce(new Error('DOCX generation failed'));
 
     render(ReportView);
-    await waitFor(() => screen.getByRole('button', { name: /export docx/i }));
-    await fireEvent.click(screen.getByRole('button', { name: /export docx/i }));
+    await waitFor(() => screen.getByRole('button', { name: /export as docx/i }));
+    await fireEvent.click(screen.getByRole('button', { name: /export as docx/i }));
 
     await waitFor(() => {
       expect(screen.getByText(/DOCX generation failed/)).toBeInTheDocument();

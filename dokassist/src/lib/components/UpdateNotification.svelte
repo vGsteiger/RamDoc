@@ -3,6 +3,30 @@
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import { checkForUpdates, installUpdate, parseError, type UpdateInfo } from '$lib/api';
 
+  function renderMarkdown(text: string): string {
+    function escape(s: string) {
+      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    function inline(s: string) {
+      return s
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+    }
+    return text
+      .split('\n')
+      .map((line) => {
+        if (/^## /.test(line))
+          return `<p class="font-semibold mt-2 mb-0.5">${inline(escape(line.slice(3)))}</p>`;
+        if (/^### /.test(line))
+          return `<p class="font-medium mt-1 mb-0.5">${inline(escape(line.slice(4)))}</p>`;
+        if (/^- /.test(line))
+          return `<p class="ml-3">&bull; ${inline(escape(line.slice(2)))}</p>`;
+        if (line.trim() === '') return '<div class="mt-1"></div>';
+        return `<p>${inline(escape(line))}</p>`;
+      })
+      .join('');
+  }
+
   let updateInfo = $state<UpdateInfo | null>(null);
   let installing = $state(false);
   let downloadProgress = $state<number>(0);
@@ -81,7 +105,7 @@
         {#if updateInfo.body}
           <div class="text-xs text-gray-500 dark:text-gray-400 mb-3 max-h-24 overflow-y-auto">
             <p class="font-medium mb-1">What's new:</p>
-            <div class="whitespace-pre-wrap">{updateInfo.body}</div>
+            <div>{@html renderMarkdown(updateInfo.body)}</div>
           </div>
         {/if}
 

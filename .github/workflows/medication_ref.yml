@@ -1,0 +1,224 @@
+name: Build Medication Reference DB
+
+on:
+  # Run on the first day of each month to pick up updated AIPS data
+  schedule:
+    - cron: '0 6 1 * *'
+  # Allow manual trigger for testing or emergency re-builds
+  workflow_dispatch:
+    inputs:
+      version_override:
+        description: 'Version string (default: YYYY-MM from current date)'
+        required: false
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # needed to create releases and upload assets
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set version string
+        id: version
+        run: |
+          if [ -n "${{ inputs.version_override }}" ]; then
+            echo "value=${{ inputs.version_override }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=$(date +'%Y-%m')" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: pip install lxml requests beautifulsoup4
+
+      - name: Download AIPS XML (Swissmedic public data)
+        run: |
+          # The AIPS download site at download.swissmedicinfo.ch is an ASP.NET
+          # application that requires accepting terms before serving the XML.
+          # A plain curl GET to Accept.aspx returns the HTML acceptance page,
+          # not the actual data.  We use a Python script to handle the form
+          # submission properly.
+          #
+          # See: https://www.swissmedic.ch/swissmedic/en/home/humanarzneimittel/authorisations/aips.html
+
+          python3 << 'PYEOF'
+          import os
+          import sys
+          import zipfile
+          import requests
+          from bs4 import BeautifulSoup
+
+          BASE = "https://download.swissmedicinfo.ch"
+          s = requests.Session()
+
+          # Step 1 — Load the acceptance / download page to get ASP.NET form tokens
+          print("Fetching download page…")
+          r = s.get(f"{BASE}/", params={"Lang": "DE"})
+          r.raise_for_status()
+          soup = BeautifulSoup(r.text, "html.parser")
+
+          # Extract ASP.NET hidden form fields (__VIEWSTATE, __EVENTVALIDATION, etc.)
+          payload = {}
+          for inp in soup.find_all("input", attrs={"type": "hidden"}):
+              name = inp.get("name", "")
+              if name.startswith("__"):
+                  payload[name] = inp.get("value", "")
+
+          # Find the "Continue Download" / accept button and include it in the POST
+          btn = soup.find("input", attrs={"type": "submit"})
+          if btn:
+              payload[btn["name"]] = btn.get("value", "")
+          else:
+              print("WARNING: Could not find submit button on the page.")
+
+          print(f"Posting acceptance form with {len(payload)} fields…")
+
+          # Step 2 — POST to accept terms and trigger the download
+          r = s.post(f"{BASE}/", data=payload, stream=True)
+          r.raise_for_status()
+
+          content_type = r.headers.get("Content-Type", "")
+          content_length = r.headers.get("Content-Length", "unknown")
+          print(f"Response Content-Type: {content_type}")
+          print(f"Response Content-Length: {content_length}")
+
+          # The response should be XML or a ZIP containing XML.
+          if "zip" in content_type or "octet-stream" in content_type:
+              fname = "aips_de.zip"
+          elif "xml" in content_type:
+              fname = "aips_de.xml"
+          else:
+              fname = "aips_download_raw"
+
+          with open(fname, "wb") as f:
+              for chunk in r.iter_content(chunk_size=8192):
+                  f.write(chunk)
+          file_size = os.path.getsize(fname)
+          print(f"Downloaded {fname} ({file_size} bytes)")
+
+          if file_size < 1000:
+              print("ERROR: Downloaded file is suspiciously small.")
+              with open(fname, "r", errors="replace") as f:
+                  print("Content:", f.read(500))
+              sys.exit(1)
+
+          # If it's a ZIP, extract the XML
+          if zipfile.is_zipfile(fname):
+              print("File is a ZIP archive — extracting…")
+              with zipfile.ZipFile(fname) as zf:
+                  names = zf.namelist()
+                  print(f"  Contents: {names}")
+                  xml_name = next((n for n in names if n.lower().endswith(".xml")), None)
+                  if not xml_name:
+                      sys.exit(f"No XML file found inside ZIP: {names}")
+                  zf.extract(xml_name)
+                  if xml_name != "aips_de.xml":
+                      os.rename(xml_name, "aips_de.xml")
+                  print(f"  Extracted {xml_name} → aips_de.xml")
+          elif fname != "aips_de.xml":
+              os.rename(fname, "aips_de.xml")
+
+          # Verify the file starts with XML (not HTML)
+          with open("aips_de.xml", "rb") as f:
+              head = f.read(500)
+          if b"<html" in head.lower() or b"<!doctype html" in head.lower():
+              print("ERROR: Downloaded file appears to be HTML, not XML.")
+              print("First 500 bytes:", head[:500])
+              sys.exit(1)
+
+          print("Download OK — file appears to be XML.")
+          PYEOF
+
+      - name: Validate AIPS XML
+        run: |
+          python3 -c "
+          from lxml import etree
+
+          parser = etree.XMLParser(recover=True, huge_tree=True)
+          tree = etree.parse('aips_de.xml', parser)
+          root = tree.getroot()
+          tag = root.tag.split('}')[-1] if '}' in root.tag else root.tag
+
+          # New format (Aug 2025+): MedicinalDocumentsBundles
+          if tag == 'MedicinalDocumentsBundles':
+              ns = {'n': 'https://simisinfo.refdata.ch/MedicinalDocuments/1.0/'}
+              count = len(root.findall('n:MedicinalDocumentsBundle', ns))
+              print(f'AIPS XML OK (new format) — {count} MedicinalDocumentsBundle entries')
+              if count < 100:
+                  raise SystemExit('Too few entries — AIPS download may have failed')
+
+          # Legacy format (pre-Aug 2025): medicalInformations
+          else:
+              count = len(tree.findall('.//{*}medicalInformation'))
+              print(f'AIPS XML OK (legacy format) — {count} medicalInformation entries')
+              if count < 100:
+                  raise SystemExit('Too few entries — AIPS download may have failed')
+          "
+
+      - name: Build reference SQLite
+        run: |
+          python3 scripts/build_medication_ref.py \
+            --aips aips_de.xml \
+            --out medication_ref_de.sqlite \
+            --version "${{ steps.version.outputs.value }}"
+
+      - name: Install minisign
+        run: |
+          curl -fsSLO https://github.com/jedisct1/minisign/releases/download/0.11/minisign-0.11-linux.tar.gz
+          tar -xzf minisign-0.11-linux.tar.gz
+          ARCH=$(uname -m)
+          echo "Runner architecture: $ARCH"
+          # Find binary matching runner arch, fall back to any available
+          MINISIGN_BIN=$(find . -path "*/${ARCH}/minisign" -type f | head -1)
+          if [ -z "$MINISIGN_BIN" ]; then
+            echo "No binary found for ${ARCH}. Available:"
+            find . -name minisign -type f
+            exit 1
+          fi
+          echo "Using: $MINISIGN_BIN"
+          sudo install -m 755 "$MINISIGN_BIN" /usr/local/bin/minisign
+          minisign -v
+
+      - name: Sign the SQLite with minisign
+        env:
+          MEDICATION_REF_PRIVATE_KEY: ${{ secrets.MEDICATION_REF_PRIVATE_KEY }}
+        run: |
+          # Write the private key to a temp file (key is stored as base64 in the secret)
+          echo "$MEDICATION_REF_PRIVATE_KEY" | base64 -d > medication_ref.key
+          chmod 600 medication_ref.key
+
+          # Sign — minisign reads the passphrase from stdin; CI key has no passphrase
+          echo "" | minisign -S -s medication_ref.key -m medication_ref_de.sqlite
+          rm -f medication_ref.key
+
+          # Verify our own signature as a sanity check.
+          # -P accepts the public key as an inline base64 string (no file needed).
+          minisign -V -P "${{ secrets.MEDICATION_REF_PUBLIC_KEY }}" -m medication_ref_de.sqlite
+          echo "Signature verified OK"
+
+      - name: Create or update GitHub Release and upload assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: medication-ref/v${{ steps.version.outputs.value }}
+          name: Medication Reference DB ${{ steps.version.outputs.value }}
+          body: |
+            Automated monthly build of the Swissmedic AIPS medication reference database.
+
+            **Version:** ${{ steps.version.outputs.value }}
+            **Source:** [Swissmedic AIPS](https://www.swissmedic.ch/swissmedic/en/home/humanarzneimittel/authorisations/aips.html) (public domain)
+            **Integrity:** Signed with Ed25519 (minisign). The app verifies the signature
+            against the hardcoded public key before accepting the file.
+
+            > Patient data never leaves the device. This file contains only public reference
+            > data from the official Swiss pharmaceutical compendium.
+          files: |
+            medication_ref_de.sqlite
+            medication_ref_de.sqlite.minisig
+          make_latest: true

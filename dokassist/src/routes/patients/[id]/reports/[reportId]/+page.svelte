@@ -15,6 +15,9 @@
   } from '$lib/api';
   import EnhancedReportEditor from '$lib/components/EnhancedReportEditor.svelte';
   import ErrorDisplay from '$lib/components/ErrorDisplay.svelte';
+  import { t } from '$lib/translations';
+  import { get } from 'svelte/store';
+  import { marked } from 'marked';
 
   $: patientId = $page.params.id;
   $: reportId = $page.params.reportId;
@@ -53,7 +56,7 @@
   }
 
   async function handleDeleteReport() {
-    if (!confirm('Are you sure you want to delete this report?')) {
+    if (!confirm(get(t)('reports.confirmDelete'))) {
       return;
     }
     try {
@@ -151,28 +154,28 @@
 <div class="p-8">
   <div class="max-w-5xl mx-auto">
     {#if loading}
-      <div class="text-gray-400">Loading report...</div>
+      <div class="text-gray-500 dark:text-gray-400">{$t('reports.loading')}</div>
     {:else if error}
       <ErrorDisplay {error} showDetails={true} />
     {:else if report}
       <div class="mb-6">
         <div class="flex items-center justify-between mb-4">
           <div>
-            <h2 class="text-2xl font-bold text-gray-100">
+            <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
               {formatReportType(report.report_type)}
             </h2>
-            <p class="text-sm text-gray-400 mt-1">
-              Generated: {formatDate(report.generated_at)}
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              {$t('reports.generated')} {formatDate(report.generated_at)}
             </p>
             {#if report.model_name}
-              <p class="text-xs text-gray-500 mt-1">Model: {report.model_name}</p>
+              <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">{$t('reports.model')} {report.model_name}</p>
             {/if}
           </div>
           <a
             href={`/patients/${patientId}/reports`}
-            class="text-sm text-gray-400 hover:text-gray-300"
+            class="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
           >
-            ← Back to Reports
+            {$t('reports.backToReports')}
           </a>
         </div>
 
@@ -182,46 +185,44 @@
               on:click={() => (editMode = true)}
               class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
             >
-              Edit
+              {$t('reports.edit')}
             </button>
           {:else}
             <button
               on:click={saveChanges}
               class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
             >
-              Save Changes
+              {$t('reports.save')}
             </button>
             <button
               on:click={() => {
                 editMode = false;
                 editableContent = report.content;
               }}
-              class="px-4 py-2 bg-gray-700 text-gray-300 rounded hover:bg-gray-600 transition-colors"
+              class="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
             >
-              Cancel
+              {$t('reports.cancel')}
             </button>
           {/if}
           <button
             on:click={handleExportPdf}
             disabled={editMode}
             class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            title={editMode ? 'Save changes before exporting PDF' : undefined}
           >
-            Export PDF
+            {$t('reports.exportPDF')}
           </button>
           <button
             on:click={handleExportDocx}
             disabled={editMode}
             class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            title={editMode ? 'Save changes before exporting DOCX' : undefined}
           >
-            Export DOCX
+            {$t('reports.exportDOCX')}
           </button>
           <button
             on:click={handleDeleteReport}
             class="px-4 py-2 bg-red-900/20 text-red-400 rounded hover:bg-red-900/40 transition-colors"
           >
-            Delete
+            {$t('reports.delete')}
           </button>
         </div>
       </div>
@@ -234,9 +235,8 @@
         <div
           class="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700"
         >
-          <div class="prose dark:prose-invert max-w-none">
-            <pre
-              class="whitespace-pre-wrap font-sans text-gray-900 dark:text-gray-100">{report.content}</pre>
+          <div class="prose prose-gray dark:prose-invert max-w-none">
+            {@html marked(report.content)}
           </div>
         </div>
       {/if}

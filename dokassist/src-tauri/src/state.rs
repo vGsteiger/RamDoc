@@ -3,6 +3,7 @@ use crate::constants::KEYCHAIN_SERVICE;
 use crate::constants::RECOVERY_FILENAME;
 use crate::database::DbPool;
 use crate::llm::{embed::EmbedEngine, LlmEngine};
+use rusqlite::Connection;
 use std::sync::{Arc, Mutex};
 
 /// Application state shared across all Tauri commands.
@@ -13,6 +14,9 @@ pub struct AppState {
     pub llm: Mutex<Option<Arc<LlmEngine>>>,
     /// Embedding engine for semantic search.  Populated lazily by `process_file`.
     pub embed: Mutex<Option<Arc<Mutex<EmbedEngine>>>>,
+    /// Unencrypted medication reference SQLite (public AIPS data).
+    /// `None` until the user downloads the reference DB via settings.
+    pub medication_ref: Mutex<Option<Connection>>,
 }
 
 pub enum AuthState {
@@ -30,12 +34,33 @@ impl AppState {
         // Determine initial auth state based on keychain and vault file existence
         let initial_state = determine_initial_auth_state(&data_dir);
 
+        // Open the medication reference DB if it has already been downloaded.
+        let ref_db_path = data_dir.join("medication_ref.sqlite");
+        let medication_ref = if ref_db_path.exists() {
+            match crate::medication_reference::open_reference_db(&ref_db_path) {
+                Ok(conn) => {
+                    log::info!(
+                        "Medication reference DB loaded from '{}'",
+                        ref_db_path.display()
+                    );
+                    Some(conn)
+                }
+                Err(e) => {
+                    log::warn!("Failed to open medication reference DB: {e}");
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         Self {
             auth: Mutex::new(initial_state),
             data_dir,
             db: Mutex::new(None),
             llm: Mutex::new(None),
             embed: Mutex::new(None),
+            medication_ref: Mutex::new(medication_ref),
         }
     }
 
@@ -128,6 +153,20 @@ impl AppState {
         if let Ok(mut g) = self.llm.lock() {
             *g = None;
         }
+    }
+
+    /// Acquire a lock on the medication reference DB connection, if installed.
+    pub fn get_medication_ref(&self) -> Option<std::sync::MutexGuard<'_, Option<Connection>>> {
+        self.medication_ref.lock().ok()
+    }
+
+    /// Replace the medication reference DB connection after a fresh download.
+    pub fn set_medication_ref(&self, conn: Connection) -> Result<(), crate::error::AppError> {
+        let mut guard = self.medication_ref.lock().map_err(|_| {
+            crate::error::AppError::Validation("Medication ref mutex poisoned".to_string())
+        })?;
+        *guard = Some(conn);
+        Ok(())
     }
 }
 

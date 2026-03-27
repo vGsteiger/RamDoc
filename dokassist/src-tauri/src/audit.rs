@@ -10,6 +10,7 @@ pub enum AuditAction {
     Update,
     Delete,
     Export,
+    Import,
     LlmQuery,
     Login,
     Logout,
@@ -24,6 +25,7 @@ impl AuditAction {
             AuditAction::Update => "update",
             AuditAction::Delete => "delete",
             AuditAction::Export => "export",
+            AuditAction::Import => "import",
             AuditAction::LlmQuery => "llm_query",
             AuditAction::Login => "login",
             AuditAction::Logout => "logout",
@@ -360,6 +362,7 @@ mod tests {
         assert_eq!(AuditAction::Update.as_str(), "update");
         assert_eq!(AuditAction::Delete.as_str(), "delete");
         assert_eq!(AuditAction::Export.as_str(), "export");
+        assert_eq!(AuditAction::Import.as_str(), "import");
         assert_eq!(AuditAction::LlmQuery.as_str(), "llm_query");
         assert_eq!(AuditAction::Login.as_str(), "login");
         assert_eq!(AuditAction::Logout.as_str(), "logout");

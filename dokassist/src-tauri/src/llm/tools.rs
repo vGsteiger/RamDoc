@@ -248,9 +248,73 @@ fn tool_write_report(
 
     let session_notes = sanitize_for_prompt(str_arg(args, "session_notes")?);
 
-    // Fetch patient context for the report
+    // Fetch patient + clinical data for the report
     let p = patient::get_patient(conn, &patient_id)?;
-    let patient_context = format!("{} {}, geb. {}", p.first_name, p.last_name, p.date_of_birth);
+    let diagnoses =
+        diagnosis::list_diagnoses_for_patient(conn, &patient_id, 20, 0).unwrap_or_default();
+    let medications =
+        medication::list_medications_for_patient(conn, &patient_id, 20, 0).unwrap_or_default();
+    let sessions = session::list_sessions_for_patient(conn, &patient_id, 5, 0).unwrap_or_default();
+
+    let mut ctx = format!(
+        "Name: {} {}\nGeburtsdatum: {}\nAHV-Nummer: {}",
+        p.first_name, p.last_name, p.date_of_birth, p.ahv_number
+    );
+    if let Some(ins) = &p.insurance {
+        ctx.push_str(&format!("\nVersicherung: {}", ins));
+    }
+    if let Some(gp) = &p.gp_name {
+        ctx.push_str(&format!("\nHausarzt: {}", gp));
+    }
+
+    if !diagnoses.is_empty() {
+        ctx.push_str("\n\nDiagnosen:");
+        for d in &diagnoses {
+            ctx.push_str(&format!(
+                "\n- {} {} ({}, seit {})",
+                sanitize_for_prompt(&d.icd10_code),
+                sanitize_for_prompt(&d.description),
+                sanitize_for_prompt(&d.status),
+                sanitize_for_prompt(&d.diagnosed_date),
+            ));
+        }
+    }
+
+    let current_meds: Vec<_> = medications
+        .iter()
+        .filter(|m| m.end_date.is_none())
+        .collect();
+    if !current_meds.is_empty() {
+        ctx.push_str("\n\nAktuelle Medikamente:");
+        for m in &current_meds {
+            ctx.push_str(&format!(
+                "\n- {} {}, {}",
+                sanitize_for_prompt(&m.substance),
+                sanitize_for_prompt(&m.dosage),
+                sanitize_for_prompt(&m.frequency),
+            ));
+        }
+    }
+
+    if !sessions.is_empty() {
+        ctx.push_str("\n\nLetzte Sitzungen:");
+        for s in &sessions {
+            let mut line = format!(
+                "\n- {}: {}",
+                sanitize_for_prompt(&s.session_date),
+                sanitize_for_prompt(&s.session_type),
+            );
+            let summary = s.clinical_summary.as_deref().or(s.notes.as_deref());
+            if let Some(text) = summary {
+                let safe = sanitize_for_prompt(text);
+                let truncated: String = safe.chars().take(400).collect();
+                line.push_str(&format!(" — {}", truncated));
+            }
+            ctx.push_str(&line);
+        }
+    }
+
+    let patient_context = ctx;
 
     let content = crate::llm::generate_report_streaming_with_prompt(
         app,

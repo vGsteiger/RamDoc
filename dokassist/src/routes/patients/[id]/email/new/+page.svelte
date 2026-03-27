@@ -33,11 +33,22 @@
   let aiPrompt = '';
   let isGenerating = false;
   let aiError = '';
+  let aiDraft = '';
+  let aiThinking = '';
+  let rawDraft = '';
+  let showThinking = false;
   let engineStatus: LlmEngineStatus | null = null;
 
   let unlistenChunk: UnlistenFn | null = null;
   let unlistenDone: UnlistenFn | null = null;
   let unlistenError: UnlistenFn | null = null;
+
+  function parseRawDraft(raw: string): { thinking: string; draft: string } {
+    const thinkMatches = [...raw.matchAll(/<think>([\s\S]*?)<\/think>/g)];
+    const thinking = thinkMatches.map((m) => m[1].trim()).join('\n\n');
+    const draft = raw.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+    return { thinking, draft };
+  }
 
   async function loadPatient() {
     try {
@@ -62,11 +73,16 @@
     if (!engineStatus?.is_loaded || isGenerating) return;
     isGenerating = true;
     aiError = '';
-    body = '';
+    rawDraft = '';
+    aiDraft = '';
+    aiThinking = '';
+    showThinking = false;
 
     try {
       const session = await createChatSession('patient', patientId, 'Email Draft');
-      const prompt = aiPrompt.trim() || `Write a professional email for this patient.`;
+      const userIntent = aiPrompt.trim() || 'Schreibe eine professionelle E-Mail für diesen Patienten.';
+      const prompt =
+        `Schreibe den Text einer E-Mail an den Patienten. Verwende KEIN Tool – gib nur den fertigen E-Mail-Text aus (ohne Betreff, nur den Nachrichtentext). Anweisung: ${userIntent}`;
       await runAgentTurn(session.id, prompt);
     } catch (e) {
       isGenerating = false;
@@ -148,11 +164,17 @@
     await loadEngineStatus();
 
     unlistenChunk = await listen<string>('agent-chunk', (event) => {
-      body += event.payload;
+      rawDraft += event.payload;
+      const parsed = parseRawDraft(rawDraft);
+      aiDraft = parsed.draft;
+      aiThinking = parsed.thinking;
     });
 
     unlistenDone = await listen('agent-done', () => {
       isGenerating = false;
+      const parsed = parseRawDraft(rawDraft);
+      aiDraft = parsed.draft;
+      aiThinking = parsed.thinking;
     });
 
     unlistenError = await listen<{ message: string }>('agent-error', (event) => {
@@ -236,7 +258,7 @@
         on:click={() => (showAiPanel = !showAiPanel)}
         class="text-sm text-blue-600 dark:text-blue-400 hover:underline"
       >
-        AI Assist
+        {$t('email.aiAssist')}
       </button>
 
       {#if showAiPanel}
@@ -250,7 +272,7 @@
               for="ai-prompt"
               class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
             >
-              What should this email say?
+              {$t('email.aiPromptLabel')}
             </label>
             <textarea
               id="ai-prompt"
@@ -266,10 +288,46 @@
               disabled={isGenerating}
               class="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isGenerating ? 'Generating…' : 'Generate Draft'}
+              {isGenerating ? $t('email.generating') : $t('email.generateDraft')}
             </button>
           {:else}
-            <p class="text-sm text-gray-500 dark:text-gray-400">No AI model is loaded</p>
+            <p class="text-sm text-gray-500 dark:text-gray-400">{$t('email.modelNotLoaded')}</p>
+          {/if}
+
+          {#if aiDraft || isGenerating}
+            <div class="mt-3 space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{$t('email.generatedDraft')}</span>
+                {#if aiDraft && !isGenerating}
+                  <button
+                    on:click={() => { body = aiDraft; aiDraft = ''; aiThinking = ''; rawDraft = ''; }}
+                    class="text-sm px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                  >
+                    {$t('email.applyToBody')}
+                  </button>
+                {/if}
+              </div>
+              <textarea
+                readonly
+                value={aiDraft}
+                rows="8"
+                class="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded text-gray-900 dark:text-gray-100 font-mono text-sm focus:outline-none"
+              ></textarea>
+            </div>
+          {/if}
+
+          {#if aiThinking}
+            <div class="mt-2">
+              <button
+                on:click={() => (showThinking = !showThinking)}
+                class="text-xs text-gray-400 dark:text-gray-500 hover:underline"
+              >
+                {showThinking ? $t('email.hideReasoning') : $t('email.showReasoning')} ({aiThinking.split('\n').length} {$t('email.reasoningLines')})
+              </button>
+              {#if showThinking}
+                <pre class="mt-2 p-3 bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded text-xs text-gray-500 dark:text-gray-400 whitespace-pre-wrap overflow-auto max-h-48">{aiThinking}</pre>
+              {/if}
+            </div>
           {/if}
         </div>
       {/if}

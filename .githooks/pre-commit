@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# Pre-commit hook — mirrors the fast subset of CI checks.
+# Full tests and Tauri build still run in GitHub Actions.
+#
+# Install once per clone:
+#   git config core.hooksPath .githooks
+#
+# Skip in an emergency:
+#   git commit --no-verify
+
+set -euo pipefail
+
+BOLD='\033[1m'
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+YELLOW='\033[0;33m'
+RESET='\033[0m'
+
+pass() { echo -e "${GREEN}✓${RESET} $1"; }
+fail() { echo -e "${RED}✗${RESET} $1"; exit 1; }
+step() { echo -e "\n${BOLD}▶ $1${RESET}"; }
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+TAURI_DIR="$REPO_ROOT/dokassist/src-tauri"
+FRONTEND_DIR="$REPO_ROOT/dokassist"
+
+# ---------------------------------------------------------------------------
+# Rust checks
+# ---------------------------------------------------------------------------
+
+step "Rust — format check"
+(cd "$TAURI_DIR" && cargo fmt -- --check) \
+  && pass "cargo fmt" \
+  || fail "cargo fmt failed — run 'cargo fmt' to fix"
+
+step "Rust — cargo check"
+(cd "$TAURI_DIR" && cargo check --all-targets --quiet) \
+  && pass "cargo check" \
+  || fail "cargo check failed"
+
+step "Rust — clippy"
+(cd "$TAURI_DIR" && cargo clippy --all-targets --all-features --quiet -- \
+    -D warnings \
+    -A clippy::too_many_arguments \
+    -A clippy::type_complexity) \
+  && pass "cargo clippy" \
+  || fail "cargo clippy reported errors"
+
+# ---------------------------------------------------------------------------
+# Frontend checks
+# ---------------------------------------------------------------------------
+
+step "Frontend — svelte-check"
+if (cd "$FRONTEND_DIR" && pnpm list svelte-check &>/dev/null); then
+  (cd "$FRONTEND_DIR" && pnpm exec svelte-check --tsconfig ./tsconfig.json --threshold error 2>&1 \
+    | grep -v "^Loading " | grep -v "^$" || true) \
+    && pass "svelte-check" \
+    || fail "svelte-check reported type errors"
+else
+  echo -e "${YELLOW}⚠${RESET}  svelte-check not found — skipping"
+fi
+
+# ---------------------------------------------------------------------------
+
+echo -e "\n${GREEN}${BOLD}All checks passed.${RESET}"

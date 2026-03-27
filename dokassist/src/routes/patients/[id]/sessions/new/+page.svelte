@@ -80,7 +80,7 @@
 </script>
 
 <div class="p-8 max-w-4xl mx-auto">
-  <h1 class="text-2xl font-bold text-gray-100 mb-6">Neue Sitzung erfassen</h1>
+  <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">Neue Sitzung erfassen</h1>
 
   {#if error}
     <div class="bg-red-500/10 border border-red-500/30 text-red-400 p-4 rounded-lg mb-6">
@@ -91,14 +91,14 @@
   <form onsubmit={handleSubmit} class="space-y-6">
     <div class="grid grid-cols-3 gap-4">
       <div class="col-span-2">
-        <label for="session-type" class="block text-sm font-medium text-gray-300 mb-1">
+        <label for="session-type" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
           Sitzungstyp *
         </label>
         <select
           id="session-type"
           bind:value={sessionType}
           required
-          class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          class="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           {#each sessionTypes as type}
             <option value={type}>{type}</option>
@@ -107,7 +107,7 @@
       </div>
 
       <div>
-        <label for="duration" class="block text-sm font-medium text-gray-300 mb-1">
+        <label for="duration" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
           Dauer (Min.)
         </label>
         <input
@@ -117,13 +117,13 @@
           min="0"
           step="5"
           placeholder="50"
-          class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          class="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
     </div>
 
     <div>
-      <label for="session-date" class="block text-sm font-medium text-gray-300 mb-1">
+      <label for="session-date" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
         Datum *
       </label>
       <input
@@ -131,31 +131,31 @@
         type="date"
         bind:value={sessionDate}
         required
-        class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        class="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
     </div>
 
     <div>
-      <label for="session-time" class="block text-sm font-medium text-gray-300 mb-1">
+      <label for="session-time" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
         Uhrzeit (optional)
       </label>
       <input
         id="session-time"
         type="time"
         bind:value={sessionTime}
-        class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        class="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
     </div>
 
     <div>
-      <label for="notes" class="block text-sm font-medium text-gray-300 mb-1"> Notizen * </label>
+      <label for="notes" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"> Notizen * </label>
       <textarea
         id="notes"
         bind:value={notes}
         required
         rows="8"
         placeholder="Gesprächsnotizen, Beobachtungen, Interventionen..."
-        class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+        class="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
       ></textarea>
     </div>
 
@@ -183,7 +183,7 @@
       <button
         type="button"
         onclick={handleCancel}
-        class="px-6 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600 transition-colors"
+        class="px-6 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
         disabled={saving}
       >
         Abbrechen

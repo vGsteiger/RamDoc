@@ -1,7 +1,7 @@
 use crate::error::AppError;
 use crate::llm::{
-    self, download, embed::EmbedEngine, EngineStatus, LlmEngine, ModelChoice, ReportType,
-    SYSTEM_PROMPT_DE,
+    self, download, embed::EmbedEngine, EngineStatus, LetterType, LlmEngine, ModelChoice,
+    ReportType, SYSTEM_PROMPT_DE, SYSTEM_PROMPT_FR,
 };
 use crate::state::{AppState, AuthState};
 use serde::Serialize;
@@ -109,7 +109,8 @@ pub async fn download_model(
 
     let dest_path = dest_dir.join(&model.filename);
     let url = download::model_url(&model.filename)?;
-    download::download_model_with_progress(&app, &url, &dest_path, &model.filename).await
+    download::download_model_with_progress(&app, &url, &dest_path, &model.filename).await?;
+    Ok(())
 }
 
 /// Load a GGUF model from ~/DokAssist/models/ into memory (Metal-accelerated).
@@ -305,4 +306,115 @@ pub async fn improve_text(
 
     let _ = app.emit("text-improvement-done", ());
     Ok(improved)
+}
+
+/// Generate a session summary with streaming output.
+/// Emits `"session-summary-chunk"` events for each token and `"session-summary-done"` on completion.
+/// `system_prompt`: optional override; falls back to the built-in German prompt.
+#[tauri::command]
+pub async fn generate_session_summary(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    patient_context: String,
+    session_notes: String,
+    system_prompt: Option<String>,
+) -> Result<String, AppError> {
+    check_auth(&state)?;
+
+    let engine = {
+        let llm = state.llm.lock().unwrap();
+        let engine = llm
+            .as_ref()
+            .ok_or_else(|| AppError::Llm("Model not loaded".to_string()))?;
+        Arc::clone(engine)
+    };
+
+    let prompt: String = system_prompt.unwrap_or_else(|| SYSTEM_PROMPT_DE.to_string());
+
+    let app_clone = app.clone();
+    let summary = tokio::task::spawn_blocking(move || {
+        llm::generate_session_summary_streaming_with_prompt(
+            &app_clone,
+            &engine,
+            &patient_context,
+            &session_notes,
+            &prompt,
+        )
+    })
+    .await
+    .map_err(|e| AppError::Llm(format!("spawn_blocking error: {e}")))??;
+
+    let _ = app.emit("session-summary-done", ());
+    Ok(summary)
+}
+
+/// Generate a formal letter (referral, insurance authorization, or therapy extension) with streaming output.
+/// Emits `"letter-chunk"` events for each token and `"letter-done"` on completion.
+/// `system_prompt`: optional override; falls back to the built-in German or French prompt based on language.
+#[allow(clippy::too_many_arguments)]
+#[tauri::command]
+pub async fn generate_letter(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    letter_type: String,
+    language: String,
+    patient_context: String,
+    clinical_summary: String,
+    recipient_name: Option<String>,
+    system_prompt: Option<String>,
+) -> Result<String, AppError> {
+    check_auth(&state)?;
+
+    let lt = match letter_type.as_str() {
+        "referral" => LetterType::Referral,
+        "insurance_authorization" => LetterType::InsuranceAuthorization,
+        "therapy_extension" => LetterType::TherapyExtension,
+        other => {
+            return Err(AppError::Validation(format!(
+                "Unknown letter type: {other}"
+            )))
+        }
+    };
+
+    if language != "de" && language != "fr" {
+        return Err(AppError::Validation(format!(
+            "Unsupported language: {language}. Must be 'de' or 'fr'"
+        )));
+    }
+
+    let engine = {
+        let llm = state.llm.lock().unwrap();
+        let engine = llm
+            .as_ref()
+            .ok_or_else(|| AppError::Llm("Model not loaded".to_string()))?;
+        Arc::clone(engine)
+    };
+
+    let prompt: String = system_prompt.unwrap_or_else(|| {
+        if language == "fr" {
+            SYSTEM_PROMPT_FR.to_string()
+        } else {
+            SYSTEM_PROMPT_DE.to_string()
+        }
+    });
+
+    let app_clone = app.clone();
+    let recipient_name_clone = recipient_name.clone();
+    let letter = tokio::task::spawn_blocking(move || {
+        llm::generate_letter_streaming_with_prompt(
+            &app_clone,
+            &engine,
+            lt,
+            &language,
+            &patient_context,
+            &clinical_summary,
+            recipient_name_clone.as_deref(),
+            &prompt,
+        )
+    })
+    .await
+    .map_err(|e| AppError::Llm(format!("spawn_blocking error: {e}")))??;
+
+    let _ = app.emit("letter-done", ());
+    Ok(letter)
 }

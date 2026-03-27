@@ -146,6 +146,85 @@ export async function loadModel(modelFilename: string): Promise<void> {
   return await invoke<void>('load_model', { modelFilename });
 }
 
+// === Model Management ===
+
+export interface Model {
+  id: string;
+  name: string;
+  filename: string;
+  sha256: string;
+  size_bytes: number;
+  downloaded_at: string;
+  last_used: string | null;
+  is_default: boolean;
+}
+
+export interface ModelInfo {
+  id: string;
+  name: string;
+  filename: string;
+  sha256: string;
+  size_bytes: number;
+  downloaded_at: string;
+  last_used: string | null;
+  is_default: boolean;
+  is_loaded: boolean;
+  exists_on_disk: boolean;
+}
+
+export interface TaskModel {
+  task_type: string;
+  model_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function listModels(): Promise<ModelInfo[]> {
+  return await invoke<ModelInfo[]>('list_models');
+}
+
+export async function getModelInfo(modelId: string): Promise<ModelInfo> {
+  return await invoke<ModelInfo>('get_model_info', { modelId });
+}
+
+export async function downloadAndRegisterModel(model: ModelChoice): Promise<Model> {
+  return await invoke<Model>('download_and_register_model', { model });
+}
+
+export async function deleteModel(modelId: string): Promise<void> {
+  return await invoke<void>('delete_model', { modelId });
+}
+
+export async function setDefaultModel(modelId: string): Promise<void> {
+  return await invoke<void>('set_default_model', { modelId });
+}
+
+export async function getDefaultModel(): Promise<Model | null> {
+  return await invoke<Model | null>('get_default_model');
+}
+
+export async function setTaskModel(taskType: string, modelId: string): Promise<void> {
+  return await invoke<void>('set_task_model', { taskType, modelId });
+}
+
+export async function getTaskModel(taskType: string): Promise<Model | null> {
+  return await invoke<Model | null>('get_task_model', { taskType });
+}
+
+export async function listTaskModels(): Promise<TaskModel[]> {
+  return await invoke<TaskModel[]>('list_task_models');
+}
+
+export async function clearTaskModel(taskType: string): Promise<void> {
+  return await invoke<void>('clear_task_model', { taskType });
+}
+
+export async function getModelForTask(taskType: string): Promise<Model | null> {
+  return await invoke<Model | null>('get_model_for_task', { taskType });
+}
+
+// === File Management ===
+
 export interface FileRecord {
   id: string;
   patient_id: string;
@@ -289,6 +368,7 @@ export interface Session {
   scheduled_time: string | null;
   notes: string | null;
   amdp_data: string | null;
+  clinical_summary: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -310,6 +390,7 @@ export interface UpdateSession {
   scheduled_time?: string;
   notes?: string;
   amdp_data?: string;
+  clinical_summary?: string;
 }
 
 export async function createSession(input: CreateSession): Promise<Session> {
@@ -477,6 +558,38 @@ export async function updateMedication(id: string, input: UpdateMedication): Pro
 
 export async function deleteMedication(id: string): Promise<void> {
   return await invoke<void>('delete_medication', { id });
+}
+
+// === Medication Reference Types ===
+
+export interface SubstanceSummary {
+  id: string;
+  name_de: string;
+  atc_code: string | null;
+  trade_names: string[];
+}
+
+export interface SubstanceDetail extends SubstanceSummary {
+  indication: string | null;
+  side_effects: string | null;
+  contraindications: string | null;
+  source_version: string | null;
+}
+
+export async function searchMedicationReference(query: string): Promise<SubstanceSummary[]> {
+  return await invoke<SubstanceSummary[]>('search_medication_reference', { query });
+}
+
+export async function getMedicationReferenceDetail(id: string): Promise<SubstanceDetail> {
+  return await invoke<SubstanceDetail>('get_medication_reference_detail', { id });
+}
+
+export async function getMedicationReferenceVersion(): Promise<string | null> {
+  return await invoke<string | null>('get_medication_reference_version');
+}
+
+export async function downloadMedicationReference(): Promise<void> {
+  return await invoke<void>('download_medication_reference');
 }
 
 // === Treatment Plan Types ===
@@ -838,6 +951,18 @@ export async function generateReport(
   });
 }
 
+export async function generateSessionSummary(
+  patientContext: string,
+  sessionNotes: string,
+  systemPrompt?: string,
+): Promise<string> {
+  return await invoke<string>('generate_session_summary', {
+    patientContext,
+    sessionNotes,
+    systemPrompt,
+  });
+}
+
 export async function exportReportToPdf(reportId: string): Promise<number[]> {
   return await invoke<number[]>('export_report_to_pdf', { reportId });
 }
@@ -913,6 +1038,110 @@ export async function markEmailAsSent(id: string): Promise<Email> {
 }
 
 // ---------------------------------------------------------------------------
+// Letters
+// ---------------------------------------------------------------------------
+
+export type LetterType = 'referral' | 'insurance_authorization' | 'therapy_extension';
+export type LetterLanguage = 'de' | 'fr';
+export type LetterStatus = 'draft' | 'finalized' | 'sent';
+
+export interface Letter {
+  id: string;
+  patient_id: string;
+  letter_type: LetterType;
+  template_language: LetterLanguage;
+  recipient_name: string | null;
+  recipient_address: string | null;
+  subject: string;
+  content: string;
+  status: LetterStatus;
+  model_name: string | null;
+  session_ids: string | null;
+  created_at: string;
+  updated_at: string;
+  finalized_at: string | null;
+  sent_at: string | null;
+}
+
+export interface CreateLetter {
+  patient_id: string;
+  letter_type: LetterType;
+  template_language: LetterLanguage;
+  recipient_name?: string;
+  recipient_address?: string;
+  subject: string;
+  content: string;
+  model_name?: string;
+  session_ids?: string;
+}
+
+export interface UpdateLetter {
+  letter_type?: LetterType;
+  template_language?: LetterLanguage;
+  recipient_name?: string;
+  recipient_address?: string;
+  subject?: string;
+  content?: string;
+  status?: LetterStatus;
+  model_name?: string;
+  session_ids?: string;
+}
+
+export async function createLetter(input: CreateLetter): Promise<Letter> {
+  return await invoke<Letter>('create_letter', { input });
+}
+
+export async function getLetter(id: string): Promise<Letter> {
+  return await invoke<Letter>('get_letter', { id });
+}
+
+export async function listLetters(
+  patientId: string,
+  limit?: number,
+  offset?: number
+): Promise<Letter[]> {
+  return await invoke<Letter[]>('list_letters', {
+    patientId,
+    limit,
+    offset,
+  });
+}
+
+export async function updateLetter(id: string, input: UpdateLetter): Promise<Letter> {
+  return await invoke<Letter>('update_letter', { id, input });
+}
+
+export async function deleteLetter(id: string): Promise<void> {
+  return await invoke<void>('delete_letter', { id });
+}
+
+export async function markLetterAsFinalized(id: string): Promise<Letter> {
+  return await invoke<Letter>('mark_letter_as_finalized', { id });
+}
+
+export async function markLetterAsSent(id: string): Promise<Letter> {
+  return await invoke<Letter>('mark_letter_as_sent', { id });
+}
+
+export async function generateLetter(
+  letterType: LetterType,
+  language: LetterLanguage,
+  patientContext: string,
+  clinicalSummary: string,
+  recipientName?: string,
+  systemPrompt?: string
+): Promise<string> {
+  return await invoke<string>('generate_letter', {
+    letterType,
+    language,
+    patientContext,
+    clinicalSummary,
+    recipientName,
+    systemPrompt,
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Updater
 // ---------------------------------------------------------------------------
 
@@ -942,6 +1171,10 @@ export async function getAppVersion(): Promise<string> {
 
 export async function exportAllPatientData(): Promise<number[]> {
   return await invoke<number[]>('export_all_patient_data');
+}
+
+export async function exportFhirBundle(patientId: string): Promise<string> {
+  return await invoke<string>('export_fhir_bundle', { patientId });
 }
 
 // ---------------------------------------------------------------------------
@@ -1176,5 +1409,52 @@ export interface DashboardData {
 
 export async function getDashboardData(): Promise<DashboardData> {
   return await invoke<DashboardData>("get_dashboard_data");
+}
+
+// ---------------------------------------------------------------------------
+// CSV Import API
+// ---------------------------------------------------------------------------
+
+export interface ColumnMapping {
+  csv_header: string;
+  patient_field: string;
+}
+
+export interface CsvWarning {
+  row: number | null;
+  column: string | null;
+  message: string;
+}
+
+export interface CsvPreview {
+  headers: string[];
+  sample_rows: string[][];
+  total_rows: number;
+  detected_mappings: ColumnMapping[];
+  warnings: CsvWarning[];
+}
+
+export interface ImportResult {
+  success: boolean;
+  imported_count: number;
+  failed_count: number;
+  warnings: CsvWarning[];
+  errors: CsvWarning[];
+}
+
+export async function parseCsvPreview(filePath: string): Promise<CsvPreview> {
+  return await invoke<CsvPreview>('parse_csv_preview', {
+    filePath,
+  });
+}
+
+export async function importCsvData(
+  filePath: string,
+  columnMappings: ColumnMapping[]
+): Promise<ImportResult> {
+  return await invoke<ImportResult>('import_csv_data', {
+    filePath,
+    columnMappings,
+  });
 }
 
