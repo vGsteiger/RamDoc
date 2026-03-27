@@ -182,7 +182,7 @@ jobs:
           fi
           echo "Found minisign at: $MINISIGN_BIN"
           sudo install -m 755 "$MINISIGN_BIN" /usr/local/bin/minisign
-          minisign --version
+          minisign -v
 
       - name: Sign the SQLite with minisign
         env:
