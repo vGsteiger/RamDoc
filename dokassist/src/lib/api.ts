@@ -1398,6 +1398,35 @@ export async function getLiteratureDocumentChunks(id: string): Promise<DocumentC
 }
 
 // ---------------------------------------------------------------------------
+// Settings API
+// ---------------------------------------------------------------------------
+
+export interface PracticeSettings {
+  practice_name?: string | null;
+  practice_address?: string | null;
+  practice_phone?: string | null;
+  practice_email?: string | null;
+  therapist_name?: string | null;
+  zsr_number?: string | null;
+  canton?: string | null;
+  clinical_specialty?: string | null;
+  language_preference: string;
+  onboarding_completed: boolean;
+}
+
+export async function getSettings(): Promise<PracticeSettings> {
+  return await invoke<PracticeSettings>('get_settings');
+}
+
+export async function updateSettings(settings: PracticeSettings): Promise<void> {
+  return await invoke<void>('update_settings', { settings });
+}
+
+export async function completeOnboarding(): Promise<void> {
+  return await invoke<void>('complete_onboarding');
+}
+
+// ---------------------------------------------------------------------------
 // Dashboard API
 // ---------------------------------------------------------------------------
 

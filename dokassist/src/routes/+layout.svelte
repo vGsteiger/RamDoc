@@ -18,7 +18,7 @@
   let isCommandPaletteOpen = $state(false);
   let patients = $state<Patient[]>([]);
 
-  const authPaths = ['/', '/setup', '/unlock', '/recover'];
+  const authPaths = ['/', '/setup', '/unlock', '/recover', '/onboarding/step1', '/onboarding/step2', '/onboarding/step3', '/onboarding/step4'];
   let showLayout = $derived(!authPaths.includes(currentPath));
 
   // Apply theme to document element

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { checkAuth } from '$lib/api';
+  import { checkAuth, getSettings } from '$lib/api';
   import { authStatus, isLoading } from '$lib/stores/auth';
   import { t } from '$lib/translations';
 
@@ -19,7 +19,19 @@
       } else if (status === 'recovery_required') {
         goto('/recover');
       } else if (status === 'unlocked') {
-        goto('/dashboard');
+        // Check if onboarding is completed
+        try {
+          const settings = await getSettings();
+          if (!settings.onboarding_completed) {
+            goto('/onboarding/step1');
+          } else {
+            goto('/dashboard');
+          }
+        } catch (err) {
+          // If settings fetch fails, go to dashboard anyway
+          console.error('Failed to check onboarding status:', err);
+          goto('/dashboard');
+        }
       }
     } catch (err) {
       console.error('Failed to check auth:', err);
@@ -44,7 +56,19 @@
         } else if (status === 'recovery_required') {
           goto('/recover');
         } else if (status === 'unlocked') {
-          goto('/dashboard');
+          // Check if onboarding is completed
+          try {
+            const settings = await getSettings();
+            if (!settings.onboarding_completed) {
+              goto('/onboarding/step1');
+            } else {
+              goto('/dashboard');
+            }
+          } catch (err) {
+            // If settings fetch fails, go to dashboard anyway
+            console.error('Failed to check onboarding status:', err);
+            goto('/dashboard');
+          }
         }
       } catch (err) {
         console.error('Failed to check auth:', err);

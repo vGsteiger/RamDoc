@@ -12,4 +12,5 @@ pub mod outcome_score;
 pub mod patient;
 pub mod report;
 pub mod session;
+pub mod settings;
 pub mod treatment_plan;

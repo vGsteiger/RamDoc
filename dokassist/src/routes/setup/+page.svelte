@@ -47,7 +47,7 @@
       }
     }
     authStatus.set('unlocked');
-    goto('/dashboard');
+    goto('/onboarding/step1');
   }
 </script>
 
