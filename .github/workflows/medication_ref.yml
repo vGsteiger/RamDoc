@@ -136,29 +136,45 @@ jobs:
           print("Download OK — file appears to be XML.")
           PYEOF
 
-      - name: Debug AIPS XML structure
+      - name: Debug single bundle structure
         run: |
           python3 -c "
           from lxml import etree
           parser = etree.XMLParser(recover=True, huge_tree=True)
           tree = etree.parse('aips_de.xml', parser)
           root = tree.getroot()
-          print(f'Root tag: {root.tag}')
-          print(f'Root attribs: {root.attrib}')
-          print(f'Namespaces: {root.nsmap}')
-          print()
-          print('Direct children (first 10):')
-          for i, child in enumerate(root):
-              if i >= 10:
-                  print(f'  ... ({len(list(root))} total children)')
+          ns = {'n': 'https://simisinfo.refdata.ch/MedicinalDocuments/1.0/'}
+  
+          # Show full structure of first SmPC bundle
+          for bundle in root.findall('n:MedicinalDocumentsBundle', ns):
+              typ = bundle.findtext('n:Type', '', ns)
+              if typ == 'SmPC':
+                  print('=== SmPC Bundle ===')
+                  for el in bundle:
+                      tag = el.tag.split('}')[-1]
+                      if len(list(el)) == 0:
+                          print(f'  {tag} = {(el.text or \"\").strip()[:120]}')
+                      else:
+                          print(f'  {tag}:')
+                          for sub in el:
+                              stag = sub.tag.split('}')[-1]
+                              if len(list(sub)) == 0:
+                                  print(f'    {stag} = {(sub.text or \"\").strip()[:120]}')
+                              else:
+                                  print(f'    {stag}:')
+                                  for subsub in sub:
+                                      sstag = subsub.tag.split('}')[-1]
+                                      print(f'      {sstag} = {(subsub.text or \"\").strip()[:120]}')
                   break
-              print(f'  tag={child.tag} attribs={dict(child.attrib)}')
-              for j, sub in enumerate(child):
-                  if j >= 5:
-                      print(f'    ... ({len(list(child))} sub-elements)')
-                      break
-                  text = (sub.text or '')[:80]
-                  print(f'    tag={sub.tag} text={text!r}')
+  
+          print()
+          # Also count types
+          types = {}
+          for bundle in root.findall('n:MedicinalDocumentsBundle', ns):
+              t = bundle.findtext('n:Type', 'unknown', ns)
+              types[t] = types.get(t, 0) + 1
+          print(f'Bundle type counts: {types}')
+          print(f'Total bundles: {sum(types.values())}')
           "
 
       - name: Validate AIPS XML
