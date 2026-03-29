@@ -592,6 +592,21 @@ export async function downloadMedicationReference(): Promise<void> {
   return await invoke<void>('download_medication_reference');
 }
 
+export interface MedicationComparison {
+  current_medication: SubstanceDetail;
+  replacement_medication: SubstanceDetail;
+}
+
+export async function compareMedications(
+  currentId: string,
+  replacementId: string
+): Promise<MedicationComparison> {
+  return await invoke<MedicationComparison>('compare_medications', {
+    currentId,
+    replacementId,
+  });
+}
+
 // === Treatment Plan Types ===
 
 export interface TreatmentPlan {

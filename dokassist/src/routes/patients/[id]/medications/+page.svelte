@@ -21,6 +21,16 @@
   let error = $state<string | null>(null);
   let showAddForm = $state(false);
   let editingMedication = $state<Medication | null>(null);
+  let replacingMedicationId = $state<string | null>(null);
+
+  // Get active medications (those without end_date or with end_date in the future)
+  const activeMedications = $derived(
+    medications.filter((m) => {
+      if (!m.end_date) return true;
+      const endDate = new Date(m.end_date);
+      return endDate >= new Date();
+    })
+  );
 
   onMount(async () => {
     await loadMedications();
@@ -68,12 +78,30 @@
         await updateMedication(input.id, input.update);
       } else {
         // Create new medication
-        await createMedication(input);
+        const created = await createMedication(input);
+
+        // Check if this is replacing another medication (from notes)
+        if (input.notes && input.notes.includes('Ersetzt ')) {
+          // Extract the medication being replaced and update its end_date
+          // Find the active medication that matches the replacement note
+          const replacingMed = activeMedications.find((m) =>
+            input.notes?.includes(`${m.substance} (${m.dosage})`)
+          );
+
+          if (replacingMed) {
+            replacingMedicationId = replacingMed.id;
+            // Update the old medication's end_date to the start_date of the new one
+            await updateMedication(replacingMed.id, {
+              end_date: input.start_date,
+            });
+          }
+        }
       }
 
       // Reset form
       showAddForm = false;
       editingMedication = null;
+      replacingMedicationId = null;
       await loadMedications();
     } catch (err) {
       error = 'Fehler beim Speichern: ' + (err instanceof Error ? err.message : String(err));
@@ -137,6 +165,7 @@
       <MedicationForm
         medication={editingMedication || undefined}
         {patientId}
+        {activeMedications}
         onSave={handleSave}
         onCancel={handleCancel}
       />
