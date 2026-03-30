@@ -1,8 +1,7 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-  import { invoke } from '@tauri-apps/api/core';
-  import type { SubstanceDetail } from '$lib/api';
+  import { getOrCreatePatientChatSession, runAgentTurn, type SubstanceDetail } from '$lib/api';
   import MedicationComparisonPanel from './MedicationComparisonPanel.svelte';
 
   interface Props {
@@ -38,7 +37,8 @@
       cleanupListeners();
 
       // Create or get the chat session for this patient
-      sessionId = await invoke<string>('get_or_create_patient_chat_session', { patientId });
+      const session = await getOrCreatePatientChatSession(patientId);
+      sessionId = session.id;
 
       // Set up event listeners for streaming
       const chunkUnlisten = await listen<string>('agent-chunk', (event) => {
@@ -50,13 +50,7 @@
         cleanupListeners();
       });
 
-      const errorUnlisten = await listen<string>('agent-error', (event) => {
-        error = event.payload;
-        isGenerating = false;
-        cleanupListeners();
-      });
-
-      activeUnlisteners = [chunkUnlisten, doneUnlisten, errorUnlisten];
+      activeUnlisteners = [chunkUnlisten, doneUnlisten];
 
       // Construct a prompt that asks the agent to compare the medications
       const prompt = `Bitte vergleiche die folgenden beiden Medikamente und gib eine Entscheidungshilfe für den Medikamentenwechsel:
@@ -73,13 +67,11 @@ Nutze das compare_medications Tool, um detaillierte Informationen zu beiden Medi
 5. Wichtige Punkte für das Monitoring nach dem Wechsel`;
 
       // Send the message to the agent
-      await invoke('run_agent_turn', {
-        sessionId,
-        message: prompt,
-      });
+      await runAgentTurn(sessionId, prompt);
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
       isGenerating = false;
+      cleanupListeners();
     }
   }
 </script>

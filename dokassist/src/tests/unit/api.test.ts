@@ -128,6 +128,8 @@ import {
   type Letter,
   type ModelChoice,
   type AppError,
+  compareMedications,
+  type MedicationComparison,
 } from '$lib/api';
 
 // invoke is mocked globally via src/tests/setup.ts
@@ -2177,5 +2179,35 @@ describe('deleteOutcomeScore', () => {
     mockInvoke.mockResolvedValueOnce(undefined);
     await deleteOutcomeScore('score1');
     expect(mockInvoke).toHaveBeenCalledWith('delete_outcome_score', { id: 'score1' });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Medication Reference
+// ---------------------------------------------------------------------------
+
+describe('compareMedications', () => {
+  it('calls compare_medications with currentId and replacementId', async () => {
+    const detail = {
+      id: 'sub1',
+      name_de: 'Sertralin',
+      atc_code: 'N06AB06',
+      trade_names: ['Zoloft'],
+      indication: 'Depression',
+      side_effects: 'Nausea',
+      contraindications: null,
+      source_version: null,
+    };
+    const comparison: MedicationComparison = {
+      current_medication: detail,
+      replacement_medication: { ...detail, id: 'sub2', name_de: 'Fluoxetin' },
+    };
+    mockInvoke.mockResolvedValueOnce(comparison);
+    const result = await compareMedications('sub1', 'sub2');
+    expect(mockInvoke).toHaveBeenCalledWith('compare_medications', {
+      currentId: 'sub1',
+      replacementId: 'sub2',
+    });
+    expect(result).toEqual(comparison);
   });
 });

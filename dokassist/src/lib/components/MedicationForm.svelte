@@ -1,7 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import type { CreateMedication, UpdateMedication, Medication, SubstanceSummary, SubstanceDetail } from '$lib/api';
-  import { getMedicationReferenceDetail } from '$lib/api';
+  import { getMedicationReferenceDetail, searchMedicationReference } from '$lib/api';
   import MedicationAutocomplete from './MedicationAutocomplete.svelte';
   import MedicationInfoPanel from './MedicationInfoPanel.svelte';
   import MedicationChangeAssistant from './MedicationChangeAssistant.svelte';
@@ -10,7 +10,7 @@
     medication?: Medication;
     patientId?: string;
     activeMedications?: Medication[];
-    onSave: (input: CreateMedication | { id: string; update: UpdateMedication }) => void;
+    onSave: (input: CreateMedication | { id: string; update: UpdateMedication }, replacingMedicationId?: string | null) => void;
     onCancel: () => void;
   }
 
@@ -53,13 +53,18 @@
   // Load substance detail when selected
   $effect(() => {
     if (selectedSubstanceId) {
-      getMedicationReferenceDetail(selectedSubstanceId)
+      const currentId = selectedSubstanceId;
+      getMedicationReferenceDetail(currentId)
         .then(detail => {
-          selectedSubstanceDetail = detail;
+          if (selectedSubstanceId === currentId) {
+            selectedSubstanceDetail = detail;
+          }
         })
         .catch(err => {
           console.error('Failed to load substance detail:', err);
-          selectedSubstanceDetail = null;
+          if (selectedSubstanceId === currentId) {
+            selectedSubstanceDetail = null;
+          }
         });
     } else {
       selectedSubstanceDetail = null;
@@ -69,24 +74,27 @@
   // Load replacing medication substance detail
   $effect(() => {
     if (replacingMedicationId) {
-      const med = activeMedications.find(m => m.id === replacingMedicationId);
+      const currentReplacingId = replacingMedicationId;
+      const med = activeMedications.find(m => m.id === currentReplacingId);
+      replacingMedication = med ?? null;
+      replacingSubstanceDetail = null;
+      showComparisonAssistant = false;
       if (med) {
-        replacingMedication = med;
-        // Try to find the substance ID by searching
-        import('$lib/api').then(api => {
-          api.searchMedicationReference(med.substance).then(results => {
+        searchMedicationReference(med.substance)
+          .then(results => {
             if (results.length > 0) {
-              return api.getMedicationReferenceDetail(results[0].id);
+              return getMedicationReferenceDetail(results[0].id);
             }
             return null;
-          }).then(detail => {
-            if (detail) {
+          })
+          .then(detail => {
+            if (replacingMedicationId === currentReplacingId) {
               replacingSubstanceDetail = detail;
             }
-          }).catch(err => {
+          })
+          .catch(err => {
             console.error('Failed to load replacing substance detail:', err);
           });
-        });
       }
     } else {
       replacingMedication = null;
@@ -120,64 +128,27 @@
       return;
     }
 
-    // If replacing a medication, set its end date to the start date of the new medication
-    if (isReplacement && replacingMedicationId && patientId) {
-      const endDateForOldMed = startDate;
-      // We'll need to update the old medication's end date
-      // For now, add this to the notes
-      const replacementNote = replacingMedication
-        ? `Ersetzt ${replacingMedication.substance} (${replacingMedication.dosage})`
-        : '';
-      const combinedNotes = notes ? `${notes}\n${replacementNote}` : replacementNote;
-
-      if (medication) {
-        const update: UpdateMedication = {
-          substance: substance !== medication.substance ? substance : undefined,
-          dosage: dosage !== medication.dosage ? dosage : undefined,
-          frequency: frequency !== medication.frequency ? frequency : undefined,
-          start_date: startDate !== medication.start_date ? startDate : undefined,
-          end_date: endDate !== (medication.end_date || '') ? endDate || undefined : undefined,
-          notes: combinedNotes !== (medication.notes || '') ? combinedNotes || undefined : undefined,
-        };
-        onSave({ id: medication.id, update });
-      } else if (patientId) {
-        const input: CreateMedication = {
-          patient_id: patientId,
-          substance,
-          dosage,
-          frequency,
-          start_date: startDate,
-          end_date: endDate || undefined,
-          notes: combinedNotes || undefined,
-        };
-        onSave(input);
-
-        // Note: The parent component should handle updating the replaced medication's end_date
-        // by calling updateMedication with the replacingMedicationId
-      }
-    } else {
-      if (medication) {
-        const update: UpdateMedication = {
-          substance: substance !== medication.substance ? substance : undefined,
-          dosage: dosage !== medication.dosage ? dosage : undefined,
-          frequency: frequency !== medication.frequency ? frequency : undefined,
-          start_date: startDate !== medication.start_date ? startDate : undefined,
-          end_date: endDate !== (medication.end_date || '') ? endDate || undefined : undefined,
-          notes: notes !== (medication.notes || '') ? notes || undefined : undefined,
-        };
-        onSave({ id: medication.id, update });
-      } else if (patientId) {
-        const input: CreateMedication = {
-          patient_id: patientId,
-          substance,
-          dosage,
-          frequency,
-          start_date: startDate,
-          end_date: endDate || undefined,
-          notes: notes || undefined,
-        };
-        onSave(input);
-      }
+    if (medication) {
+      const update: UpdateMedication = {
+        substance: substance !== medication.substance ? substance : undefined,
+        dosage: dosage !== medication.dosage ? dosage : undefined,
+        frequency: frequency !== medication.frequency ? frequency : undefined,
+        start_date: startDate !== medication.start_date ? startDate : undefined,
+        end_date: endDate !== (medication.end_date || '') ? endDate || undefined : undefined,
+        notes: notes !== (medication.notes || '') ? notes || undefined : undefined,
+      };
+      onSave({ id: medication.id, update });
+    } else if (patientId) {
+      const input: CreateMedication = {
+        patient_id: patientId,
+        substance,
+        dosage,
+        frequency,
+        start_date: startDate,
+        end_date: endDate || undefined,
+        notes: notes || undefined,
+      };
+      onSave(input, isReplacement ? replacingMedicationId : null);
     }
   }
 </script>

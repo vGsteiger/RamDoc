@@ -26,7 +26,10 @@
     medications.filter((m) => {
       if (!m.end_date) return true;
       const endDate = new Date(m.end_date);
-      return endDate >= new Date();
+      const today = new Date();
+      endDate.setHours(0, 0, 0, 0);
+      today.setHours(0, 0, 0, 0);
+      return endDate >= today;
     })
   );
 
@@ -67,7 +70,10 @@
     }
   }
 
-  async function handleSave(input: CreateMedication | { id: string; update: UpdateMedication }) {
+  async function handleSave(
+    input: CreateMedication | { id: string; update: UpdateMedication },
+    replacingMedicationId?: string | null
+  ) {
     try {
       error = null;
 
@@ -76,21 +82,17 @@
         await updateMedication(input.id, input.update);
       } else {
         // Create new medication
-        const created = await createMedication(input);
+        await createMedication(input);
 
-        // Check if this is replacing another medication (from notes)
-        if (input.notes && input.notes.includes('Ersetzt ')) {
-          // Extract the medication being replaced and update its end_date
-          // Find the active medication that matches the replacement note
-          const replacingMed = activeMedications.find((m) =>
-            input.notes?.includes(`${m.substance} (${m.dosage})`)
-          );
-
-          if (replacingMed) {
-            // Update the old medication's end_date to the start_date of the new one
-            await updateMedication(replacingMed.id, {
-              end_date: input.start_date,
-            });
+        // If replacing an existing medication, end-date it
+        if (replacingMedicationId) {
+          try {
+            await updateMedication(replacingMedicationId, { end_date: input.start_date });
+          } catch (updateErr) {
+            error =
+              'Neues Medikament wurde erfasst, aber das ersetzte Medikament konnte nicht beendet werden: ' +
+              (updateErr instanceof Error ? updateErr.message : String(updateErr));
+            console.error('Failed to end-date replaced medication:', updateErr);
           }
         }
       }
@@ -127,7 +129,10 @@
   function isActive(medication: Medication): boolean {
     if (!medication.end_date) return true;
     const endDate = new Date(medication.end_date);
-    return endDate >= new Date();
+    const today = new Date();
+    endDate.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+    return endDate >= today;
   }
 </script>
 
