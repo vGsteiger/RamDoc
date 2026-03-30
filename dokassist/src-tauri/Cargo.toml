@@ -67,7 +67,7 @@ minisign-verify = "0.2"
 zip = "8"
 printpdf = "0.9"
 docx-rs = "0.4"
-pulldown-cmark = { version = "0.12", default-features = false }
+pulldown-cmark = { version = "0.13", default-features = false }
 
 # CSV Import
 csv = "1"
