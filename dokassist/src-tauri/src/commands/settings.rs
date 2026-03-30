@@ -6,7 +6,7 @@ use tauri::State;
 /// Get practice settings from the database
 #[tauri::command]
 pub async fn get_settings(state: State<'_, AppState>) -> Result<PracticeSettings, AppError> {
-    let pool = state.require_db()?;
+    let pool = state.get_db()?;
     let conn = pool.conn()?;
 
     let mut stmt = conn.prepare(
@@ -16,7 +16,7 @@ pub async fn get_settings(state: State<'_, AppState>) -> Result<PracticeSettings
          FROM practice_settings WHERE id = 1",
     )?;
 
-    let settings = stmt.query_row([], |row| {
+    let settings = stmt.query_row([], |row: &rusqlite::Row<'_>| {
         Ok(PracticeSettings {
             practice_name: row.get(0)?,
             practice_address: row.get(1)?,
@@ -40,7 +40,7 @@ pub async fn update_settings(
     state: State<'_, AppState>,
     settings: PracticeSettings,
 ) -> Result<(), AppError> {
-    let pool = state.require_db()?;
+    let pool = state.get_db()?;
     let conn = pool.conn()?;
 
     conn.execute(
@@ -76,7 +76,7 @@ pub async fn update_settings(
 /// Mark onboarding as completed
 #[tauri::command]
 pub async fn complete_onboarding(state: State<'_, AppState>) -> Result<(), AppError> {
-    let pool = state.require_db()?;
+    let pool = state.get_db()?;
     let conn = pool.conn()?;
 
     conn.execute(
@@ -85,5 +85,14 @@ pub async fn complete_onboarding(state: State<'_, AppState>) -> Result<(), AppEr
     )?;
 
     Ok(())
+}
+
+
+}
+
+
+}
+
+
 }
 
