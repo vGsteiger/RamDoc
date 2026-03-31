@@ -17,7 +17,7 @@
     "lint": "eslint \"src/**/*.{js,ts,svelte}\""
   },
   "devDependencies": {
-    "@eslint/js": "^9.0.0",
+    "@eslint/js": "^10.0.1",
     "@sveltejs/adapter-static": "^3.0.0",
     "@sveltejs/kit": "^2.55.0",
     "@sveltejs/vite-plugin-svelte": "^6.2.4",
