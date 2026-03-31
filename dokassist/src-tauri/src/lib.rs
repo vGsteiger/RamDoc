@@ -114,6 +114,7 @@ pub fn run() {
             commands::search::global_search,
             commands::settings::get_settings,
             commands::settings::update_settings,
+            commands::settings::complete_onboarding,
             commands::llm::get_engine_status,
             commands::llm::get_recommended_model,
             commands::llm::get_default_system_prompt,

@@ -19,7 +19,8 @@
   let patients = $state<Patient[]>([]);
 
   const authPaths = ['/', '/setup', '/unlock', '/recover'];
-  let showLayout = $derived(!authPaths.includes(currentPath));
+  const layoutlessPaths = [...authPaths, '/onboarding/step1', '/onboarding/step2', '/onboarding/step3', '/onboarding/step4'];
+  let showLayout = $derived(!layoutlessPaths.includes(currentPath));
 
   // Apply theme to document element
   $effect(() => {
@@ -43,7 +44,7 @@
     // Async initialization
     (async () => {
       // Only enforce auth on protected routes
-      if (!authPaths.includes(currentPath)) {
+      if (!layoutlessPaths.includes(currentPath)) {
         try {
           const status = await checkAuth();
           authStatus.set(status);
@@ -75,7 +76,7 @@
     // Global keyboard shortcuts
     const handleGlobalKeydown = (e: KeyboardEvent) => {
       // Don't handle shortcuts on auth routes
-      if (authPaths.includes(currentPath)) {
+      if (layoutlessPaths.includes(currentPath)) {
         return;
       }
 

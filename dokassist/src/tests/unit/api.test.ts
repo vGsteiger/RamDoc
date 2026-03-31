@@ -125,11 +125,15 @@ import {
   markLetterAsFinalized,
   markLetterAsSent,
   generateLetter,
+  getSettings,
+  updateSettings,
+  completeOnboarding,
   type Letter,
   type ModelChoice,
   type AppError,
   compareMedications,
   type MedicationComparison,
+  type PracticeSettings,
 } from '$lib/api';
 
 // invoke is mocked globally via src/tests/setup.ts
@@ -2208,6 +2212,64 @@ describe('compareMedications', () => {
       currentId: 'sub1',
       replacementId: 'sub2',
     });
-    expect(result).toEqual(comparison);
+    expect(result).toEqual(comparison); 
+  });
+
+  // Practice Settings
+  // ---------------------------------------------------------------------------
+
+const PRACTICE_SETTINGS: PracticeSettings = {
+  practice_name: 'Test Practice',
+  practice_address: '123 Main St',
+  practice_phone: '+41 44 000 00 00',
+  practice_email: 'test@example.com',
+  therapist_name: 'Dr. Test',
+  zsr_number: 'ZSR123',
+  canton: 'ZH',
+  clinical_specialty: 'Clinical Psychology',
+  language_preference: 'de',
+  onboarding_completed: false,
+};
+
+describe('getSettings', () => {
+  it('calls get_settings and returns practice settings', async () => {
+    mockInvoke.mockResolvedValueOnce(PRACTICE_SETTINGS);
+    const result = await getSettings();
+    expect(mockInvoke).toHaveBeenCalledWith('get_settings');
+    expect(result).toEqual(PRACTICE_SETTINGS);
+  });
+
+  it('propagates invoke errors', async () => {
+    const err = { code: 'DB_ERROR', message: 'Database error', ref: 'REF123' };
+    mockInvoke.mockRejectedValueOnce(err);
+    await expect(getSettings()).rejects.toEqual(err);
+  });
+});
+
+describe('updateSettings', () => {
+  it('calls update_settings with the full settings payload', async () => {
+    mockInvoke.mockResolvedValueOnce(undefined);
+    await updateSettings(PRACTICE_SETTINGS);
+    expect(mockInvoke).toHaveBeenCalledWith('update_settings', { settings: PRACTICE_SETTINGS });
+  });
+
+  it('propagates invoke errors', async () => {
+    const err = { code: 'DB_ERROR', message: 'Failed to update', ref: 'REF456' };
+    mockInvoke.mockRejectedValueOnce(err);
+    await expect(updateSettings(PRACTICE_SETTINGS)).rejects.toEqual(err);
+  });
+});
+
+describe('completeOnboarding', () => {
+  it('calls complete_onboarding', async () => {
+    mockInvoke.mockResolvedValueOnce(undefined);
+    await completeOnboarding();
+    expect(mockInvoke).toHaveBeenCalledWith('complete_onboarding');
+  });
+
+  it('propagates invoke errors', async () => {
+    const err = { code: 'DB_ERROR', message: 'Failed to complete', ref: 'REF789' };
+    mockInvoke.mockRejectedValueOnce(err);
+    await expect(completeOnboarding()).rejects.toEqual(err);
   });
 });

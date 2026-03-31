@@ -155,6 +155,13 @@ fn run_migrations(conn: &Connection) -> Result<(), AppError> {
         conn.execute("PRAGMA user_version = 12;", [])?;
     }
 
+    // Migration 13: Practice settings and onboarding state
+    if version < 13 {
+        log::info!("Running migration 013: Practice settings");
+        conn.execute_batch(include_str!("migrations/013_practice_settings.sql"))?;
+        conn.execute("PRAGMA user_version = 13;", [])?;
+    }
+
     log::info!("Database migrations complete");
     Ok(())
 }
@@ -213,6 +220,6 @@ mod tests {
         let version: i32 = conn
             .query_row("PRAGMA user_version;", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 12);
+        assert_eq!(version, 13);
     }
 }
