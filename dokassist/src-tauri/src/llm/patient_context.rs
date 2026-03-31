@@ -9,13 +9,13 @@ pub fn assemble_patient_context(
 ) -> Result<String, AppError> {
     let patient = patient::get_patient(conn, patient_id)?;
 
-    // Fetch all patient data
-    let sessions = session::list_sessions_for_patient(conn, patient_id, u32::MAX, 0)?;
-    let diagnoses = diagnosis::list_diagnoses_for_patient(conn, patient_id, u32::MAX, 0)?;
-    let medications = medication::list_medications_for_patient(conn, patient_id, u32::MAX, 0)?;
-    let outcome_scores = outcome_score::list_scores_for_patient(conn, patient_id, u32::MAX, 0)?;
-    let treatment_plans =
-        treatment_plan::list_treatment_plans_for_patient(conn, patient_id, u32::MAX, 0)?;
+    // Fetch patient data with appropriate limits to avoid loading excessive data
+    // Most recent 20 sessions, all active diagnoses and current medications
+    let sessions = session::list_sessions_for_patient(conn, patient_id, 20, 0)?;
+    let diagnoses = diagnosis::list_diagnoses_for_patient(conn, patient_id, 100, 0)?;
+    let medications = medication::list_medications_for_patient(conn, patient_id, 100, 0)?;
+    let outcome_scores = outcome_score::list_scores_for_patient(conn, patient_id, 100, 0)?;
+    let treatment_plans = treatment_plan::list_treatment_plans_for_patient(conn, patient_id, 20, 0)?;
 
     // Format patient context as structured text
     let mut context = String::new();
@@ -179,7 +179,7 @@ pub fn assemble_patient_context(
                             .map(|d| format!(" (target: {})", d))
                             .unwrap_or_default();
                         context.push_str(&format!(
-                            "    - {} (status: {}){})\n",
+                            "    - {} (status: {}{})\n",
                             goal.description, goal.status, target
                         ));
                     }
@@ -199,11 +199,10 @@ pub fn assemble_patient_context(
                             .map(|f| format!(" ({})", f))
                             .unwrap_or_default();
                         context.push_str(&format!(
-                            "    - {} (type: {}){}): {}\n",
+                            "    - {} (type: {}{}\n",
                             intervention.description,
-                            intervention.intervention_type,
-                            frequency,
-                            intervention.description
+                            intervention.r#type,
+                            frequency
                         ));
                     }
                 }
@@ -280,20 +279,15 @@ pub fn assemble_patient_context(
     }
     context.push_str("\n");
 
-    // Session history (most recent first, with limit for context window)
+    // Session history (most recent first, limited by query)
     context.push_str("===== SESSION HISTORY =====\n");
     if !sessions.is_empty() {
-        let recent_sessions = if sessions.len() > 20 {
-            context.push_str(&format!(
-                "Showing 20 most recent sessions (total: {}):\n\n",
-                sessions.len()
-            ));
-            &sessions[..20]
-        } else {
-            &sessions[..]
-        };
+        context.push_str(&format!(
+            "Showing {} most recent sessions:\n\n",
+            sessions.len()
+        ));
 
-        for session in recent_sessions {
+        for session in &sessions {
             context.push_str(&format!("--- Session: {} ---\n", session.session_date));
             context.push_str(&format!("Type: {}\n", session.session_type));
             if let Some(duration) = session.duration_minutes {
@@ -318,21 +312,9 @@ pub fn assemble_patient_context(
 
             context.push_str("\n");
         }
-
-        if sessions.len() > 20 {
-            context.push_str(&format!(
-                "Note: {} older sessions not shown to manage context size.\n",
-                sessions.len() - 20
-            ));
-        }
     } else {
         context.push_str("No sessions recorded.\n");
     }
 
     Ok(context)
-}
-
-/// Estimates the token count for a given text (1 token ≈ 4 bytes)
-pub fn estimate_tokens(text: &str) -> usize {
-    (text.len() / 4).max(1)
 }

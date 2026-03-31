@@ -128,6 +128,7 @@ import {
   getSettings,
   updateSettings,
   completeOnboarding,
+  queryPatientHistory
   type Letter,
   type ModelChoice,
   type AppError,
@@ -2274,3 +2275,42 @@ describe('completeOnboarding', () => {
     await expect(completeOnboarding()).rejects.toEqual(err);
   });
 });
+// Patient History RAG Query
+// ---------------------------------------------------------------------------
+
+describe('queryPatientHistory', () => {
+  it('calls query_patient_history with patientId and question', async () => {
+    const response = 'Die Medikation wurde am 2025-03-15 geändert.';
+    mockInvoke.mockResolvedValueOnce(response);
+    const result = await queryPatientHistory('p1', 'Wann wurde die Medikation geändert?');
+    expect(mockInvoke).toHaveBeenCalledWith('query_patient_history', {
+      patientId: 'p1',
+      question: 'Wann wurde die Medikation geändert?',
+      systemPrompt: undefined,
+    });
+    expect(result).toBe(response);
+  });
+
+  it('calls query_patient_history with optional systemPrompt', async () => {
+    const response = 'Antwort mit custom Prompt';
+    mockInvoke.mockResolvedValueOnce(response);
+    await queryPatientHistory('p1', 'Test Frage', 'Custom system prompt');
+    expect(mockInvoke).toHaveBeenCalledWith('query_patient_history', {
+      patientId: 'p1',
+      question: 'Test Frage',
+      systemPrompt: 'Custom system prompt',
+    });
+  });
+
+  it('propagates invoke errors', async () => {
+    mockInvoke.mockRejectedValueOnce({
+      code: 'AUTH_REQUIRED',
+      message: 'Authentication required',
+      ref: 'AUTH-001',
+    });
+    await expect(queryPatientHistory('p1', 'Question')).rejects.toMatchObject({
+      code: 'AUTH_REQUIRED',
+    });
+  });
+});
+

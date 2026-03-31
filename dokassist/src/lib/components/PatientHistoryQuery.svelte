@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-  import { queryPatientHistory } from '$lib/api';
+  import { queryPatientHistory, parseError, formatError } from '$lib/api';
   import { Loader2, Send, ChevronDown, ChevronUp } from 'lucide-svelte';
 
   interface Props {
@@ -66,8 +66,9 @@
       // Invoke the command
       await queryPatientHistory(patientId, question);
     } catch (e) {
-      error = e instanceof Error ? e.message : 'Failed to query patient history';
-      console.error('Error querying patient history:', e);
+      const appError = parseError(e);
+      error = formatError(appError);
+      console.error('Error querying patient history:', appError);
       isQuerying = false;
       // Clean up listeners on error
       if (unlistenChunk) {
