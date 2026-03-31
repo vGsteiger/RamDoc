@@ -87,6 +87,7 @@ pub fn run() {
             commands::medication_reference::get_medication_reference_detail,
             commands::medication_reference::get_medication_reference_version,
             commands::medication_reference::download_medication_reference,
+            commands::medication_reference::compare_medications,
             commands::treatment_plans::create_treatment_plan,
             commands::treatment_plans::get_treatment_plan,
             commands::treatment_plans::list_treatment_plans_for_patient,

@@ -84,3 +84,36 @@ pub async fn download_medication_reference(
 
     Ok(())
 }
+
+/// Result of comparing two medications.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct MedicationComparison {
+    pub current_medication: SubstanceDetail,
+    pub replacement_medication: SubstanceDetail,
+}
+
+/// Compare two medications by their IDs.
+///
+/// Returns full details for both medications for side-by-side comparison.
+#[tauri::command]
+pub async fn compare_medications(
+    state: State<'_, AppState>,
+    current_id: String,
+    replacement_id: String,
+) -> Result<MedicationComparison, AppError> {
+    let guard = state
+        .get_medication_ref()
+        .ok_or_else(|| AppError::Validation("Medication ref mutex poisoned".to_string()))?;
+
+    let conn = guard
+        .as_ref()
+        .ok_or_else(|| AppError::NotFound("medication reference DB not installed".to_string()))?;
+
+    let current_medication = medication_reference::get_substance_detail(conn, &current_id)?;
+    let replacement_medication = medication_reference::get_substance_detail(conn, &replacement_id)?;
+
+    Ok(MedicationComparison {
+        current_medication,
+        replacement_medication,
+    })
+}

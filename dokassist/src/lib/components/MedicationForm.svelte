@@ -1,17 +1,20 @@
 <script lang="ts">
   import { untrack } from 'svelte';
-  import type { CreateMedication, UpdateMedication, Medication, SubstanceSummary } from '$lib/api';
+  import type { CreateMedication, UpdateMedication, Medication, SubstanceSummary, SubstanceDetail } from '$lib/api';
+  import { getMedicationReferenceDetail, searchMedicationReference } from '$lib/api';
   import MedicationAutocomplete from './MedicationAutocomplete.svelte';
   import MedicationInfoPanel from './MedicationInfoPanel.svelte';
+  import MedicationChangeAssistant from './MedicationChangeAssistant.svelte';
 
   interface Props {
     medication?: Medication;
     patientId?: string;
-    onSave: (input: CreateMedication | { id: string; update: UpdateMedication }) => void;
+    activeMedications?: Medication[];
+    onSave: (input: CreateMedication | { id: string; update: UpdateMedication }, replacingMedicationId?: string | null) => void;
     onCancel: () => void;
   }
 
-  let { medication, patientId, onSave, onCancel }: Props = $props();
+  let { medication, patientId, activeMedications = [], onSave, onCancel }: Props = $props();
 
   let substance = $state(untrack(() => medication?.substance || ''));
   let dosage = $state(untrack(() => medication?.dosage || ''));
@@ -22,6 +25,14 @@
   let endDate = $state(untrack(() => medication?.end_date || ''));
   let notes = $state(untrack(() => medication?.notes || ''));
   let selectedSubstanceId = $state<string | null>(null);
+  let selectedSubstanceDetail = $state<SubstanceDetail | null>(null);
+
+  // Replacement medication state
+  let isReplacement = $state(false);
+  let replacingMedicationId = $state<string | null>(null);
+  let replacingMedication = $state<Medication | null>(null);
+  let replacingSubstanceDetail = $state<SubstanceDetail | null>(null);
+  let showComparisonAssistant = $state(false);
 
   $effect(() => {
     if (medication) {
@@ -33,12 +44,81 @@
       notes = medication.notes || '';
       // Clear any reference panel when editing an existing record
       selectedSubstanceId = null;
+      selectedSubstanceDetail = null;
+      isReplacement = false;
+      replacingMedicationId = null;
+    }
+  });
+
+  // Load substance detail when selected
+  $effect(() => {
+    if (selectedSubstanceId) {
+      const currentId = selectedSubstanceId;
+      getMedicationReferenceDetail(currentId)
+        .then(detail => {
+          if (selectedSubstanceId === currentId) {
+            selectedSubstanceDetail = detail;
+          }
+        })
+        .catch(err => {
+          console.error('Failed to load substance detail:', err);
+          if (selectedSubstanceId === currentId) {
+            selectedSubstanceDetail = null;
+          }
+        });
+    } else {
+      selectedSubstanceDetail = null;
+    }
+  });
+
+  // Load replacing medication substance detail
+  $effect(() => {
+    if (replacingMedicationId) {
+      const currentReplacingId = replacingMedicationId;
+      const med = activeMedications.find(m => m.id === currentReplacingId);
+      replacingMedication = med ?? null;
+      replacingSubstanceDetail = null;
+      showComparisonAssistant = false;
+      if (med) {
+        searchMedicationReference(med.substance)
+          .then(results => {
+            if (results.length > 0) {
+              return getMedicationReferenceDetail(results[0].id);
+            }
+            return null;
+          })
+          .then(detail => {
+            if (replacingMedicationId === currentReplacingId) {
+              replacingSubstanceDetail = detail;
+            }
+          })
+          .catch(err => {
+            console.error('Failed to load replacing substance detail:', err);
+          });
+      }
+    } else {
+      replacingMedication = null;
+      replacingSubstanceDetail = null;
     }
   });
 
   function handleSubstanceSelect(summary: SubstanceSummary) {
     substance = summary.name_de;
     selectedSubstanceId = summary.id;
+  }
+
+  function handleReplacementToggle() {
+    isReplacement = !isReplacement;
+    if (!isReplacement) {
+      replacingMedicationId = null;
+      showComparisonAssistant = false;
+    }
+  }
+
+  function handleShowComparison() {
+    if (selectedSubstanceDetail && replacingSubstanceDetail) {
+      showComparisonAssistant = true;
+    }
   }
 
   function handleSubmit(event: Event) {
@@ -68,12 +148,71 @@
         end_date: endDate || undefined,
         notes: notes || undefined,
       };
-      onSave(input);
+      onSave(input, isReplacement ? replacingMedicationId : null);
     }
   }
 </script>
 
 <form onsubmit={handleSubmit} class="space-y-4">
+  <!-- Replacement Option -->
+  {#if !medication && activeMedications.length > 0}
+    <div class="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+      <label class="flex items-center gap-2 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={isReplacement}
+          onchange={handleReplacementToggle}
+          class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+        />
+        <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
+          Dieses Medikament ersetzt ein bestehendes Medikament
+        </span>
+      </label>
+
+      {#if isReplacement}
+        <div class="mt-3">
+          <label for="replacing-medication" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Zu ersetzendes Medikament *
+          </label>
+          <select
+            id="replacing-medication"
+            bind:value={replacingMedicationId}
+            required={isReplacement}
+            class="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value={null}>-- Bitte wählen --</option>
+            {#each activeMedications as med (med.id)}
+              <option value={med.id}>
+                {med.substance} ({med.dosage}, {med.frequency})
+              </option>
+            {/each}
+          </select>
+
+          {#if replacingMedicationId && selectedSubstanceDetail && replacingSubstanceDetail && patientId}
+            <button
+              type="button"
+              onclick={handleShowComparison}
+              class="mt-2 w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm"
+            >
+              🤖 Medikamentenvergleich & KI-Entscheidungshilfe anzeigen
+            </button>
+          {/if}
+        </div>
+      {/if}
+    </div>
+  {/if}
+
+  <!-- Show Comparison Assistant -->
+  {#if showComparisonAssistant && selectedSubstanceDetail && replacingSubstanceDetail && patientId}
+    <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
+      <MedicationChangeAssistant
+        {patientId}
+        currentSubstance={replacingSubstanceDetail}
+        replacementSubstance={selectedSubstanceDetail}
+      />
+    </div>
+  {/if}
+
   <div>
     <label for="substance" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
       Wirkstoff *

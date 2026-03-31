@@ -21,6 +21,17 @@
   let error = $state<string | null>(null);
   let showAddForm = $state(false);
   let editingMedication = $state<Medication | null>(null);
+  // Get active medications (those without end_date or with end_date in the future)
+  const activeMedications = $derived(
+    medications.filter((m) => {
+      if (!m.end_date) return true;
+      const endDate = new Date(m.end_date);
+      const today = new Date();
+      endDate.setHours(0, 0, 0, 0);
+      today.setHours(0, 0, 0, 0);
+      return endDate >= today;
+    })
+  );
 
   onMount(async () => {
     await loadMedications();
@@ -59,7 +70,10 @@
     }
   }
 
-  async function handleSave(input: CreateMedication | { id: string; update: UpdateMedication }) {
+  async function handleSave(
+    input: CreateMedication | { id: string; update: UpdateMedication },
+    replacingMedicationId?: string | null
+  ) {
     try {
       error = null;
 
@@ -69,6 +83,18 @@
       } else {
         // Create new medication
         await createMedication(input);
+
+        // If replacing an existing medication, end-date it
+        if (replacingMedicationId) {
+          try {
+            await updateMedication(replacingMedicationId, { end_date: input.start_date });
+          } catch (updateErr) {
+            error =
+              'Neues Medikament wurde erfasst, aber das ersetzte Medikament konnte nicht beendet werden: ' +
+              (updateErr instanceof Error ? updateErr.message : String(updateErr));
+            console.error('Failed to end-date replaced medication:', updateErr);
+          }
+        }
       }
 
       // Reset form
@@ -103,7 +129,10 @@
   function isActive(medication: Medication): boolean {
     if (!medication.end_date) return true;
     const endDate = new Date(medication.end_date);
-    return endDate >= new Date();
+    const today = new Date();
+    endDate.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+    return endDate >= today;
   }
 </script>
 
@@ -137,6 +166,7 @@
       <MedicationForm
         medication={editingMedication || undefined}
         {patientId}
+        {activeMedications}
         onSave={handleSave}
         onCancel={handleCancel}
       />

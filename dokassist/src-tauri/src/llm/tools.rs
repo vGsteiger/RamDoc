@@ -40,6 +40,7 @@ pub fn dispatch_tool(
         "create_diagnosis" => tool_create_diagnosis(conn, scope, &call.args),
         "list_medications" => tool_list_medications(conn, scope, &call.args),
         "create_medication" => tool_create_medication(conn, scope, &call.args),
+        "compare_medications" => tool_compare_medications(app, &call.args),
         "draft_email" => tool_draft_email(conn, scope, &call.args),
         "list_treatment_plans" => tool_list_treatment_plans(conn, scope, &call.args),
         unknown => Err(AppError::Validation(format!("Unknown tool: {}", unknown))),
@@ -479,6 +480,72 @@ fn tool_create_medication(
         },
     )?;
     Ok(serde_json::to_value(created).unwrap_or(json!({"error": "serialize"})))
+}
+
+fn tool_compare_medications(app: &tauri::AppHandle, args: &Value) -> Result<Value, AppError> {
+    let current_id = sanitize_for_prompt(str_arg(args, "current_substance_id")?);
+    let replacement_id = sanitize_for_prompt(str_arg(args, "replacement_substance_id")?);
+
+    let state = app.state::<crate::state::AppState>();
+
+    let guard = state
+        .get_medication_ref()
+        .ok_or_else(|| AppError::Validation("Medication ref mutex poisoned".to_string()))?;
+
+    let conn = guard
+        .as_ref()
+        .ok_or_else(|| AppError::NotFound("medication reference DB not installed".to_string()))?;
+
+    let current = crate::medication_reference::get_substance_detail(conn, &current_id)?;
+    let replacement = crate::medication_reference::get_substance_detail(conn, &replacement_id)?;
+
+    // Build a structured comparison highlighting key differences
+    let mut comparison = json!({
+        "current_medication": {
+            "name": current.name_de,
+            "atc_code": current.atc_code,
+            "trade_names": current.trade_names,
+            "indication": current.indication,
+            "side_effects": current.side_effects,
+            "contraindications": current.contraindications,
+        },
+        "replacement_medication": {
+            "name": replacement.name_de,
+            "atc_code": replacement.atc_code,
+            "trade_names": replacement.trade_names,
+            "indication": replacement.indication,
+            "side_effects": replacement.side_effects,
+            "contraindications": replacement.contraindications,
+        }
+    });
+
+    // Add a summary field to help the LLM
+    let mut summary_notes = Vec::new();
+
+    if current.atc_code == replacement.atc_code && current.atc_code.is_some() {
+        summary_notes.push(
+            "Beide Medikamente haben denselben ATC-Code (gleiche pharmakologische Klasse)"
+                .to_string(),
+        );
+    }
+
+    // Check for potential overlapping side effects
+    if let (Some(current_se), Some(replacement_se)) =
+        (&current.side_effects, &replacement.side_effects)
+    {
+        if !current_se.is_empty() && !replacement_se.is_empty() {
+            summary_notes.push("Bitte Nebenwirkungen beider Medikamente vergleichen".to_string());
+        }
+    }
+
+    if let Value::Object(ref mut map) = comparison {
+        map.insert(
+            "summary_notes".to_string(),
+            Value::Array(summary_notes.into_iter().map(Value::String).collect()),
+        );
+    }
+
+    Ok(comparison)
 }
 
 fn tool_draft_email(
