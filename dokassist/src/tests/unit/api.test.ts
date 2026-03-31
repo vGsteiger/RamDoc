@@ -2212,11 +2212,12 @@ describe('compareMedications', () => {
       currentId: 'sub1',
       replacementId: 'sub2',
     });
-    expect(result).toEqual(comparison); 
+    expect(result).toEqual(comparison);
   });
+});
 
-  // Practice Settings
-  // ---------------------------------------------------------------------------
+// Practice Settings
+// ---------------------------------------------------------------------------
 
 const PRACTICE_SETTINGS: PracticeSettings = {
   practice_name: 'Test Practice',
