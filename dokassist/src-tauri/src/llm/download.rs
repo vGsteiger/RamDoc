@@ -43,6 +43,16 @@ const MODELS: &[ModelEntry] = &[
         download_url: "https://huggingface.co/unsloth/Phi-4-mini-instruct-GGUF/resolve/main/Phi-4-mini-instruct-Q4_K_M.gguf",
         lfs_pointer_url: "https://huggingface.co/unsloth/Phi-4-mini-instruct-GGUF/raw/main/Phi-4-mini-instruct-Q4_K_M.gguf",
     },
+    ModelEntry {
+        filename: "gemma-4-26B-A4B-it-Q4_K_M.gguf",
+        download_url: "https://huggingface.co/ggml-org/gemma-4-26B-A4B-it-GGUF/resolve/main/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+        lfs_pointer_url: "https://huggingface.co/ggml-org/gemma-4-26B-A4B-it-GGUF/raw/main/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+    },
+    ModelEntry {
+        filename: "gemma-4-E4B-it-Q8_0.gguf",
+        download_url: "https://huggingface.co/ggml-org/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q8_0.gguf",
+        lfs_pointer_url: "https://huggingface.co/ggml-org/gemma-4-E4B-it-GGUF/raw/main/gemma-4-E4B-it-Q8_0.gguf",
+    },
 ];
 
 fn find_model(filename: &str) -> Option<&'static ModelEntry> {
@@ -273,6 +283,14 @@ mod tests {
             (
                 "Phi-4-mini-instruct-Q4_K_M.gguf",
                 "resolve/main/Phi-4-mini-instruct-Q4_K_M.gguf",
+            ),
+            (
+                "gemma-4-26B-A4B-it-Q4_K_M.gguf",
+                "resolve/main/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+            ),
+            (
+                "gemma-4-E4B-it-Q8_0.gguf",
+                "resolve/main/gemma-4-E4B-it-Q8_0.gguf",
             ),
         ];
         for (filename, expected_suffix) in cases {

@@ -305,19 +305,33 @@ impl LlmEngine {
         let ram = Self::total_ram();
         const GB: u64 = 1024 * 1024 * 1024;
 
-        if ram >= 24 * GB {
+        if ram >= 32 * GB {
+            ModelChoice {
+                name: "Gemma 4 26B A4B MoE Q4_K_M".to_string(),
+                filename: "gemma-4-26B-A4B-it-Q4_K_M.gguf".to_string(),
+                size_bytes: 16 * GB,
+                reason: "32 GB+ RAM: Gemma 4 26B MoE für sehr gute Qualität".to_string(),
+            }
+        } else if ram >= 24 * GB {
             ModelChoice {
                 name: "Qwen3-30B-A3B MoE Q4_K_M".to_string(),
                 filename: "Qwen3-30B-A3B-Q4_K_M.gguf".to_string(),
                 size_bytes: 18 * GB,
-                reason: "24 GB+ RAM: Qwen3 30B MoE für beste Qualität".to_string(),
+                reason: "24–32 GB RAM: Qwen3 30B MoE für beste Qualität".to_string(),
+            }
+        } else if ram >= 18 * GB {
+            ModelChoice {
+                name: "Gemma 4 E4B Q8_0".to_string(),
+                filename: "gemma-4-E4B-it-Q8_0.gguf".to_string(),
+                size_bytes: 5 * GB,
+                reason: "18–24 GB RAM: Gemma 4 E4B für sehr gute Qualität".to_string(),
             }
         } else if ram >= 16 * GB {
             ModelChoice {
                 name: "Qwen3-8B Q4_K_M".to_string(),
                 filename: "Qwen3-8B-Q4_K_M.gguf".to_string(),
                 size_bytes: 5 * GB,
-                reason: "16–24 GB RAM: Qwen3 8B für gute Qualität".to_string(),
+                reason: "16–18 GB RAM: Qwen3 8B für gute Qualität".to_string(),
             }
         } else {
             ModelChoice {
