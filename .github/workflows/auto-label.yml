@@ -11,29 +11,71 @@ jobs:
   auto-label:
     runs-on: ubuntu-latest
     steps:
+      - name: Check if PR is from dependabot
+        id: check_author
+        run: |
+          PR_AUTHOR="${{ github.event.pull_request.user.login }}"
+          echo "PR author: $PR_AUTHOR"
+
+          if [[ "$PR_AUTHOR" == "dependabot[bot]" ]] || [[ "$PR_AUTHOR" == *"dependabot"* ]]; then
+            echo "is_dependabot=true" >> $GITHUB_OUTPUT
+            echo "This is a dependabot PR"
+          else
+            echo "is_dependabot=false" >> $GITHUB_OUTPUT
+            echo "This is not a dependabot PR"
+          fi
+
       - name: Add default labels to PR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           PR_NUMBER="${{ github.event.pull_request.number }}"
+          IS_DEPENDABOT="${{ steps.check_author.outputs.is_dependabot }}"
 
-          # Add both automation labels by default
-          gh pr edit "$PR_NUMBER" \
-            --repo ${{ github.repository }} \
-            --add-label "autorelease" \
-            --add-label "merge when ready"
+          if [ "$IS_DEPENDABOT" = "true" ]; then
+            # For dependabot PRs, only add merge when ready, skip autorelease
+            gh pr edit "$PR_NUMBER" \
+              --repo ${{ github.repository }} \
+              --add-label "merge when ready"
 
-          echo "✅ Added default automation labels to PR #$PR_NUMBER"
-          echo "- autorelease: Release will be created automatically on merge"
-          echo "- merge when ready: PR will auto-merge when checks pass"
+            echo "✅ Added automation labels to dependabot PR #$PR_NUMBER"
+            echo "- merge when ready: PR will auto-merge when checks pass"
+            echo "- autorelease: SKIPPED for dependabot PRs"
+          else
+            # For normal PRs, add both automation labels
+            gh pr edit "$PR_NUMBER" \
+              --repo ${{ github.repository }} \
+              --add-label "autorelease" \
+              --add-label "merge when ready"
+
+            echo "✅ Added default automation labels to PR #$PR_NUMBER"
+            echo "- autorelease: Release will be created automatically on merge"
+            echo "- merge when ready: PR will auto-merge when checks pass"
+          fi
 
       - name: Add comment explaining labels
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           PR_NUMBER="${{ github.event.pull_request.number }}"
+          IS_DEPENDABOT="${{ steps.check_author.outputs.is_dependabot }}"
 
-          COMMENT_BODY="🤖 **Automation labels applied**
+          if [ "$IS_DEPENDABOT" = "true" ]; then
+            COMMENT_BODY="🤖 **Dependabot automation labels applied**
+
+          This PR has been automatically labeled with:
+          - \`merge when ready\` - This PR will automatically merge when all checks pass
+
+          **Note:** The \`autorelease\` label was **not** applied because this is a dependabot PR.
+          Dependency updates do not trigger automatic releases by default.
+
+          If you want to create a release with this dependency update, manually add the \`autorelease\` label.
+
+          **To disable auto-merge**, remove the \`merge when ready\` label.
+
+          See [AUTOMATION.md](.github/AUTOMATION.md) for more details."
+          else
+            COMMENT_BODY="🤖 **Automation labels applied**
 
           This PR has been automatically labeled with:
           - \`autorelease\` - A release will be created when this PR is merged to \`main\`
@@ -48,6 +90,7 @@ jobs:
           **To disable auto-merge**, remove the \`merge when ready\` label.
 
           See [AUTOMATION.md](.github/AUTOMATION.md) for more details."
+          fi
 
           gh pr comment "$PR_NUMBER" \
             --repo ${{ github.repository }} \
