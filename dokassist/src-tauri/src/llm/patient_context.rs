@@ -239,9 +239,10 @@ pub fn assemble_patient_context(
             context.push_str("PHQ-9 Scores (Depression):\n");
             for score in phq9_scores.iter().take(10) {
                 // Show last 10 scores
+                let interpretation = score.interpretation.as_deref().unwrap_or("no interpretation");
                 context.push_str(&format!(
                     "  {}: {} ({} - {})\n",
-                    score.administered_at, score.score, score.scale_type, score.interpretation
+                    score.administered_at, score.score, score.scale_type, interpretation
                 ));
             }
             if phq9_scores.len() > 10 {
@@ -252,9 +253,10 @@ pub fn assemble_patient_context(
         if !gad7_scores.is_empty() {
             context.push_str("GAD-7 Scores (Anxiety):\n");
             for score in gad7_scores.iter().take(10) {
+                let interpretation = score.interpretation.as_deref().unwrap_or("no interpretation");
                 context.push_str(&format!(
                     "  {}: {} ({} - {})\n",
-                    score.administered_at, score.score, score.scale_type, score.interpretation
+                    score.administered_at, score.score, score.scale_type, interpretation
                 ));
             }
             if gad7_scores.len() > 10 {
@@ -265,9 +267,10 @@ pub fn assemble_patient_context(
         if !bdi_scores.is_empty() {
             context.push_str("BDI-II Scores (Depression):\n");
             for score in bdi_scores.iter().take(10) {
+                let interpretation = score.interpretation.as_deref().unwrap_or("no interpretation");
                 context.push_str(&format!(
                     "  {}: {} ({} - {})\n",
-                    score.administered_at, score.score, score.scale_type, score.interpretation
+                    score.administered_at, score.score, score.scale_type, interpretation
                 ));
             }
             if bdi_scores.len() > 10 {
