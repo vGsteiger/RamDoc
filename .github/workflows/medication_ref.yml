@@ -204,7 +204,7 @@ jobs:
           echo "Signature verified OK"
 
       - name: Create or update GitHub Release and upload assets
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: medication-ref/v${{ steps.version.outputs.value }}
           name: Medication Reference DB ${{ steps.version.outputs.value }}
