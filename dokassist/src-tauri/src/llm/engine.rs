@@ -145,9 +145,8 @@ impl LlmEngine {
 
         // 5. Stateful UTF-8 decoder for multi-byte tokens
         let mut utf8_dec = UTF_8.new_decoder();
-        let mut n_cur = n_prompt as i32;
 
-        for _ in 0..max_tokens {
+        for (n_cur, _) in (n_prompt as i32..).zip(0..max_tokens) {
             let token = sampler.sample(&ctx, -1);
             sampler.accept(token);
 
@@ -173,7 +172,6 @@ impl LlmEngine {
                 .map_err(|e| AppError::Llm(format!("Failed to add token: {e}")))?;
             ctx.decode(&mut batch)
                 .map_err(|e| AppError::Llm(format!("Failed to decode token: {e}")))?;
-            n_cur += 1;
         }
         Ok(())
     }
@@ -240,9 +238,8 @@ impl LlmEngine {
         ]);
 
         let mut utf8_dec = UTF_8.new_decoder();
-        let mut n_cur = n_prompt as i32;
 
-        for _ in 0..max_tokens {
+        for (n_cur, _) in (n_prompt as i32..).zip(0..max_tokens) {
             let token = sampler.sample(&ctx, -1);
             sampler.accept(token);
 
@@ -267,7 +264,6 @@ impl LlmEngine {
                 .map_err(|e| AppError::Llm(format!("Failed to add token: {e}")))?;
             ctx.decode(&mut batch)
                 .map_err(|e| AppError::Llm(format!("Failed to decode token: {e}")))?;
-            n_cur += 1;
         }
         Ok(())
     }
