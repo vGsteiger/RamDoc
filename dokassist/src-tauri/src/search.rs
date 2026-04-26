@@ -699,7 +699,7 @@ pub fn hybrid_search(
 
     // Merge unique results, FTS5 preferred (has snippets)
     let mut result_map: HashMap<(String, String), SearchResult> = HashMap::new();
-    for r in fts_results.into_iter().chain(sem_results.into_iter()) {
+    for r in fts_results.into_iter().chain(sem_results) {
         let key = (r.result_type.clone(), r.entity_id.clone());
         result_map.entry(key).or_insert(r);
     }

@@ -125,6 +125,7 @@ pub fn run() {
             commands::llm::generate_letter,
             commands::llm::improve_text,
             commands::llm::generate_session_summary,
+            commands::llm::query_patient_history,
             commands::llm::get_embed_status,
             commands::llm::initialize_embed_engine,
             commands::reports::create_report,
