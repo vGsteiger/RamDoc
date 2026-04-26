@@ -277,3 +277,33 @@ pub fn letter_generation_prompt(
         _ => format!("{delimited}\n\nLetter:"),
     }
 }
+
+/// Prompt for answering questions about a patient's history using RAG.
+///
+/// # Security
+/// `patient_context` is sanitized with `sanitize_for_prompt()` and enclosed in
+/// `===== CLINICAL DATA START/END =====` delimiter markers before insertion.
+/// `question` is also sanitized to prevent injection attacks.
+pub fn patient_history_query_prompt(patient_context: &str, question: &str) -> String {
+    use super::sanitize::{build_delimited_prompt, sanitize_for_prompt};
+
+    let safe_context = sanitize_for_prompt(patient_context);
+    let safe_question = sanitize_for_prompt(question);
+
+    let instructions = format!(
+        "Beantworten Sie die folgende Frage basierend ausschließlich auf den bereitgestellten \
+        Patientenakten.\n\n\
+        Wichtige Regeln:\n\
+        - Antworten Sie NUR mit Informationen aus den bereitgestellten Akten\n\
+        - Zitieren Sie immer Sitzungsdaten oder Datumsangaben, wenn Sie sich auf spezifische Ereignisse beziehen\n\
+        - Wenn die Informationen nicht in den Akten enthalten sind, antworten Sie mit: \
+        \"Diese Information ist in den vorliegenden Akten nicht dokumentiert.\"\n\
+        - Erfinden Sie keine Details oder Informationen\n\
+        - Seien Sie präzise und verwenden Sie medizinische Fachsprache\n\
+        - Wenn Sie Trends oder Veränderungen beschreiben, nennen Sie die spezifischen Daten und Werte\n\n\
+        Frage: {safe_question}"
+    );
+
+    let delimited = build_delimited_prompt(&instructions, &safe_context);
+    format!("{delimited}\nAntwort:")
+}
