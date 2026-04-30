@@ -189,10 +189,18 @@ pub fn run() {
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
-                // Gracefully unload LLM model before closing
+                // Gracefully clean up resources before closing
                 if let Some(state) = window.try_state::<AppState>() {
-                    log::info!("Window close requested - cleaning up LLM resources");
+                    log::info!("Window close requested - cleaning up resources");
+
+                    // Close database connection to prevent corruption
+                    if let Err(e) = state.clear_db() {
+                        log::error!("Failed to close database on window close: {:?}", e);
+                    }
+
+                    // Unload LLM and embedding models
                     state.clear_llm();
+                    state.clear_embed();
                 }
             }
         })
