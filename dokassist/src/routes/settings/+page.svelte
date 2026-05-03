@@ -28,6 +28,7 @@
     getTaskModel,
     listTaskModels,
     clearTaskModel,
+    listAvailableModels,
     parseCsvPreview,
     importCsvData,
     getMedicationReferenceVersion,
@@ -38,6 +39,7 @@
     type EmbedStatus,
     type ModelInfo,
     type TaskModel,
+    type AvailableModel,
     type CsvPreview,
     type ColumnMapping,
     type ImportResult,
@@ -77,9 +79,11 @@
   let errorMsg = $state('');
   let unlisten: UnlistenFn | null = null;
   let appVersion = $state('');
+  let activeDownloadFilename = $state<string | null>(null);
 
   // Model management state
   let installedModels = $state<ModelInfo[]>([]);
+  let availableModels = $state<AvailableModel[]>([]);
   let taskModels = $state<TaskModel[]>([]);
   let selectedTaskModel = $state<Record<string, string>>({});
   let modelManagementError = $state('');
@@ -123,7 +127,30 @@
   async function loadInstalledModels() {
     try {
       loadingModels = true;
-      [installedModels, taskModels] = await Promise.all([listModels(), listTaskModels()]);
+      const results = await Promise.allSettled([
+        listModels(),
+        listTaskModels(),
+        listAvailableModels(),
+      ]);
+
+      // Handle each result separately
+      if (results[0].status === 'fulfilled') {
+        installedModels = results[0].value;
+      } else {
+        console.error('Failed to load installed models:', results[0].reason);
+      }
+
+      if (results[1].status === 'fulfilled') {
+        taskModels = results[1].value;
+      } else {
+        console.error('Failed to load task models:', results[1].reason);
+      }
+
+      if (results[2].status === 'fulfilled') {
+        availableModels = results[2].value;
+      } else {
+        console.error('Failed to load available models:', results[2].reason);
+      }
 
       // Build a map of task -> model_id for easy lookup
       selectedTaskModel = taskModels.reduce((acc, tm) => {
@@ -271,6 +298,7 @@
     phase = 'downloading';
     downloadProgress = 0;
     errorMsg = '';
+    activeDownloadFilename = model.filename;
 
     unlisten = await listen<number>('model-download-progress', (e) => {
       downloadProgress = Math.round(e.payload * 100);
@@ -292,6 +320,7 @@
       unlisten = null;
       doneUnsubscribe?.();
       doneUnsubscribe = null;
+      activeDownloadFilename = null;
     }
   }
 
@@ -926,6 +955,95 @@
                 </button>
               {/if}
             </div>
+          </div>
+        {/each}
+      </div>
+    {/if}
+  </div>
+
+  <!-- Available Models Card -->
+  <div class="mb-6">
+    <h3 class="text-md font-semibold text-gray-900 dark:text-gray-200 mb-3">
+      Available Models
+    </h3>
+    <p class="text-xs text-gray-600 dark:text-gray-400 mb-4">
+      Choose a model based on your system's available RAM. Your system has {status?.total_ram_bytes ? formatBytes(status.total_ram_bytes) : '...'} of RAM.
+    </p>
+
+    {#if loadingModels}
+      <p class="text-sm text-gray-600 dark:text-gray-400">Loading available models...</p>
+    {:else}
+      <div class="space-y-3">
+        {#each availableModels as model}
+          {@const canRunModel = status?.total_ram_bytes ? status.total_ram_bytes >= model.min_ram_gb * 1024 * 1024 * 1024 : false}
+          {@const modelChoice = { name: model.name, filename: model.filename, size_bytes: model.size_bytes, reason: model.description }}
+
+          <div
+            class="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-4 {!canRunModel ? 'opacity-60' : ''}"
+          >
+            <div class="flex items-start justify-between gap-4 mb-2">
+              <div class="flex-1">
+                <div class="flex items-center gap-2 mb-1">
+                  <p class="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    {model.name}
+                  </p>
+                  {#if model.is_downloaded}
+                    <span class="px-2 py-0.5 text-xs rounded bg-green-500 text-white">
+                      Downloaded
+                    </span>
+                  {/if}
+                  {#if !canRunModel}
+                    <span class="px-2 py-0.5 text-xs rounded bg-amber-600 text-white">
+                      Needs {model.min_ram_gb}GB+ RAM
+                    </span>
+                  {:else}
+                    <span class="px-2 py-0.5 text-xs rounded bg-blue-500 text-white">
+                      Compatible
+                    </span>
+                  {/if}
+                </div>
+                <p class="text-xs text-gray-600 dark:text-gray-400 mb-1">
+                  {model.description}
+                </p>
+                <p class="text-xs text-gray-500 dark:text-gray-500">
+                  Size: {formatBytes(model.size_bytes)} • Minimum RAM: {model.min_ram_gb}GB
+                </p>
+              </div>
+            </div>
+
+            {#if !model.is_downloaded}
+              <div class="mt-3">
+                {#if phase === 'downloading' && activeDownloadFilename === model.filename}
+                  <div class="mb-3">
+                    <div class="flex justify-between text-xs text-gray-600 dark:text-gray-400 mb-1">
+                      <span>Downloading...</span>
+                      <span>{downloadProgress ?? 0}%</span>
+                    </div>
+                    <div class="w-full bg-gray-300 dark:bg-gray-700 rounded-full h-2">
+                      <div
+                        class="bg-blue-500 h-2 rounded-full transition-all"
+                        style="width: {downloadProgress ?? 0}%"
+                      ></div>
+                    </div>
+                  </div>
+                {/if}
+
+                <button
+                  onclick={() => handleDownloadNewModel(modelChoice)}
+                  disabled={phase === 'downloading' || phase === 'loading' || !canRunModel}
+                  class="px-4 py-2 text-sm rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors"
+                >
+                  {phase === 'downloading' && activeDownloadFilename === model.filename
+                    ? 'Downloading...'
+                    : 'Download Model'}
+                </button>
+                {#if !canRunModel}
+                  <p class="text-xs text-amber-400 mt-2">
+                    This model requires at least {model.min_ram_gb}GB RAM. Your system has {status?.total_ram_bytes ? formatBytes(status.total_ram_bytes) : '...'}.
+                  </p>
+                {/if}
+              </div>
+            {/if}
           </div>
         {/each}
       </div>

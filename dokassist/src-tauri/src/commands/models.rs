@@ -280,3 +280,100 @@ pub async fn get_model_for_task(
     // Fall back to default model
     model::get_default_model(&conn)
 }
+
+/// Information about an available model (downloaded or not)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AvailableModel {
+    pub name: String,
+    pub filename: String,
+    pub size_bytes: u64,
+    pub min_ram_gb: u64,
+    pub description: String,
+    pub is_downloaded: bool,
+    pub model_id: Option<String>,
+}
+
+/// List all available models from the whitelist with their requirements
+#[tauri::command]
+pub async fn list_available_models(
+    state: State<'_, AppState>,
+) -> Result<Vec<AvailableModel>, AppError> {
+    const GB: u64 = 1024 * 1024 * 1024;
+
+    // Define all available models with their metadata
+    let available_models = vec![
+        AvailableModel {
+            name: "Gemma 4 26B A4B MoE Q4_K_M".to_string(),
+            filename: "gemma-4-26B-A4B-it-Q4_K_M.gguf".to_string(),
+            size_bytes: 16 * GB,
+            min_ram_gb: 32,
+            description: "High-quality 26B parameter Mixture-of-Experts model. Best for systems with 32GB+ RAM.".to_string(),
+            is_downloaded: false,
+            model_id: None,
+        },
+        AvailableModel {
+            name: "Qwen3-30B-A3B MoE Q4_K_M".to_string(),
+            filename: "Qwen3-30B-A3B-Q4_K_M.gguf".to_string(),
+            size_bytes: 18 * GB,
+            min_ram_gb: 24,
+            description: "High-quality 30B parameter Mixture-of-Experts model. Best for systems with 24GB+ RAM.".to_string(),
+            is_downloaded: false,
+            model_id: None,
+        },
+        AvailableModel {
+            name: "Gemma 4 E4B Q8_0".to_string(),
+            filename: "gemma-4-E4B-it-Q8_0.gguf".to_string(),
+            size_bytes: 5 * GB,
+            min_ram_gb: 18,
+            description: "Dense 4B parameter model with 8-bit quantization. Good for systems with 18-24GB RAM.".to_string(),
+            is_downloaded: false,
+            model_id: None,
+        },
+        AvailableModel {
+            name: "Qwen3-8B Q4_K_M".to_string(),
+            filename: "Qwen3-8B-Q4_K_M.gguf".to_string(),
+            size_bytes: 5 * GB,
+            min_ram_gb: 16,
+            description: "Good quality 8B parameter model. Suitable for systems with 16GB+ RAM.".to_string(),
+            is_downloaded: false,
+            model_id: None,
+        },
+        AvailableModel {
+            name: "Phi-4 Mini Q4_K_M".to_string(),
+            filename: "Phi-4-mini-instruct-Q4_K_M.gguf".to_string(),
+            size_bytes: 3 * GB,
+            min_ram_gb: 8,
+            description: "Compact mini model for systems with limited RAM (8GB+). Faster but lower quality.".to_string(),
+            is_downloaded: false,
+            model_id: None,
+        },
+    ];
+
+    // Check which models are already downloaded
+    let db = state.get_db()?;
+    let conn = db.conn()?;
+    let installed_models = model::list_models(&conn)?;
+
+    let mut result: Vec<AvailableModel> = available_models
+        .into_iter()
+        .map(|mut am| {
+            // Check if this model is downloaded
+            if let Some(installed) = installed_models.iter().find(|m| m.filename == am.filename) {
+                am.is_downloaded = true;
+                am.model_id = Some(installed.id.clone());
+            }
+            am
+        })
+        .collect();
+
+    // Sort by RAM requirement (descending) so best models appear first.
+    // Add deterministic tie-breakers for models with the same RAM requirement.
+    result.sort_by(|a, b| {
+        b.min_ram_gb
+            .cmp(&a.min_ram_gb)
+            .then_with(|| b.size_bytes.cmp(&a.size_bytes))
+            .then_with(|| a.name.cmp(&b.name))
+    });
+
+    Ok(result)
+}

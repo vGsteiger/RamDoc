@@ -223,6 +223,20 @@ export async function getModelForTask(taskType: string): Promise<Model | null> {
   return await invoke<Model | null>('get_model_for_task', { taskType });
 }
 
+export interface AvailableModel {
+  name: string;
+  filename: string;
+  size_bytes: number;
+  min_ram_gb: number;
+  description: string;
+  is_downloaded: boolean;
+  model_id: string | null;
+}
+
+export async function listAvailableModels(): Promise<AvailableModel[]> {
+  return await invoke<AvailableModel[]>('list_available_models');
+}
+
 // === File Management ===
 
 export interface FileRecord {

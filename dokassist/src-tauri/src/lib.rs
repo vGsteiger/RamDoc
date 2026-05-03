@@ -184,6 +184,7 @@ pub fn run() {
             commands::models::list_task_models,
             commands::models::clear_task_model,
             commands::models::get_model_for_task,
+            commands::models::list_available_models,
             commands::import::parse_csv_preview,
             commands::import::import_csv_data,
         ])
