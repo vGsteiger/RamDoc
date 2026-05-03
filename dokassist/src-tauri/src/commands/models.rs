@@ -377,4 +377,3 @@ pub async fn list_available_models(
 
     Ok(result)
 }
-
