@@ -294,7 +294,10 @@ pub fn run_agent_loop(
                 Ok(val) => {
                     let s = val.to_string();
                     if s.len() > TOOL_RESULT_TRIM {
-                        let end = (0..=TOOL_RESULT_TRIM).rev().find(|&i| s.is_char_boundary(i)).unwrap_or(0);
+                        let end = (0..=TOOL_RESULT_TRIM)
+                            .rev()
+                            .find(|&i| s.is_char_boundary(i))
+                            .unwrap_or(0);
                         s[..end].to_string()
                     } else {
                         s
