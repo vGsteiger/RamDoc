@@ -76,6 +76,7 @@ pub async fn get_engine_status(state: State<'_, AppState>) -> Result<EngineStatu
                 } else {
                     None
                 },
+                last_generation_stats: None,
             })
         }
     }

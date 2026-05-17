@@ -9,11 +9,26 @@ use llama_cpp_2::sampling::LlamaSampler;
 use serde::{Deserialize, Serialize};
 use std::num::NonZeroU32;
 use std::path::PathBuf;
+use std::sync::Mutex;
+use std::time::Instant;
 
 /// Sentinel value for n_gpu_layers that offloads all layers to Metal GPU.
 const ALL_GPU_LAYERS: u32 = 999;
 /// Token context window size used for all inference calls.
 const N_CTX: usize = 4096;
+
+/// Performance metrics recorded after each generation call.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GenerationStats {
+    /// Wall-clock milliseconds from inference start to first token emitted.
+    pub ttft_ms: f64,
+    /// Tokens generated per second (generation phase, excluding prompt evaluation).
+    pub tps: f64,
+    /// Number of tokens in the generated completion.
+    pub completion_tokens: usize,
+    /// Number of tokens in the prompt.
+    pub prompt_tokens: usize,
+}
 
 pub struct LlmEngine {
     // IMPORTANT: field declaration order controls drop order in Rust.
@@ -24,6 +39,7 @@ pub struct LlmEngine {
     model_path: PathBuf,
     model_name: String,
     backend: LlamaBackend,
+    last_stats: Mutex<Option<GenerationStats>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -44,6 +60,8 @@ pub struct EngineStatus {
     pub is_downloaded: bool,
     /// Filename of the downloaded model, if present on disk.
     pub downloaded_filename: Option<String>,
+    /// Performance stats from the most recent generation, if any.
+    pub last_generation_stats: Option<GenerationStats>,
 }
 
 impl LlmEngine {
@@ -66,6 +84,7 @@ impl LlmEngine {
             model: Some(model),
             model_path,
             model_name,
+            last_stats: Mutex::new(None),
         })
     }
 
@@ -132,8 +151,11 @@ impl LlmEngine {
         batch
             .add_sequence(&tokens, 0, false)
             .map_err(|e| AppError::Llm(format!("Failed to build batch: {e}")))?;
+
+        let wall_start = Instant::now();
         ctx.decode(&mut batch)
             .map_err(|e| AppError::Llm(format!("Failed to decode prompt: {e}")))?;
+        let gen_phase_start = Instant::now();
 
         // 4. Sampler chain: temp → top-k → top-p → dist (terminal)
         let mut sampler = LlamaSampler::chain_simple([
@@ -145,6 +167,10 @@ impl LlmEngine {
 
         // 5. Stateful UTF-8 decoder for multi-byte tokens
         let mut utf8_dec = UTF_8.new_decoder();
+
+        let mut first_token = true;
+        let mut ttft_ms = 0.0f64;
+        let mut completion_tokens = 0usize;
 
         for (n_cur, _) in (n_prompt as i32..).zip(0..max_tokens) {
             let token = sampler.sample(&ctx, -1);
@@ -158,9 +184,16 @@ impl LlmEngine {
                 .token_to_piece(token, &mut utf8_dec, false, None)
                 .map_err(|e| AppError::Llm(format!("Token decode failed: {e}")))?;
 
+            if first_token {
+                ttft_ms = wall_start.elapsed().as_secs_f64() * 1000.0;
+                first_token = false;
+            }
+
             if !on_token(&piece) {
                 break;
             }
+
+            completion_tokens += 1;
 
             // Advance context with the new token
             if n_cur + 1 >= N_CTX as i32 {
@@ -173,6 +206,24 @@ impl LlmEngine {
             ctx.decode(&mut batch)
                 .map_err(|e| AppError::Llm(format!("Failed to decode token: {e}")))?;
         }
+
+        if completion_tokens > 0 {
+            let gen_elapsed = gen_phase_start.elapsed().as_secs_f64();
+            let tps = if gen_elapsed > 0.0 {
+                completion_tokens as f64 / gen_elapsed
+            } else {
+                0.0
+            };
+            if let Ok(mut stats) = self.last_stats.lock() {
+                *stats = Some(GenerationStats {
+                    ttft_ms,
+                    tps,
+                    completion_tokens,
+                    prompt_tokens: n_prompt,
+                });
+            }
+        }
+
         Ok(())
     }
 
@@ -188,6 +239,7 @@ impl LlmEngine {
             // A loaded model is always on disk.
             is_downloaded: self.model.is_some(),
             downloaded_filename: self.model.as_ref().map(|_| self.model_name.clone()),
+            last_generation_stats: self.last_stats.lock().ok().and_then(|g| g.clone()),
         }
     }
 
@@ -227,8 +279,11 @@ impl LlmEngine {
         batch
             .add_sequence(&tokens, 0, false)
             .map_err(|e| AppError::Llm(format!("Failed to build batch: {e}")))?;
+
+        let wall_start = Instant::now();
         ctx.decode(&mut batch)
             .map_err(|e| AppError::Llm(format!("Failed to decode prompt: {e}")))?;
+        let gen_phase_start = Instant::now();
 
         let mut sampler = LlamaSampler::chain_simple([
             LlamaSampler::temp(temperature),
@@ -238,6 +293,10 @@ impl LlmEngine {
         ]);
 
         let mut utf8_dec = UTF_8.new_decoder();
+
+        let mut first_token = true;
+        let mut ttft_ms = 0.0f64;
+        let mut completion_tokens = 0usize;
 
         for (n_cur, _) in (n_prompt as i32..).zip(0..max_tokens) {
             let token = sampler.sample(&ctx, -1);
@@ -251,9 +310,16 @@ impl LlmEngine {
                 .token_to_piece(token, &mut utf8_dec, false, None)
                 .map_err(|e| AppError::Llm(format!("Token decode failed: {e}")))?;
 
+            if first_token {
+                ttft_ms = wall_start.elapsed().as_secs_f64() * 1000.0;
+                first_token = false;
+            }
+
             if !on_token(&piece) {
                 break;
             }
+
+            completion_tokens += 1;
 
             if n_cur + 1 >= N_CTX as i32 {
                 break;
@@ -265,6 +331,24 @@ impl LlmEngine {
             ctx.decode(&mut batch)
                 .map_err(|e| AppError::Llm(format!("Failed to decode token: {e}")))?;
         }
+
+        if completion_tokens > 0 {
+            let gen_elapsed = gen_phase_start.elapsed().as_secs_f64();
+            let tps = if gen_elapsed > 0.0 {
+                completion_tokens as f64 / gen_elapsed
+            } else {
+                0.0
+            };
+            if let Ok(mut stats) = self.last_stats.lock() {
+                *stats = Some(GenerationStats {
+                    ttft_ms,
+                    tps,
+                    completion_tokens,
+                    prompt_tokens: n_prompt,
+                });
+            }
+        }
+
         Ok(())
     }
 

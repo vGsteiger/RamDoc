@@ -101,6 +101,13 @@ export async function resetApp(): Promise<void> {
   return await invoke<void>('reset_app');
 }
 
+export interface GenerationStats {
+  ttft_ms: number;
+  tps: number;
+  completion_tokens: number;
+  prompt_tokens: number;
+}
+
 export interface LlmEngineStatus {
   is_loaded: boolean;
   model_name: string | null;
@@ -108,6 +115,7 @@ export interface LlmEngineStatus {
   total_ram_bytes: number;
   is_downloaded: boolean;
   downloaded_filename: string | null;
+  last_generation_stats: GenerationStats | null;
 }
 
 export interface EmbedStatus {

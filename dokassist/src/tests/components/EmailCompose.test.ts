@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import { invoke } from '@tauri-apps/api/core';

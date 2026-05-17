@@ -66,7 +66,7 @@
           (p) =>
             p.first_name.toLowerCase().includes(lowerQuery) ||
             p.last_name.toLowerCase().includes(lowerQuery) ||
-            p.ahv_number.includes(query)
+            (p.ahv_number?.includes(query) ?? false)
         );
       }
     }, 300);

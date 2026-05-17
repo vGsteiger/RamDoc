@@ -8,7 +8,7 @@
 
   let { children }: { children: Snippet } = $props();
 
-  let patientId = $derived($page.params.id);
+  let patientId = $derived($page.params.id!);
   let patient = $state<Patient | null>(null);
   let isLoading = $state(true);
   let errorMessage = $state('');

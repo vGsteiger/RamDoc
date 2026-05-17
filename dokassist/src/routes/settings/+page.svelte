@@ -34,6 +34,7 @@
     getMedicationReferenceVersion,
     downloadMedicationReference,
     type LlmEngineStatus,
+    type GenerationStats,
     type ModelChoice,
     type UpdateInfo,
     type EmbedStatus,
@@ -43,6 +44,7 @@
     type CsvPreview,
     type ColumnMapping,
     type ImportResult,
+    type BackupInfo,
   } from '$lib/api';
   import { themePreference } from '$lib/stores/theme';
   import { language } from '$lib/stores/language';
@@ -872,6 +874,32 @@
         {/if}
       </div>
     </div>
+
+    {#if status?.last_generation_stats}
+      {@const s = status.last_generation_stats}
+      <div class="border-t border-gray-300 dark:border-gray-700 pt-3">
+        <p class="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
+          Last generation performance
+        </p>
+        <div class="grid grid-cols-2 gap-3">
+          <div class="bg-gray-200 dark:bg-gray-900 rounded-lg p-2.5 text-center">
+            <p class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              {(s.ttft_ms / 1000).toFixed(2)}s
+            </p>
+            <p class="text-xs text-gray-500 dark:text-gray-400">Time to first token</p>
+          </div>
+          <div class="bg-gray-200 dark:bg-gray-900 rounded-lg p-2.5 text-center">
+            <p class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              {s.tps.toFixed(1)} tok/s
+            </p>
+            <p class="text-xs text-gray-500 dark:text-gray-400">Throughput</p>
+          </div>
+        </div>
+        <p class="text-xs text-gray-500 dark:text-gray-500 mt-2">
+          {s.prompt_tokens} prompt tokens · {s.completion_tokens} generated tokens
+        </p>
+      </div>
+    {/if}
   </div>
 
   <!-- Installed Models List -->
@@ -1095,7 +1123,7 @@
         {/if}
 
         <button
-          onclick={() => handleDownloadNewModel(recommended)}
+          onclick={() => handleDownloadNewModel(recommended!)}
           disabled={phase === 'downloading' || phase === 'loading'}
           class="px-4 py-2 text-sm rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors"
         >

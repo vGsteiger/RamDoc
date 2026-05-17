@@ -18,7 +18,7 @@ function getNestedValue(obj: Record<string, unknown>, path: string): string {
 
   for (const key of keys) {
     if (current && typeof current === 'object' && key in current) {
-      current = current[key];
+      current = current[key] as Record<string, unknown>;
     } else {
       return path; // Return the key if translation not found
     }

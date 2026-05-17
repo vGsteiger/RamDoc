@@ -5,7 +5,7 @@
   import { listSessionsForPatient, type Session } from '$lib/api';
   import SessionCard from '$lib/components/SessionCard.svelte';
 
-  const patientId = $derived($page.params.id);
+  const patientId = $derived($page.params.id!);
 
   let sessions = $state<Session[]>([]);
   let loading = $state(true);

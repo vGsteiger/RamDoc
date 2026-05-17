@@ -1742,6 +1742,8 @@ const LETTER: Letter = {
   status: 'draft',
   model_name: null,
   session_ids: null,
+  finalized_at: null,
+  sent_at: null,
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
 };

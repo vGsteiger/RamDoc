@@ -27,7 +27,7 @@
   import { get } from 'svelte/store';
   import { t } from '$lib/translations';
 
-  $: patientId = $page.params.id;
+  $: patientId = $page.params.id!;
 
   let selectedType = '';
   let sessionNotes = '';

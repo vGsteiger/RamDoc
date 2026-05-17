@@ -14,7 +14,7 @@
   import { get } from 'svelte/store';
   import { t } from '$lib/translations';
 
-  const patientId = $derived($page.params.id);
+  const patientId = $derived($page.params.id!);
 
   let medications = $state<Medication[]>([]);
   let loading = $state(true);

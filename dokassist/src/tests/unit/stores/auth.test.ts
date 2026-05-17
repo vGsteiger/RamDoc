@@ -34,7 +34,7 @@ describe('authStatus store', () => {
   });
 
   it('update propagates to subscribers', () => {
-    const values: Array<typeof null | string> = [];
+    const values: Array<null | string> = [];
     const unsubscribe = authStatus.subscribe((v) => values.push(v));
 
     authStatus.set('locked');

@@ -124,13 +124,13 @@
           <div class="bg-gray-800 rounded-lg p-4 text-center">
             <Zap size={24} class="text-gray-400 mx-auto mb-2" />
             <p class="text-gray-400 text-sm mb-1">Speed</p>
-            <p class="text-gray-100 font-semibold">{recommended.tier === '30B' ? 'Good' : 'Fast'}</p>
+            <p class="text-gray-100 font-semibold">{recommended.name.includes('30B') ? 'Good' : 'Fast'}</p>
           </div>
 
           <div class="bg-gray-800 rounded-lg p-4 text-center">
             <Brain size={24} class="text-gray-400 mx-auto mb-2" />
             <p class="text-gray-400 text-sm mb-1">Quality</p>
-            <p class="text-gray-100 font-semibold">{recommended.tier === '30B' ? 'Excellent' : 'Very Good'}</p>
+            <p class="text-gray-100 font-semibold">{recommended.name.includes('30B') ? 'Excellent' : 'Very Good'}</p>
           </div>
         </div>
 

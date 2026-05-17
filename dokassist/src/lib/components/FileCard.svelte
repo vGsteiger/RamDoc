@@ -37,11 +37,11 @@
     );
   }
 
-  function getFileIcon(mimeType: string): Component {
-    if (mimeType.startsWith('image/')) return ImageIcon;
-    if (mimeType === 'application/pdf') return FileText;
-    if (mimeType.includes('word')) return FileType;
-    return Paperclip;
+  function getFileIcon(mimeType: string): Component<Record<string, unknown>> {
+    if (mimeType.startsWith('image/')) return ImageIcon as unknown as Component<Record<string, unknown>>;
+    if (mimeType === 'application/pdf') return FileText as unknown as Component<Record<string, unknown>>;
+    if (mimeType.includes('word')) return FileType as unknown as Component<Record<string, unknown>>;
+    return Paperclip as unknown as Component<Record<string, unknown>>;
   }
 
   function getFileExtension(filename: string): string {

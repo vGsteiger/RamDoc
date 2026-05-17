@@ -16,7 +16,7 @@
     { path: `/patients/${patientId}/medications`, label: 'Medications', icon: Pill },
     { path: `/patients/${patientId}/treatment-plans`, label: 'Treatment Plans', icon: ClipboardCheck },
     { path: `/patients/${patientId}/reports`, label: 'Reports', icon: FileText }
-  ];
+  ]);
 
   let currentPath = $derived($page.url.pathname);
 </script>

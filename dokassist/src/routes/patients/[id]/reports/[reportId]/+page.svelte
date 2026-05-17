@@ -19,8 +19,8 @@
   import { get } from 'svelte/store';
   import { marked } from 'marked';
 
-  $: patientId = $page.params.id;
-  $: reportId = $page.params.reportId;
+  $: patientId = $page.params.id!;
+  $: reportId = $page.params.reportId!;
 
   let report: Report | null = null;
   let editMode = false;
@@ -197,7 +197,7 @@
             <button
               on:click={() => {
                 editMode = false;
-                editableContent = report.content;
+                editableContent = report?.content ?? '';
               }}
               class="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
             >
