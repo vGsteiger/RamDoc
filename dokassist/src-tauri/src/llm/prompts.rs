@@ -9,7 +9,8 @@ Richtlinien:\n\
 - Seien Sie sachlich, klar und professionell\n\
 - Respektieren Sie den Datenschutz und die ärztliche Schweigepflicht\n\
 - Verwenden Sie korrekte psychiatrische Terminologie (ICD-10/DSM-5)\n\
-- Strukturieren Sie Berichte nach deutschen medizinischen Standards";
+- Strukturieren Sie Berichte nach deutschen medizinischen Standards\n\
+- Verwenden Sie KEIN Markdown, KEINE Sterne, KEINE Rauten, KEINE Listen mit Bindestrichen und KEINE sonstige Formatierung — nur reinen Fliesstext mit Zeilenumbrüchen zur Abschnittstrennung";
 
 /// French system prompt for a psychiatric documentation assistant.
 pub const SYSTEM_PROMPT_FR: &str = "\
@@ -22,7 +23,8 @@ Directives:\n\
 - Soyez factuel, clair et professionnel\n\
 - Respectez la protection des données et le secret médical\n\
 - Utilisez la terminologie psychiatrique correcte (CIM-10/DSM-5)\n\
-- Structurez les rapports selon les normes médicales françaises et suisses";
+- Structurez les rapports selon les normes médicales françaises et suisses\n\
+- N'utilisez PAS de Markdown, PAS d'astérisques, PAS de dièses, PAS de listes à tirets ni aucune autre mise en forme — uniquement du texte brut avec des sauts de ligne pour séparer les sections";
 
 #[derive(Debug, Clone)]
 pub enum ReportType {
@@ -66,12 +68,14 @@ pub fn metadata_extraction_prompt(document_text: &str) -> String {
 /// Prompt for generating a formal German psychiatric report of the given type.
 ///
 /// # Security
-/// Both `patient_context` and `session_notes` are sanitized with `sanitize_for_prompt()`
-/// and enclosed in `===== CLINICAL DATA START/END =====` delimiter markers before insertion.
+/// All inputs are sanitized with `sanitize_for_prompt()` and enclosed in
+/// `===== CLINICAL DATA START/END =====` delimiter markers before insertion.
 pub fn report_generation_prompt(
     report_type: ReportType,
     patient_context: &str,
     session_notes: &str,
+    additional_context: Option<&str>,
+    instructions: Option<&str>,
 ) -> String {
     use super::sanitize::{build_delimited_prompt, sanitize_for_prompt};
 
@@ -109,10 +113,23 @@ pub fn report_generation_prompt(
         }
     };
 
-    let combined_data =
+    let mut combined_data =
         format!("Patientenkontext:\n{safe_context}\n\nSitzungsnotizen:\n{safe_notes}");
-    let delimited = build_delimited_prompt(type_instructions, &combined_data);
-    format!("{delimited}\nBericht:")
+
+    if let Some(ctx) = additional_context.filter(|s| !s.is_empty()) {
+        let safe_ctx = sanitize_for_prompt(ctx);
+        combined_data.push_str(&format!("\n\nZusatzdokument:\n{safe_ctx}"));
+    }
+
+    let full_instructions = if let Some(instr) = instructions.filter(|s| !s.is_empty()) {
+        let safe_instr = sanitize_for_prompt(instr);
+        format!("{type_instructions}\n\nZusätzliche Vorgaben:\n{safe_instr}")
+    } else {
+        type_instructions.to_string()
+    };
+
+    let delimited = build_delimited_prompt(&full_instructions, &combined_data);
+    format!("{delimited}\nWICHTIG: Nur reiner Fliesstext, kein Markdown, keine Sterne, keine Rauten.\nBericht:")
 }
 
 /// Prompt for generating a structured clinical session summary.
@@ -141,7 +158,7 @@ pub fn session_summary_prompt(patient_context: &str, session_notes: &str) -> Str
     let combined_data =
         format!("Patientenkontext:\n{safe_context}\n\nSitzungsnotizen:\n{safe_notes}");
     let delimited = build_delimited_prompt(instructions, &combined_data);
-    format!("{delimited}\nZusammenfassung:")
+    format!("{delimited}\nWICHTIG: Nur reiner Fliesstext, kein Markdown, keine Sterne, keine Rauten.\nZusammenfassung:")
 }
 
 /// Prompt for generating a formal letter (referral, insurance authorization, or therapy extension).
@@ -271,11 +288,61 @@ pub fn letter_generation_prompt(
 
     let delimited = build_delimited_prompt(type_instructions, &combined_data);
 
+    let no_fmt = "WICHTIG: Nur reiner Fliesstext, kein Markdown, keine Sterne, keine Rauten.";
     match language {
-        "de" => format!("{delimited}\n\nBrief:"),
-        "fr" => format!("{delimited}\n\nLettre:"),
-        _ => format!("{delimited}\n\nLetter:"),
+        "de" => format!("{delimited}\n\n{no_fmt}\nBrief:"),
+        "fr" => format!("{delimited}\n\n{no_fmt}\nLettre:"),
+        _ => format!("{delimited}\n\n{no_fmt}\nLetter:"),
     }
+}
+
+/// Prompt for condensing long patient context + session notes into a compact clinical summary.
+/// Used as a pre-pass when the full input would overflow the model's context window.
+///
+/// # Security
+/// Both inputs are sanitized with `sanitize_for_prompt()` before insertion.
+pub fn context_summarization_prompt(patient_context: &str, session_notes: &str) -> String {
+    use super::sanitize::{build_delimited_prompt, sanitize_for_prompt};
+
+    let safe_context = sanitize_for_prompt(patient_context);
+    let safe_notes = sanitize_for_prompt(session_notes);
+
+    let instructions = "Fassen Sie die folgenden Patientendaten und Sitzungsnotizen in einer kompakten klinischen Zusammenfassung zusammen.\n\
+        Behalten Sie vollständig bei:\n\
+        - Alle aktiven ICD-10-Diagnosen mit Datum und Beschreibung\n\
+        - Alle aktuellen Medikamente mit Dosierung und Häufigkeit\n\
+        - Den vollständigen Inhalt der aktuellen Sitzungsnotizen\n\
+        - Wesentliche Verlaufsinformationen der letzten Sitzungen (komprimiert)\n\
+        - Aktuelle Behandlungsziele\n\
+        Vermeiden Sie Wiederholungen. Schreiben Sie präzise medizinische Fachsprache. \
+        Halten Sie die Zusammenfassung so kurz wie möglich, ohne klinisch relevante Informationen zu verlieren.";
+
+    let combined =
+        format!("Patientenkontext:\n{safe_context}\n\nAktuelle Sitzungsnotizen:\n{safe_notes}");
+    format!(
+        "{}\nZusammenfassung:",
+        build_delimited_prompt(instructions, &combined)
+    )
+}
+
+/// Prompt for continuing a report that was cut off due to context window limits.
+/// `partial_output` should be the last portion (≤ 800 chars) of the incomplete report.
+///
+/// # Security
+/// `partial_output` is sanitized with `sanitize_for_prompt()` before insertion.
+pub fn continuation_prompt(partial_output: &str) -> String {
+    use super::sanitize::sanitize_for_prompt;
+
+    let safe_tail = sanitize_for_prompt(partial_output);
+
+    format!(
+        "Ein psychiatrischer Bericht wurde begonnen, konnte aber aufgrund von Platzbeschränkungen \
+        nicht vollständig generiert werden. Hier ist das Ende des bisher erstellten Texts:\n\n\
+        [...]\n{safe_tail}\n\n\
+        Bitte vervollständigen Sie den Bericht. Fahren Sie direkt an der Stelle fort, wo der Text \
+        endet. Wiederholen Sie nichts, was bereits geschrieben wurde. Schreiben Sie nur den \
+        fehlenden Rest des Berichts.\nFortsetzung:"
+    )
 }
 
 /// Prompt for answering questions about a patient's history using RAG.

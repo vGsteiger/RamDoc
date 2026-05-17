@@ -14,8 +14,8 @@
   import ErrorDisplay from '$lib/components/ErrorDisplay.svelte';
   import { t } from '$lib/translations';
 
-  $: patientId = $page.params.id;
-  $: emailId = $page.params.emailId;
+  $: patientId = $page.params.id!;
+  $: emailId = $page.params.emailId!;
 
   let email: Email | null = null;
   let recipientEmail = '';

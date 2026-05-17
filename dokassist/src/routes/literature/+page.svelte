@@ -27,13 +27,15 @@
 
   let unlisten: UnlistenFn | null = null;
 
-  onMount(async () => {
-    await loadLiterature();
-
-    unlisten = await listen<string>('literature-processed', (event) => {
-      const litId = event.payload;
-      processingFiles.delete(litId);
-      loadLiterature();
+  onMount(() => {
+    loadLiterature().then(() => {
+      listen<string>('literature-processed', (event) => {
+        const litId = event.payload;
+        processingFiles.delete(litId);
+        loadLiterature();
+      }).then((fn) => {
+        unlisten = fn;
+      });
     });
 
     return () => {
@@ -67,7 +69,7 @@
 
       try {
         const arrayBuffer = await file.arrayBuffer();
-        const data = new Uint8Array(arrayBuffer);
+        const data = new Uint8Array(arrayBuffer as ArrayBuffer);
 
         const uploaded = await uploadLiterature(
           file.name,
@@ -108,7 +110,7 @@
     error = null;
     try {
       const data = await downloadLiterature(lit.id);
-      const blob = new Blob([data], { type: lit.mime_type });
+      const blob = new Blob([data as unknown as Uint8Array<ArrayBuffer>], { type: lit.mime_type });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;

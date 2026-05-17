@@ -5,6 +5,7 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "allowJs": true,
-    "checkJs": false
+    "checkJs": false,
+    "types": ["node"]
   }
 }

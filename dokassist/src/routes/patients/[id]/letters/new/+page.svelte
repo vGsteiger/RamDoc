@@ -18,7 +18,7 @@
   } from '$lib/api';
   import { language as appLanguage } from '$lib/stores/language';
 
-  const patientId = $derived(page.params.id);
+  const patientId = $derived(page.params.id!);
 
   let patient = $state<Patient | null>(null);
   let diagnoses = $state<Diagnosis[]>([]);
@@ -52,7 +52,7 @@
       patientContext = formatPatientContext();
 
       // Set default language based on app language
-      letterLanguage = $appLanguage === 'fr' ? 'fr' : 'de'; // Only de/fr supported for letters
+      letterLanguage = ($appLanguage as string) === 'fr' ? 'fr' : 'de'; // Only de/fr supported for letters
 
       isLoading = false;
     } catch (err) {

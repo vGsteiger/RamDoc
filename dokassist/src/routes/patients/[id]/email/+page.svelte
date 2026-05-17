@@ -5,7 +5,7 @@
   import ErrorDisplay from '$lib/components/ErrorDisplay.svelte';
   import { t } from '$lib/translations';
 
-  $: patientId = $page.params.id;
+  $: patientId = $page.params.id!;
   let emails: Email[] = [];
   let loading = true;
   let error: AppError | null = null;

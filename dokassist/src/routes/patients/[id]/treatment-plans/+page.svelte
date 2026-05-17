@@ -92,7 +92,7 @@
     try {
       loading = true;
       error = null;
-      plans = await listTreatmentPlansForPatient(patientId);
+      plans = await listTreatmentPlansForPatient(patientId!);
     } catch (err) {
       error = 'Error loading treatment plans: ' + (err instanceof Error ? err.message : String(err));
       console.error('Failed to load treatment plans:', err);
@@ -177,7 +177,7 @@
         await updateTreatmentPlan(editingId, update);
       } else {
         const input: CreateTreatmentPlan = {
-          patient_id: patientId,
+          patient_id: patientId!,
           title,
           description: description || undefined,
           start_date: startDate,

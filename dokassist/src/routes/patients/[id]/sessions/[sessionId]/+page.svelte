@@ -32,8 +32,8 @@
   import OutcomeScoreForm from "$lib/components/OutcomeScoreForm.svelte";
   import { t } from "$lib/translations";
 
-  const patientId = $derived($page.params.id);
-  const sessionId = $derived($page.params.sessionId);
+  const patientId = $derived($page.params.id!);
+  const sessionId = $derived($page.params.sessionId!);
 
   let session = $state<Session | null>(null);
   let patient = $state<Patient | null>(null);
@@ -136,7 +136,7 @@
       error = null;
       const updateData: UpdateSession = {
         notes: editedNotes,
-        duration_minutes: editedDuration,
+        duration_minutes: editedDuration ?? undefined,
         session_type: editedSessionType,
         session_date: editedSessionDate,
         clinical_summary: editableSummary ?? "",

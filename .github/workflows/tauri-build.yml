@@ -200,7 +200,7 @@ jobs:
           "pub_date": "${RELEASE_DATE}",
           "platforms": {
             "darwin-aarch64": {
-              "signature": $(echo "$ARM_SIG_CONTENT" | jq -Rs .),
+              "signature": $(printf '%s' "$ARM_SIG_CONTENT" | jq -Rs .),
               "url": "${ARM_URL}"
             }
           }

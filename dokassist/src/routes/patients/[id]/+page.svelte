@@ -12,6 +12,7 @@
     listScoresForPatient,
     type Patient,
     type UpdatePatient,
+    type CreatePatient,
     type OutcomeScore,
   } from '$lib/api';
   import PatientForm from '$lib/components/PatientForm.svelte';
@@ -34,7 +35,7 @@
   let isLoadingScores = $state(false);
   let showTrendChart = $state(true);
 
-  let patientId = $derived($page.params.id);
+  let patientId = $derived($page.params.id!);
 
   onMount(async () => {
     await loadPatient();
@@ -73,7 +74,8 @@
     }
   }
 
-  async function handleUpdate(event: CustomEvent<{ id: string; data: UpdatePatient }>) {
+  async function handleUpdate(event: CustomEvent<CreatePatient | { id: string; data: UpdatePatient }>) {
+    if (!('id' in event.detail)) return;
     try {
       isSubmitting = true;
       error = '';

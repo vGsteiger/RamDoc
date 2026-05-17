@@ -54,7 +54,7 @@
       error = null;
 
       const input: CreateSession = {
-        patient_id: patientId,
+        patient_id: patientId!,
         session_date: sessionDate,
         session_type: sessionType,
         duration_minutes: durationMinutes || undefined,

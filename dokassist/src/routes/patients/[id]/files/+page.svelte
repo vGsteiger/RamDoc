@@ -8,7 +8,7 @@
   import { Hourglass, FolderOpen } from 'lucide-svelte';
   import { t } from '$lib/translations';
 
-  let patientId = $derived($page.params.id);
+  let patientId = $derived($page.params.id!);
   let files = $state<FileRecord[]>([]);
   let isLoading = $state(true);
   let errorMessage = $state('');

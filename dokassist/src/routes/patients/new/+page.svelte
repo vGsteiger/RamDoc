@@ -1,13 +1,14 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import { createPatient, parseError, type CreatePatient } from '$lib/api';
+  import { createPatient, parseError, type CreatePatient, type UpdatePatient } from '$lib/api';
   import PatientForm from '$lib/components/PatientForm.svelte';
   import { addToast } from '$lib/stores/toast';
 
   let isSubmitting = $state(false);
   let error = $state('');
 
-  async function handleSubmit(event: CustomEvent<CreatePatient>) {
+  async function handleSubmit(event: CustomEvent<CreatePatient | { id: string; data: UpdatePatient }>) {
+    if ('id' in event.detail) return;
     try {
       isSubmitting = true;
       error = '';

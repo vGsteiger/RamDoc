@@ -78,7 +78,12 @@
       // agent-done triggers re-fetch via event listener
     } catch (e: unknown) {
       isStreaming = false;
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg =
+        e instanceof Error
+          ? e.message
+          : typeof e === 'object' && e !== null && 'message' in e
+            ? String((e as { message: unknown }).message)
+            : String(e);
       errorMessage = `Fehler: ${msg}`;
       // Remove optimistic message on error
       messages = messages.filter((m) => m.id !== optimisticMsg.id);
