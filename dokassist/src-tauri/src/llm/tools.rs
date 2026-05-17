@@ -341,9 +341,10 @@ fn tool_write_report(
         },
     )?;
 
+    let preview_end = (0..=content.len().min(500)).rev().find(|&i| content.is_char_boundary(i)).unwrap_or(0);
     Ok(json!({
         "report_id": report.id,
-        "content_preview": &content[..content.len().min(500)],
+        "content_preview": &content[..preview_end],
     }))
 }
 
