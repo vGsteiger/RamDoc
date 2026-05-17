@@ -104,9 +104,10 @@ fn generate_with_think_budget(
             }
             // Keep tail short enough to span a split tag; "</think>" is 8 chars.
             if tag_tail.len() > 16 {
-                let drain_end = tag_tail.len() - 16;
-                let drain_end = (0..=drain_end).rev().find(|&i| tag_tail.is_char_boundary(i)).unwrap_or(0);
-                tag_tail.drain(..drain_end);
+                let target_drain_end = tag_tail.len() - 16;
+                let char_boundary_end =
+                    (0..=target_drain_end).rev().find(|&i| tag_tail.is_char_boundary(i)).unwrap_or(0);
+                tag_tail.drain(..char_boundary_end);
             }
 
             if in_think {
