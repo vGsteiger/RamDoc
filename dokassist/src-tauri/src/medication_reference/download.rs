@@ -41,13 +41,23 @@ const REF_DB_PUBLIC_KEY: &str = "RWSfnrRB0cL2sWFA/bAJbZa8mvXCcVjjVq6N50oz6KA65wW
 async fn fetch_latest_medication_ref_tag(client: &reqwest::Client) -> Result<String, AppError> {
     // Fetch the first page (most-recent releases first); 10 is enough — medication-ref
     // releases are infrequent and always near the top.
-    let body = client
+    let resp = client
         .get(format!("{GITHUB_API_RELEASES}?per_page=10"))
         .header("User-Agent", "RamDoc")
         .header("Accept", "application/vnd.github+json")
         .send()
         .await
-        .map_err(|e| AppError::Validation(format!("Failed to fetch GitHub releases: {e}")))?
+        .map_err(|e| AppError::Validation(format!("Failed to fetch GitHub releases: {e}")))?;
+
+    if resp.status() == reqwest::StatusCode::FORBIDDEN {
+        return Err(AppError::Validation(
+            "GitHub rate limit reached — please try again later \
+             (unauthenticated API calls are limited to 60 per hour per IP)"
+                .to_string(),
+        ));
+    }
+
+    let body = resp
         .error_for_status()
         .map_err(|e| AppError::Validation(format!("GitHub releases API error: {e}")))?
         .bytes()

@@ -43,8 +43,10 @@
   let error: AppError | null = null;
   let llmStatus: LlmEngineStatus | null = null;
 
+  let isSummarizing = false;
   let unlistenChunk: UnlistenFn | null = null;
   let unlistenDone: UnlistenFn | null = null;
+  let unlistenSummarizing: UnlistenFn | null = null;
 
   async function checkLlmStatus() {
     try {
@@ -85,19 +87,30 @@
       }
 
       isGenerating = true;
+      isSummarizing = false;
       error = null;
       generatedContent = '';
 
       // Set up event listeners for streaming
+      unlistenSummarizing = await listen('report-summarizing', () => {
+        isSummarizing = true;
+      });
+
       unlistenChunk = await listen<string>('report-chunk', (event) => {
+        isSummarizing = false;
         generatedContent += event.payload;
       });
 
       unlistenDone = await listen('report-done', () => {
         isGenerating = false;
+        isSummarizing = false;
         editableContent = stripThinkTags(generatedContent);
         isEditing = true;
         // Unlisten after completion
+        if (unlistenSummarizing) {
+          unlistenSummarizing();
+          unlistenSummarizing = null;
+        }
         if (unlistenChunk) {
           unlistenChunk();
           unlistenChunk = null;
@@ -119,7 +132,12 @@
     } catch (e) {
       error = parseError(e);
       isGenerating = false;
+      isSummarizing = false;
       // Unlisten on error
+      if (unlistenSummarizing) {
+        unlistenSummarizing();
+        unlistenSummarizing = null;
+      }
       if (unlistenChunk) {
         unlistenChunk();
         unlistenChunk = null;
@@ -282,6 +300,7 @@
   });
 
   onDestroy(() => {
+    if (unlistenSummarizing) unlistenSummarizing();
     if (unlistenChunk) unlistenChunk();
     if (unlistenDone) unlistenDone();
   });
@@ -483,7 +502,7 @@
               <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
                 {$t('reports.generatedReport')}
               </h3>
-              <ReportStream content={generatedContent} isStreaming={isGenerating} />
+              <ReportStream content={generatedContent} isStreaming={isGenerating} {isSummarizing} />
             </div>
           {/if}
 

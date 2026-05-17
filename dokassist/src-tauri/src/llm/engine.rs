@@ -356,6 +356,28 @@ impl LlmEngine {
         self.model.is_some()
     }
 
+    /// Returns the context window size used for all inference calls.
+    pub fn context_size() -> usize {
+        N_CTX
+    }
+
+    /// Returns stats from the most recent generation call, if any.
+    pub fn last_generation_stats(&self) -> Option<GenerationStats> {
+        self.last_stats.lock().ok().and_then(|g| g.clone())
+    }
+
+    /// Count the number of tokens in a string using the loaded model's tokenizer.
+    /// Falls back to a character-based estimate (~4 chars/token) if no model is loaded.
+    pub fn count_tokens(&self, text: &str) -> usize {
+        let Some(model) = self.model.as_ref() else {
+            return text.len() / 4;
+        };
+        model
+            .str_to_token(text, AddBos::Always)
+            .map(|t| t.len())
+            .unwrap_or(text.len() / 4)
+    }
+
     /// Return the total system RAM in bytes (macOS via sysctl).
     pub fn total_ram() -> u64 {
         #[cfg(target_os = "macos")]

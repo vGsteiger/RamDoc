@@ -1,6 +1,7 @@
 <script lang="ts">
   export let content: string = '';
   export let isStreaming: boolean = false;
+  export let isSummarizing: boolean = false;
 
   const THINK_START = '<think>';
   const THINK_END = '</think>';
@@ -65,6 +66,11 @@
         <p class="text-gray-400 dark:text-gray-500 italic">
           Report will appear here as it's generated...
         </p>
+      {:else if isStreaming && isSummarizing && !thinkContent && !reportContent}
+        <div class="flex items-center space-x-2 text-gray-400 dark:text-gray-500">
+          <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-amber-500"></div>
+          <span>Kontext wird komprimiert...</span>
+        </div>
       {:else if isStreaming && !thinkContent && !reportContent}
         <div class="flex items-center space-x-2 text-gray-400 dark:text-gray-500">
           <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
