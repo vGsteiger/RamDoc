@@ -172,6 +172,7 @@ pub async fn extract_file_metadata(
 /// Generate a psychiatric report with streaming output.
 /// Emits `"report-chunk"` events for each token and `"report-done"` on completion.
 /// `system_prompt`: optional override; falls back to the built-in German prompt.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn generate_report(
     app: AppHandle,
@@ -179,6 +180,8 @@ pub async fn generate_report(
     patient_context: String,
     report_type: String,
     session_notes: String,
+    additional_context: Option<String>,
+    instructions: Option<String>,
     system_prompt: Option<String>,
 ) -> Result<String, AppError> {
     // Check authentication before processing patient data
@@ -217,6 +220,8 @@ pub async fn generate_report(
             rt,
             &patient_context,
             &session_notes,
+            additional_context.as_deref(),
+            instructions.as_deref(),
             &prompt,
         )
     })

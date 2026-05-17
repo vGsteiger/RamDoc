@@ -323,6 +323,8 @@ fn tool_write_report(
         rt,
         &patient_context,
         &session_notes,
+        None,
+        None,
         crate::llm::SYSTEM_PROMPT_DE,
     )?;
 

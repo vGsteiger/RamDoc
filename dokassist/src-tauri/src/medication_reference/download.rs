@@ -11,16 +11,16 @@ const MAX_REF_DB_BYTES: u64 = 256 * 1024 * 1024;
 /// Hard maximum for the .minisig file (they're < 200 bytes in practice).
 const MAX_MINISIG_BYTES: usize = 4096;
 
-/// Hardcoded download URLs for the medication reference DB and its detached minisign signature.
+/// GitHub API endpoint for listing releases in this repository.
 ///
-/// Both files are published as assets on the `medication-ref` GitHub release in this repo.
-/// Update these constants whenever a new release is cut.
-///
-/// ⚠️  These are the ONLY URLs this module ever contacts — there is no user-supplied URL path.
-const REF_DB_URL: &str =
-    "https://github.com/vGsteiger/RamDoc/releases/latest/download/medication_ref_de.sqlite";
-const REF_DB_SIG_URL: &str =
-    "https://github.com/vGsteiger/RamDoc/releases/latest/download/medication_ref_de.sqlite.minisig";
+/// ⚠️  We intentionally avoid `releases/latest` because GitHub resolves that to whichever
+/// release was most recently published as "latest" — which may be an app release (e.g. v0.9.6)
+/// that does not carry the medication-ref assets.  Instead we query the API, filter for tags
+/// with the `medication-ref/` prefix, and build the download URLs from the actual tag.
+const GITHUB_API_RELEASES: &str = "https://api.github.com/repos/vGsteiger/RamDoc/releases";
+const MEDICATION_REF_TAG_PREFIX: &str = "medication-ref/";
+const ASSET_DB_NAME: &str = "medication_ref_de.sqlite";
+const ASSET_SIG_NAME: &str = "medication_ref_de.sqlite.minisig";
 
 /// Ed25519 public key used to verify the medication reference database.
 ///
@@ -36,38 +36,86 @@ const REF_DB_SIG_URL: &str =
 /// trust for the reference DB.
 const REF_DB_PUBLIC_KEY: &str = "RWSfnrRB0cL2sWFA/bAJbZa8mvXCcVjjVq6N50oz6KA65wW9MkM4Vjv9";
 
+/// Query the GitHub releases API and return the tag name of the most recent release
+/// whose tag starts with `medication-ref/`.
+async fn fetch_latest_medication_ref_tag(client: &reqwest::Client) -> Result<String, AppError> {
+    // Fetch the first page (most-recent releases first); 10 is enough — medication-ref
+    // releases are infrequent and always near the top.
+    let body = client
+        .get(format!("{GITHUB_API_RELEASES}?per_page=10"))
+        .header("User-Agent", "RamDoc")
+        .header("Accept", "application/vnd.github+json")
+        .send()
+        .await
+        .map_err(|e| AppError::Validation(format!("Failed to fetch GitHub releases: {e}")))?
+        .error_for_status()
+        .map_err(|e| AppError::Validation(format!("GitHub releases API error: {e}")))?
+        .bytes()
+        .await
+        .map_err(|e| {
+            AppError::Validation(format!("Failed to read GitHub releases response: {e}"))
+        })?;
+
+    let releases: Vec<serde_json::Value> = serde_json::from_slice(&body)
+        .map_err(|e| AppError::Validation(format!("Failed to parse GitHub releases JSON: {e}")))?;
+
+    releases
+        .into_iter()
+        .filter_map(|r| r["tag_name"].as_str().map(str::to_owned))
+        .find(|tag| tag.starts_with(MEDICATION_REF_TAG_PREFIX))
+        .ok_or_else(|| {
+            AppError::Validation(
+                "No medication-ref release found on GitHub — has the workflow run yet?".to_string(),
+            )
+        })
+}
+
+/// Build a GitHub release asset download URL for the given tag and filename.
+/// The tag may contain `/` which must be percent-encoded in the URL path.
+fn build_asset_url(tag: &str, filename: &str) -> String {
+    let encoded_tag = tag.replace('/', "%2F");
+    format!("https://github.com/vGsteiger/RamDoc/releases/download/{encoded_tag}/{filename}")
+}
+
 /// Download and verify the medication reference SQLite.
 ///
 /// Steps:
-/// 1. Download the `.minisig` signature file (tiny, always first).
-/// 2. Download the SQLite file, streaming it to a temp path while computing SHA-256.
-/// 3. Verify the minisign Ed25519 signature over the file bytes.
-/// 4. Remove any existing DB file and rename the temp file to `dest_path` (atomic on most OS).
+/// 1. Resolve the latest `medication-ref/*` release tag via the GitHub API.
+/// 2. Download the `.minisig` signature file (tiny, always first).
+/// 3. Download the SQLite file, streaming it to a temp path while computing SHA-256.
+/// 4. Verify the minisign Ed25519 signature over the file bytes.
+/// 5. Remove any existing DB file and rename the temp file to `dest_path` (atomic on most OS).
 ///
-/// Emits `"medication-ref-download-progress"` (f64 0.0–1.0) during step 2.
+/// Emits `"medication-ref-download-progress"` (f64 0.0–1.0) during step 3.
 pub async fn download_reference_db(app: &AppHandle, dest_path: &Path) -> Result<(), AppError> {
     let client = reqwest::Client::new();
 
-    // Step 1 — fetch the detached signature (tiny file, get it first so we fail fast)
-    let sig_bytes = fetch_signature(&client).await?;
+    // Step 1 — resolve the correct release tag (avoids `releases/latest` pointing at the app release)
+    let tag = fetch_latest_medication_ref_tag(&client).await?;
+    log::info!("Downloading medication reference DB from release tag '{tag}'");
+    let db_url = build_asset_url(&tag, ASSET_DB_NAME);
+    let sig_url = build_asset_url(&tag, ASSET_SIG_NAME);
 
-    // Step 2 — stream the SQLite to a temp path beside the final destination
+    // Step 2 — fetch the detached signature (tiny file, get it first so we fail fast)
+    let sig_bytes = fetch_signature(&client, &sig_url).await?;
+
+    // Step 3 — stream the SQLite to a temp path beside the final destination
     let tmp_path = dest_path.with_extension("sqlite.tmp");
-    let sha256_hex = stream_to_file(&client, app, &tmp_path)
+    let sha256_hex = stream_to_file(&client, app, &tmp_path, &db_url)
         .await
         .inspect_err(|_e| {
             // Clean up on error
             let _ = std::fs::remove_file(&tmp_path);
         })?;
 
-    // Step 3 — verify the minisign signature
+    // Step 4 — verify the minisign signature
     verify_minisign_signature(&sig_bytes, &sha256_hex, &tmp_path)
         .await
         .inspect_err(|_e| {
             let _ = std::fs::remove_file(&tmp_path);
         })?;
 
-    // Step 4 — remove existing DB file if present, then atomic rename to final path
+    // Step 5 — remove existing DB file if present, then atomic rename to final path
     if dest_path.exists() {
         std::fs::remove_file(dest_path).map_err(AppError::Filesystem)?;
     }
@@ -85,9 +133,9 @@ pub async fn download_reference_db(app: &AppHandle, dest_path: &Path) -> Result<
     Ok(())
 }
 
-async fn fetch_signature(client: &reqwest::Client) -> Result<Vec<u8>, AppError> {
+async fn fetch_signature(client: &reqwest::Client, url: &str) -> Result<Vec<u8>, AppError> {
     let response = client
-        .get(REF_DB_SIG_URL)
+        .get(url)
         .send()
         .await
         .map_err(|e| AppError::Validation(format!("Failed to fetch .minisig: {e}")))?
@@ -120,9 +168,10 @@ async fn stream_to_file(
     client: &reqwest::Client,
     app: &AppHandle,
     tmp_path: &Path,
+    url: &str,
 ) -> Result<String, AppError> {
     let response = client
-        .get(REF_DB_URL)
+        .get(url)
         .send()
         .await
         .map_err(|e| AppError::Validation(format!("Failed to start reference DB download: {e}")))?

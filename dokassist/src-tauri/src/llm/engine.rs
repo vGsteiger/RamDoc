@@ -15,7 +15,7 @@ use std::time::Instant;
 /// Sentinel value for n_gpu_layers that offloads all layers to Metal GPU.
 const ALL_GPU_LAYERS: u32 = 999;
 /// Token context window size used for all inference calls.
-const N_CTX: usize = 4096;
+const N_CTX: usize = 8192;
 
 /// Performance metrics recorded after each generation call.
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -13,7 +13,7 @@ const MAX_ITERATIONS: usize = 8;
 /// Tokens budget for the "is there a tool call?" probe.
 const PROBE_MAX_TOKENS: usize = 512;
 /// Tokens budget for the final streaming answer.
-const ANSWER_MAX_TOKENS: usize = 2048;
+const ANSWER_MAX_TOKENS: usize = 4096;
 /// Temperature for the probe (deterministic tool selection).
 const PROBE_TEMP: f32 = 0.1;
 /// Temperature for the final answer (more creative).
@@ -21,15 +21,15 @@ const ANSWER_TEMP: f32 = 0.7;
 /// Maximum chars of a tool result that are fed back into the LLM.
 const TOOL_RESULT_TRIM: usize = 4_000;
 /// Token context window (must match engine.rs N_CTX).
-const N_CTX: usize = 4096;
+const N_CTX: usize = 8192;
 /// Trigger summarization when estimated prompt tokens exceed this threshold.
 /// Leaves headroom for PROBE_MAX_TOKENS + ANSWER_MAX_TOKENS.
-const SUMMARIZE_THRESHOLD: usize = 1024;
+const SUMMARIZE_THRESHOLD: usize = 3072;
 /// Tokens budget for the summarization call itself.
 const SUMMARY_MAX_TOKENS: usize = 512;
-/// Rough estimate: 1 token ≈ 4 UTF-8 bytes.
+/// Rough estimate: 1 token ≈ 3 UTF-8 bytes (conservative for German medical text).
 fn estimate_tokens(s: &str) -> usize {
-    (s.len() / 4).max(1)
+    (s.len() / 3).max(1)
 }
 
 /// Whether the agent is scoped to a single patient or has global access.

@@ -35,7 +35,7 @@
         Thinking
       </p>
       <pre
-        class="whitespace-pre-wrap font-sans text-sm text-gray-500 dark:text-gray-400 italic">{thinkContent}</pre>
+        class="not-prose whitespace-pre-wrap font-sans text-sm text-gray-500 dark:text-gray-400 italic">{thinkContent}</pre>
       {#if isStreaming && !reportContent}
         <div class="flex items-center space-x-2 text-gray-400 dark:text-gray-500 mt-2">
           <div class="animate-pulse text-xs">●</div>
@@ -60,7 +60,7 @@
     <div class="prose dark:prose-invert max-w-none">
       {#if reportContent}
         <pre
-          class="whitespace-pre-wrap font-sans text-gray-900 dark:text-gray-100">{reportContent}</pre>
+          class="not-prose whitespace-pre-wrap font-sans text-gray-900 dark:text-gray-100">{reportContent}</pre>
       {:else if !isStreaming && !thinkContent}
         <p class="text-gray-400 dark:text-gray-500 italic">
           Report will appear here as it's generated...

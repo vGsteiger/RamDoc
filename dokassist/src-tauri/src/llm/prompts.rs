@@ -66,12 +66,14 @@ pub fn metadata_extraction_prompt(document_text: &str) -> String {
 /// Prompt for generating a formal German psychiatric report of the given type.
 ///
 /// # Security
-/// Both `patient_context` and `session_notes` are sanitized with `sanitize_for_prompt()`
-/// and enclosed in `===== CLINICAL DATA START/END =====` delimiter markers before insertion.
+/// All inputs are sanitized with `sanitize_for_prompt()` and enclosed in
+/// `===== CLINICAL DATA START/END =====` delimiter markers before insertion.
 pub fn report_generation_prompt(
     report_type: ReportType,
     patient_context: &str,
     session_notes: &str,
+    additional_context: Option<&str>,
+    instructions: Option<&str>,
 ) -> String {
     use super::sanitize::{build_delimited_prompt, sanitize_for_prompt};
 
@@ -109,9 +111,22 @@ pub fn report_generation_prompt(
         }
     };
 
-    let combined_data =
+    let mut combined_data =
         format!("Patientenkontext:\n{safe_context}\n\nSitzungsnotizen:\n{safe_notes}");
-    let delimited = build_delimited_prompt(type_instructions, &combined_data);
+
+    if let Some(ctx) = additional_context.filter(|s| !s.is_empty()) {
+        let safe_ctx = sanitize_for_prompt(ctx);
+        combined_data.push_str(&format!("\n\nZusatzdokument:\n{safe_ctx}"));
+    }
+
+    let full_instructions = if let Some(instr) = instructions.filter(|s| !s.is_empty()) {
+        let safe_instr = sanitize_for_prompt(instr);
+        format!("{type_instructions}\n\nZusätzliche Vorgaben:\n{safe_instr}")
+    } else {
+        type_instructions.to_string()
+    };
+
+    let delimited = build_delimited_prompt(&full_instructions, &combined_data);
     format!("{delimited}\nBericht:")
 }
 
