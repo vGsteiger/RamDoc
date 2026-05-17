@@ -104,7 +104,12 @@ fn generate_with_think_budget(
             }
             // Keep tail short enough to span a split tag; "</think>" is 8 chars.
             if tag_tail.len() > 16 {
-                tag_tail.drain(..tag_tail.len() - 16);
+                let drain_end = tag_tail.len() - 16;
+                let drain_end = (0..=drain_end)
+                    .rev()
+                    .find(|&i| tag_tail.is_char_boundary(i))
+                    .unwrap_or(0);
+                tag_tail.drain(..drain_end);
             }
 
             if in_think {
@@ -157,6 +162,9 @@ fn generate_with_think_budget(
         if was_cut_off {
             // Anchor the continuation with the tail of the partial output.
             let tail_start = output.len().saturating_sub(800);
+            let tail_start = (tail_start..=output.len())
+                .find(|&i| output.is_char_boundary(i))
+                .unwrap_or(output.len());
             let tail = &output[tail_start..];
             let continuation_msg = prompts::continuation_prompt(tail);
 
