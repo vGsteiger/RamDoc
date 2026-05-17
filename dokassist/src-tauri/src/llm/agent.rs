@@ -2,6 +2,7 @@
 //! and converses with the user over multiple turns.
 
 use super::engine::{format_chatml_history, AgentMessage, LlmEngine};
+use super::utf8;
 use crate::database::DbPool;
 use crate::error::AppError;
 use serde::{Deserialize, Serialize};
@@ -294,10 +295,7 @@ pub fn run_agent_loop(
                 Ok(val) => {
                     let s = val.to_string();
                     if s.len() > TOOL_RESULT_TRIM {
-                        let end = (0..=TOOL_RESULT_TRIM)
-                            .rev()
-                            .find(|&i| s.is_char_boundary(i))
-                            .unwrap_or(0);
+                        let end = utf8::find_boundary_backward(&s, TOOL_RESULT_TRIM);
                         s[..end].to_string()
                     } else {
                         s
