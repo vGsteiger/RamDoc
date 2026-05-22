@@ -5,6 +5,7 @@
 
 use super::agent::{AgentScope, ToolCallRequest};
 use super::sanitize::sanitize_for_prompt;
+use super::utf8;
 use crate::error::AppError;
 use crate::llm::embed::EmbedEngine;
 use crate::llm::LlmEngine;
@@ -341,10 +342,7 @@ fn tool_write_report(
         },
     )?;
 
-    let preview_end = (0..=content.len().min(500))
-        .rev()
-        .find(|&i| content.is_char_boundary(i))
-        .unwrap_or(0);
+    let preview_end = utf8::find_boundary_backward(&content, content.len().min(500));
     Ok(json!({
         "report_id": report.id,
         "content_preview": &content[..preview_end],
