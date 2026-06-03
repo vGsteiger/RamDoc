@@ -30,7 +30,7 @@
     "@vitest/coverage-v8": "^4.0.18",
     "eslint": "^10.4.0",
     "eslint-plugin-svelte": "^3.17.0",
-    "globals": "^17.4.0",
+    "globals": "^17.6.0",
     "jsdom": "^29.1.1",
     "prettier": "^3.8.2",
     "prettier-plugin-svelte": "^3.0.0",
