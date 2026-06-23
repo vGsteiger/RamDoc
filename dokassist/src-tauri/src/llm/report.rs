@@ -2,6 +2,7 @@ use super::{
     engine::LlmEngine,
     prompts::{self, LetterType, ReportType},
     sanitize::{build_delimited_prompt, sanitize_for_prompt},
+    utf8,
 };
 use crate::error::AppError;
 use tauri::Emitter;
@@ -20,18 +21,6 @@ const SUMMARIZE_MAX_TOKENS: usize = 800;
 /// Char limits for truncating inputs before the summarizer pass (prevents summarizer overflow).
 const MAX_CONTEXT_CHARS: usize = 16_000;
 const MAX_NOTES_CHARS: usize = 6_000;
-
-/// Trim `s` to at most `max_chars` bytes, always on a UTF-8 character boundary.
-fn truncate_to_char_boundary(s: &str, max_chars: usize) -> &str {
-    if s.len() <= max_chars {
-        return s;
-    }
-    let mut boundary = max_chars;
-    while !s.is_char_boundary(boundary) {
-        boundary -= 1;
-    }
-    &s[..boundary]
-}
 
 /// Returns `true` when the formatted ChatML prompt for the given inputs would
 /// exceed `MAX_INPUT_TOKENS`, meaning pre-summarization is required.
@@ -57,8 +46,8 @@ fn run_summarization(
     patient_context: &str,
     session_notes: &str,
 ) -> Result<String, AppError> {
-    let ctx = truncate_to_char_boundary(patient_context, MAX_CONTEXT_CHARS);
-    let notes = truncate_to_char_boundary(session_notes, MAX_NOTES_CHARS);
+    let ctx = utf8::truncate_to_boundary(patient_context, MAX_CONTEXT_CHARS);
+    let notes = utf8::truncate_to_boundary(session_notes, MAX_NOTES_CHARS);
     let summarization_msg = prompts::context_summarization_prompt(ctx, notes);
     engine.generate(system_prompt, &summarization_msg, SUMMARIZE_MAX_TOKENS, 0.3)
 }
@@ -105,10 +94,7 @@ fn generate_with_think_budget(
             // Keep tail short enough to span a split tag; "</think>" is 8 chars.
             if tag_tail.len() > 16 {
                 let drain_end = tag_tail.len() - 16;
-                let drain_end = (0..=drain_end)
-                    .rev()
-                    .find(|&i| tag_tail.is_char_boundary(i))
-                    .unwrap_or(0);
+                let drain_end = utf8::find_boundary_backward(&tag_tail, drain_end);
                 tag_tail.drain(..drain_end);
             }
 
@@ -162,9 +148,7 @@ fn generate_with_think_budget(
         if was_cut_off {
             // Anchor the continuation with the tail of the partial output.
             let tail_start = output.len().saturating_sub(800);
-            let tail_start = (tail_start..=output.len())
-                .find(|&i| output.is_char_boundary(i))
-                .unwrap_or(output.len());
+            let tail_start = utf8::find_boundary_forward(&output, tail_start);
             let tail = &output[tail_start..];
             let continuation_msg = prompts::continuation_prompt(tail);
 
