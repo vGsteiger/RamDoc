@@ -18,6 +18,16 @@ const MAX_POINTER_BYTES: usize = 4096;
 /// Both the download URL and the LFS pointer URL are co-located so they
 /// cannot diverge — adding a model in one place without the other is a
 /// compile error (missing struct field).
+///
+/// `pinned_sha256` is the SHA-256 of the GGUF blob, baked in at compile time.
+/// CRIT-3: The runtime-fetched LFS pointer digest is asserted against this
+/// value before the download begins, so neither a MITM on the LFS endpoint
+/// nor a supply-chain swap of the blob can pass silently.
+///
+/// To obtain the hash for a new entry: fetch the raw/main URL in a browser,
+/// copy the 64-char hex from the "oid sha256:" line of the LFS pointer, and
+/// paste it here.  Do NOT leave the field as an all-zero placeholder in a
+/// production merge — the verification will reject the download at runtime.
 struct ModelEntry {
     filename: &'static str,
     /// CRIT-4: HuggingFace blob URL (resolve/main) — used for the actual download.
@@ -25,33 +35,77 @@ struct ModelEntry {
     /// CRIT-3: HuggingFace raw-git URL (raw/main) — returns the LFS pointer text
     /// (~130 bytes) containing the authoritative SHA-256 of the blob.
     lfs_pointer_url: &'static str,
+    /// CRIT-3: SHA-256 of the GGUF blob, pinned at compile time.
+    /// Must match the "oid sha256:" value in the LFS pointer exactly.
+    /// Set to None only while a new entry is being staged — must be Some
+    /// before a release build is cut.
+    pinned_sha256: Option<&'static str>,
 }
 
 const MODELS: &[ModelEntry] = &[
+    // Qwen3.6 30B-A3B — MoE, ~3B active params. Apache 2.0.
+    // Replaces Qwen3-30B-A3B as the primary heavy model. ~18 GB Q4_K_M.
+    // Min unified memory tier: 48 GB (M5 Pro 48 GB / M5 Max 64 GB).
+    // Role: primary report generation, RAG.
     ModelEntry {
-        filename: "Qwen3-30B-A3B-Q4_K_M.gguf",
-        download_url: "https://huggingface.co/unsloth/Qwen3-30B-A3B-GGUF/resolve/main/Qwen3-30B-A3B-Q4_K_M.gguf",
-        lfs_pointer_url: "https://huggingface.co/unsloth/Qwen3-30B-A3B-GGUF/raw/main/Qwen3-30B-A3B-Q4_K_M.gguf",
+        filename: "Qwen3.6-30B-A3B-Q4_K_M.gguf",
+        download_url: "https://huggingface.co/unsloth/Qwen3.6-30B-A3B-GGUF/resolve/main/Qwen3.6-30B-A3B-Q4_K_M.gguf",
+        lfs_pointer_url: "https://huggingface.co/unsloth/Qwen3.6-30B-A3B-GGUF/raw/main/Qwen3.6-30B-A3B-Q4_K_M.gguf",
+        // TODO: populate after verifying the model card at
+        //   https://huggingface.co/unsloth/Qwen3.6-30B-A3B-GGUF
+        // and copying the "oid sha256:" line from the raw LFS pointer.
+        pinned_sha256: None,
     },
+    // Qwen3 8B — dense, 8B params. Apache 2.0.
+    // ~5 GB Q4_K_M. Min tier: 16 GB unified.
+    // Role: lower-spec fallback.
     ModelEntry {
         filename: "Qwen3-8B-Q4_K_M.gguf",
         download_url: "https://huggingface.co/unsloth/Qwen3-8B-GGUF/resolve/main/Qwen3-8B-Q4_K_M.gguf",
         lfs_pointer_url: "https://huggingface.co/unsloth/Qwen3-8B-GGUF/raw/main/Qwen3-8B-Q4_K_M.gguf",
+        pinned_sha256: None,
     },
+    // Phi-4-mini-instruct — dense, 3.8B params. MIT.
+    // ~2.5 GB Q4_K_M. Min tier: 8 GB unified.
+    // Role: English-leaning small/fast fallback.
     ModelEntry {
         filename: "Phi-4-mini-instruct-Q4_K_M.gguf",
         download_url: "https://huggingface.co/unsloth/Phi-4-mini-instruct-GGUF/resolve/main/Phi-4-mini-instruct-Q4_K_M.gguf",
         lfs_pointer_url: "https://huggingface.co/unsloth/Phi-4-mini-instruct-GGUF/raw/main/Phi-4-mini-instruct-Q4_K_M.gguf",
+        pinned_sha256: None,
     },
+    // Gemma 4 26B-A4B — MoE, ~4B active params. Apache 2.0 (confirmed apache-2.0 checkpoint).
+    // ~17 GB Q4_K_M. Min tier: 48 GB unified (M5 Pro 48 GB / M5 Max 64 GB).
+    // Role: multilingual + vision alternative to Qwen for report generation.
     ModelEntry {
         filename: "gemma-4-26B-A4B-it-Q4_K_M.gguf",
         download_url: "https://huggingface.co/ggml-org/gemma-4-26B-A4B-it-GGUF/resolve/main/gemma-4-26B-A4B-it-Q4_K_M.gguf",
         lfs_pointer_url: "https://huggingface.co/ggml-org/gemma-4-26B-A4B-it-GGUF/raw/main/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+        pinned_sha256: None,
     },
+    // Gemma 4 E4B — MoE, small active set. Apache 2.0.
+    // ~4 GB Q8_0. Min tier: 8 GB unified.
+    // Role: agent probe step, structured output, small/fast tier.
     ModelEntry {
         filename: "gemma-4-E4B-it-Q8_0.gguf",
         download_url: "https://huggingface.co/ggml-org/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q8_0.gguf",
         lfs_pointer_url: "https://huggingface.co/ggml-org/gemma-4-E4B-it-GGUF/raw/main/gemma-4-E4B-it-Q8_0.gguf",
+        pinned_sha256: None,
+    },
+    // gpt-oss-20B — MoE, 21B total / ~3.6B active params. Apache 2.0.
+    // ~16 GB Q4_K_M. Min tier: 32 GB unified.
+    // Role: mid-tier A/B vs Qwen for German clinical text and tool-calling.
+    // NOTE: Verify the exact org, filename, and quant on the HuggingFace model
+    //   card before a production release — the repo URL below is a template
+    //   derived from aggregator reporting and must be confirmed at the source.
+    ModelEntry {
+        filename: "gpt-oss-20B-Q4_K_M.gguf",
+        download_url: "https://huggingface.co/unsloth/gpt-oss-20B-GGUF/resolve/main/gpt-oss-20B-Q4_K_M.gguf",
+        lfs_pointer_url: "https://huggingface.co/unsloth/gpt-oss-20B-GGUF/raw/main/gpt-oss-20B-Q4_K_M.gguf",
+        // TODO: populate after verifying the model card at
+        //   https://huggingface.co/unsloth/gpt-oss-20B-GGUF
+        // and copying the "oid sha256:" line from the raw LFS pointer.
+        pinned_sha256: None,
     },
 ];
 
@@ -140,6 +194,8 @@ pub fn model_url(filename: &str) -> Result<String, AppError> {
 ///
 /// CRIT-3: Fetches the expected SHA-256 from HuggingFace's LFS pointer before downloading,
 ///         then verifies the completed file against it.
+///         If a pinned_sha256 is set on the ModelEntry, the runtime-fetched LFS pointer
+///         digest is also asserted against the pinned value before the download begins.
 /// HIGH-2: Aborts download if total bytes exceed MAX_DOWNLOAD_BYTES.
 pub async fn download_model_with_progress(
     app: &AppHandle,
@@ -161,6 +217,20 @@ pub async fn download_model_with_progress(
     })?;
     log::info!("Fetching LFS pointer for '{}'…", filename);
     let expected_hex = fetch_lfs_sha256(&client, model.lfs_pointer_url).await?;
+
+    // CRIT-3: If a pinned hash is baked in, assert the LFS pointer matches it.
+    // This prevents a MITM on the LFS endpoint from silently swapping the expected digest.
+    if let Some(pinned) = model.pinned_sha256 {
+        if expected_hex.to_lowercase() != pinned.to_lowercase() {
+            return Err(AppError::Validation(format!(
+                "LFS pointer SHA-256 for '{}' does not match pinned value: \
+                 expected pinned={}, fetched={}. \
+                 Possible supply-chain tampering — download aborted.",
+                filename, pinned, expected_hex
+            )));
+        }
+        log::info!("Pinned SHA-256 verified for '{}'.", filename);
+    }
 
     // Check for an existing partial download.
     let existing_size = if dest_path.exists() {
@@ -276,8 +346,8 @@ mod tests {
     fn test_model_url_known_filenames() {
         let cases = [
             (
-                "Qwen3-30B-A3B-Q4_K_M.gguf",
-                "resolve/main/Qwen3-30B-A3B-Q4_K_M.gguf",
+                "Qwen3.6-30B-A3B-Q4_K_M.gguf",
+                "resolve/main/Qwen3.6-30B-A3B-Q4_K_M.gguf",
             ),
             ("Qwen3-8B-Q4_K_M.gguf", "resolve/main/Qwen3-8B-Q4_K_M.gguf"),
             (
@@ -291,6 +361,10 @@ mod tests {
             (
                 "gemma-4-E4B-it-Q8_0.gguf",
                 "resolve/main/gemma-4-E4B-it-Q8_0.gguf",
+            ),
+            (
+                "gpt-oss-20B-Q4_K_M.gguf",
+                "resolve/main/gpt-oss-20B-Q4_K_M.gguf",
             ),
         ];
         for (filename, expected_suffix) in cases {
@@ -314,6 +388,87 @@ mod tests {
     fn test_model_url_unknown_filename() {
         let result = model_url("evil-model.gguf");
         assert!(matches!(result, Err(AppError::Validation(_))));
+    }
+
+    /// Ensure the old Qwen3-30B-A3B entry (before the 3.6 refresh) is no longer
+    /// in the whitelist — callers must migrate to Qwen3.6-30B-A3B-Q4_K_M.gguf.
+    #[test]
+    fn test_model_url_old_qwen3_30b_removed() {
+        let result = model_url("Qwen3-30B-A3B-Q4_K_M.gguf");
+        assert!(
+            matches!(result, Err(AppError::Validation(_))),
+            "Old Qwen3-30B-A3B entry should no longer be whitelisted"
+        );
+    }
+
+    /// `find_model` must return an entry for every new 2026-refresh filename.
+    #[test]
+    fn test_find_model_new_entries() {
+        assert!(
+            find_model("Qwen3.6-30B-A3B-Q4_K_M.gguf").is_some(),
+            "Qwen3.6-30B-A3B should be in the whitelist"
+        );
+        assert!(
+            find_model("gpt-oss-20B-Q4_K_M.gguf").is_some(),
+            "gpt-oss-20B should be in the whitelist"
+        );
+    }
+
+    /// Both URL fields for every model must point at the same filename blob
+    /// (resolve/main vs raw/main, not a different quant or repo).
+    #[test]
+    fn test_model_url_pairs_are_consistent() {
+        for entry in MODELS {
+            let fname = entry.filename;
+            assert!(
+                entry.download_url.contains(fname),
+                "download_url for '{}' does not contain the filename",
+                fname
+            );
+            assert!(
+                entry.lfs_pointer_url.contains(fname),
+                "lfs_pointer_url for '{}' does not contain the filename",
+                fname
+            );
+            assert!(
+                entry.download_url.contains("resolve/main"),
+                "download_url for '{}' should use resolve/main, got '{}'",
+                fname,
+                entry.download_url
+            );
+            assert!(
+                entry.lfs_pointer_url.contains("raw/main"),
+                "lfs_pointer_url for '{}' should use raw/main, got '{}'",
+                fname,
+                entry.lfs_pointer_url
+            );
+        }
+    }
+
+    /// If a pinned_sha256 is set, it must be exactly 64 lowercase hex characters.
+    #[test]
+    fn test_pinned_sha256_format() {
+        for entry in MODELS {
+            if let Some(pinned) = entry.pinned_sha256 {
+                assert_eq!(
+                    pinned.len(),
+                    64,
+                    "pinned_sha256 for '{}' must be 64 hex chars",
+                    entry.filename
+                );
+                assert!(
+                    pinned.bytes().all(|b| b.is_ascii_hexdigit()),
+                    "pinned_sha256 for '{}' contains non-hex characters",
+                    entry.filename
+                );
+                assert_eq!(
+                    pinned,
+                    &pinned.to_lowercase(),
+                    "pinned_sha256 for '{}' must be lowercase",
+                    entry.filename
+                );
+            }
+        }
     }
 
     // ---- parse_lfs_pointer_text ----
