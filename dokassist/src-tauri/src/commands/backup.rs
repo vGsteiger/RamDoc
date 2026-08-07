@@ -110,7 +110,7 @@ pub async fn restore_vault_backup(
     let manifest = filesystem::restore_backup(&base_dir, &encrypted_backup, &backup_key)?;
 
     // Re-initialize the database connection with the restored database
-    state.init_db(&db_key)?;
+    state.init_db_reanchor(&db_key, &backup_key)?;
 
     // Log the restore action
     let pool = state.get_db()?;
@@ -192,10 +192,11 @@ pub async fn validate_backup_archive(
     }
 
     // Check database schema version compatibility
-    if manifest.db_schema_version > 6 {
+    if manifest.db_schema_version > crate::database::LATEST_SCHEMA_VERSION {
         return Err(AppError::Validation(format!(
-            "Backup database schema version {} is newer than supported version 6",
-            manifest.db_schema_version
+            "Backup database schema version {} is newer than supported version {}",
+            manifest.db_schema_version,
+            crate::database::LATEST_SCHEMA_VERSION
         )));
     }
 

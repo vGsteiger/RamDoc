@@ -24,7 +24,7 @@ use security_framework_sys::item::{
     kSecValueData,
 };
 #[cfg(target_os = "macos")]
-use security_framework_sys::keychain_item::{SecItemAdd, SecItemCopyMatching, SecItemDelete};
+use security_framework_sys::keychain_item::{SecItemAdd, SecItemCopyMatching, SecItemUpdate};
 
 #[cfg(target_os = "macos")]
 extern "C" {
@@ -42,9 +42,7 @@ extern "C" {
 /// configuration.
 #[cfg(target_os = "macos")]
 pub fn store_key(service: &str, account: &str, key: &[u8]) -> Result<(), AppError> {
-    // Delete any existing item first using a raw SecItemDelete query so we match
-    // items regardless of how they were originally stored.
-    let del_query = CFDictionary::<CFString, _>::from_CFType_pairs(&[
+    let match_query = CFDictionary::<CFString, _>::from_CFType_pairs(&[
         (
             unsafe { CFString::wrap_under_get_rule(kSecClass) },
             unsafe { CFString::wrap_under_get_rule(kSecClassGenericPassword) }.as_CFType(),
@@ -58,7 +56,35 @@ pub fn store_key(service: &str, account: &str, key: &[u8]) -> Result<(), AppErro
             CFString::new(account).as_CFType(),
         ),
     ]);
-    unsafe { SecItemDelete(del_query.as_concrete_TypeRef()) };
+
+    // Updating in place is atomic from the caller's perspective and avoids a
+    // delete/add window where a crash could temporarily remove an audit checkpoint.
+    let update = CFDictionary::<CFString, _>::from_CFType_pairs(&[
+        (
+            unsafe { CFString::wrap_under_get_rule(kSecValueData) },
+            CFData::from_buffer(key).as_CFType(),
+        ),
+        (
+            unsafe { CFString::wrap_under_get_rule(kSecAttrAccessible) },
+            unsafe { CFString::wrap_under_get_rule(kSecAttrAccessibleWhenUnlockedThisDeviceOnly) }
+                .as_CFType(),
+        ),
+    ]);
+    let update_status = unsafe {
+        SecItemUpdate(
+            match_query.as_concrete_TypeRef(),
+            update.as_concrete_TypeRef(),
+        )
+    };
+    if update_status == 0 {
+        return Ok(());
+    }
+    if update_status != errSecItemNotFound {
+        return Err(AppError::Keychain(format!(
+            "Failed to update key (OSStatus {})",
+            update_status
+        )));
+    }
 
     let dict = CFDictionary::<CFString, _>::from_CFType_pairs(&[
         (
@@ -116,8 +142,13 @@ pub fn retrieve_key(service: &str, account: &str) -> Result<Vec<u8>, AppError> {
 /// Delete a key from Keychain.
 #[cfg(target_os = "macos")]
 pub fn delete_key(service: &str, account: &str) -> Result<(), AppError> {
-    delete_generic_password(service, account)
-        .map_err(|e| AppError::Keychain(format!("Failed to delete key: {}", e)))
+    delete_generic_password(service, account).map_err(|e| {
+        if e.code() == errSecItemNotFound {
+            AppError::KeychainItemMissing
+        } else {
+            AppError::Keychain(format!("Failed to delete key: {}", e))
+        }
+    })
 }
 
 /// Check if both master keys exist in the Keychain WITHOUT triggering Touch ID.
@@ -240,6 +271,6 @@ mod tests {
     #[test]
     fn test_keys_exist_nonexistent() {
         let result = keys_exist("ch.dokassist.app.test.nonexistent");
-        assert!(matches!(result, Ok(false)));
+        assert!(matches!(result, Ok(false)), "unexpected result: {result:?}");
     }
 }

@@ -1,4 +1,7 @@
-use crate::constants::{DB_KEY_ACCOUNT, FS_KEY_ACCOUNT, KEYCHAIN_SERVICE, RECOVERY_FILENAME};
+use crate::constants::{
+    AUDIT_CHECKPOINT_A_ACCOUNT, AUDIT_CHECKPOINT_B_ACCOUNT, DB_KEY_ACCOUNT, FS_KEY_ACCOUNT,
+    KEYCHAIN_SERVICE, RECOVERY_FILENAME,
+};
 use crate::error::AppError;
 use crate::state::{AppState, AuthState};
 use crate::{keychain, recovery};
@@ -46,7 +49,7 @@ pub async fn initialize_app(state: State<'_, AppState>) -> Result<Vec<String>, A
     keychain::store_key(KEYCHAIN_SERVICE, FS_KEY_ACCOUNT, &*fs_key)?;
 
     // Initialize database *before* committing auth state (HIGH-5: TOCTOU fix)
-    state.init_db(&db_key)?;
+    state.init_db(&db_key, &fs_key)?;
 
     // Only transition to Unlocked after DB init succeeds
     let mut auth = state.auth.lock().map_err(|_| lock_poisoned())?;
@@ -125,7 +128,7 @@ pub async fn unlock_app(state: State<'_, AppState>) -> Result<bool, AppError> {
 
     // Initialize database *before* committing auth state (HIGH-5: TOCTOU fix).
     // If init_db fails, auth state remains Locked — no inconsistent state.
-    state.init_db(&db_key)?;
+    state.init_db(&db_key, &fs_key)?;
 
     // Only transition to Unlocked after DB init succeeds
     let mut auth = state.auth.lock().map_err(|_| lock_poisoned())?;
@@ -157,7 +160,7 @@ pub async fn recover_app(state: State<'_, AppState>, words: Vec<String>) -> Resu
     keychain::store_key(KEYCHAIN_SERVICE, FS_KEY_ACCOUNT, &fs_key)?;
 
     // Initialize database *before* committing auth state (HIGH-5: TOCTOU fix)
-    state.init_db(&db_key)?;
+    state.init_db_reanchor(&db_key, &fs_key)?;
 
     // Only transition to Unlocked after DB init succeeds
     let mut auth = state.auth.lock().map_err(|_| lock_poisoned())?;
@@ -190,6 +193,8 @@ pub async fn reset_app(state: State<'_, AppState>) -> Result<(), AppError> {
     // 2. Delete keychain entries (ignore "not found" errors).
     let _ = keychain::delete_key(KEYCHAIN_SERVICE, DB_KEY_ACCOUNT);
     let _ = keychain::delete_key(KEYCHAIN_SERVICE, FS_KEY_ACCOUNT);
+    let _ = keychain::delete_key(KEYCHAIN_SERVICE, AUDIT_CHECKPOINT_A_ACCOUNT);
+    let _ = keychain::delete_key(KEYCHAIN_SERVICE, AUDIT_CHECKPOINT_B_ACCOUNT);
 
     // 3. Wipe the entire data directory (database, vault, model files, …).
     if state.data_dir.exists() {

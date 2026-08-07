@@ -17,6 +17,10 @@ pub enum AppError {
     #[error("Database error: {0}")]
     Database(#[from] rusqlite::Error),
 
+    /// The audit HMAC chain or its independently stored checkpoint did not verify.
+    #[error("Audit log integrity verification failed: {0}")]
+    AuditIntegrity(String),
+
     #[error("Filesystem error: {0}")]
     Filesystem(#[from] std::io::Error),
 
@@ -67,6 +71,7 @@ impl AppError {
                     "DATABASE_ERROR".to_string()
                 }
             }
+            AppError::AuditIntegrity(_) => "AUDIT_INTEGRITY_ERROR".to_string(),
             AppError::Filesystem(_) => "FILESYSTEM_ERROR".to_string(),
             AppError::Llm(_) => "LLM_ERROR".to_string(),
             AppError::AuthRequired => "AUTH_REQUIRED".to_string(),

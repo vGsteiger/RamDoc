@@ -68,10 +68,39 @@ impl AppState {
         }
     }
 
-    /// Initialize database after unlock with encryption key
-    pub fn init_db(&self, key: &[u8; 32]) -> Result<(), crate::error::AppError> {
+    /// Initialize the database and strictly verify its external audit checkpoint.
+    pub fn init_db(
+        &self,
+        db_key: &[u8; 32],
+        fs_key: &[u8; 32],
+    ) -> Result<(), crate::error::AppError> {
+        self.init_db_with_mode(db_key, fs_key, crate::database::CheckpointMode::Strict)
+    }
+
+    /// Initialize after an explicitly authorized recovery/restore and establish a
+    /// new checkpoint after the complete HMAC chain has verified.
+    pub fn init_db_reanchor(
+        &self,
+        db_key: &[u8; 32],
+        fs_key: &[u8; 32],
+    ) -> Result<(), crate::error::AppError> {
+        self.init_db_with_mode(db_key, fs_key, crate::database::CheckpointMode::Reanchor)
+    }
+
+    fn init_db_with_mode(
+        &self,
+        db_key: &[u8; 32],
+        fs_key: &[u8; 32],
+        mode: crate::database::CheckpointMode,
+    ) -> Result<(), crate::error::AppError> {
         let db_path = self.data_dir.join("dokassist.db");
-        let pool = crate::database::init_db(&db_path, key)?;
+        #[cfg(target_os = "macos")]
+        let pool = crate::database::init_db_with_audit_checkpoint(&db_path, db_key, fs_key, mode)?;
+        #[cfg(not(target_os = "macos"))]
+        let pool = {
+            let _ = (fs_key, mode);
+            crate::database::init_db(&db_path, db_key)?
+        };
 
         let mut db_lock = self.db.lock().map_err(|_| {
             crate::error::AppError::Database(rusqlite::Error::SqliteFailure(

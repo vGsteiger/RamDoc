@@ -704,10 +704,11 @@ pub fn restore_backup(
     // Check database schema version compatibility
     // We can restore backups from the same or older DB schema versions
     // The database migration system will upgrade if needed
-    if manifest.db_schema_version > 6 {
+    if manifest.db_schema_version > crate::database::LATEST_SCHEMA_VERSION {
         return Err(AppError::Validation(format!(
-            "Backup database schema version {} is newer than supported version 6",
-            manifest.db_schema_version
+            "Backup database schema version {} is newer than supported version {}",
+            manifest.db_schema_version,
+            crate::database::LATEST_SCHEMA_VERSION
         )));
     }
 

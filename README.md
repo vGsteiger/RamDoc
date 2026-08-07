@@ -33,7 +33,7 @@ commit prefixes such as `feat:` / `fix:`).
 - **Full-Text Search** — encrypted FTS5 search with proper operator escaping
 - **Local LLM Integration** — on-device report generation via llama.cpp with Metal GPU acceleration
 - **Clinical Workflows** — sessions, diagnoses (ICD-10), medications, file attachments, reports
-- **Audit Logging** — append-only compliance audit trail enforced by SQLite triggers
+- **Audit Logging** — HMAC-chained audit trail with an independently stored Keychain checkpoint
 - **Security First** — macOS Keychain integration, zeroised key material, BIP-39 recovery
 
 ## Security
@@ -45,7 +45,7 @@ RamDoc is designed with a defence-in-depth approach:
 | Data at rest | AES-256-GCM for all vault files; SQLCipher for the database |
 | Key storage | macOS Keychain (`ch.dokassist.app`) — keys never touch disk unencrypted |
 | Recovery | 24-word BIP-39 mnemonic with 256 bits of entropy and Argon2id key derivation |
-| Audit trail | Append-only `audit_log` SQLite table; deletion blocked by DB trigger |
+| Audit trail | HMAC-SHA-256 chained `audit_log`; chain head anchored in two alternating macOS Keychain slots |
 | Input sanitisation | AHV validation, FTS5 query escaping, LLM prompt sanitisation (fence + fullwidth variants) |
 | File safety | 500 MiB upload cap, symlink-escape prevention via `canonicalize()`, UUID temp filenames |
 | Model integrity | SHA-256 verification on every GGUF model download; 60 GiB cap |
@@ -75,9 +75,10 @@ RamDoc is designed with a defence-in-depth approach:
 | `lib/amdp.ts` | AMDP psychopathology category definitions and serialize/deserialize helpers |
 | `lib/components/` | AhvInput, PatientForm, ReportStream, AMDP forms, file management, clinical workflow UI |
 
-**Database** — SQLCipher with two migrations:
-- `001_initial_schema.sql` — patients, sessions, diagnoses, medications, files, reports, FTS5
+**Database** — SQLCipher with versioned migrations, including:
+- `001_initial.sql` — patients, sessions, diagnoses, medications, files, reports, FTS5
 - `002_audit_append_only.sql` — audit_log table + deletion-blocking trigger
+- `014_audit_hmac_chain.sql` — canonical per-row HMAC chain + external Keychain checkpoint
 
 ## Development
 
