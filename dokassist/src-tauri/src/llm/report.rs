@@ -1,6 +1,6 @@
 use super::{
     engine::{AgentMessage, LlmEngine},
-    harness::GenerationTask,
+    harness::{GenerationTask, SamplerConfig},
     prompts::{self, LetterType, ReportType},
     sanitize::{build_delimited_prompt, sanitize_for_prompt},
     thinking::{self, ThinkingEffort},
@@ -89,6 +89,35 @@ pub fn generate_report_streaming_with_prompt(
     system_prompt: &str,
     thinking_effort: ThinkingEffort,
 ) -> Result<String, AppError> {
+    generate_report_streaming_with_sampler(
+        app,
+        engine,
+        report_type,
+        patient_context,
+        session_notes,
+        additional_context,
+        instructions,
+        system_prompt,
+        thinking_effort,
+        None,
+    )
+}
+
+/// Generate a report with an optional validated sampler override. Callers
+/// that do not opt in retain the task-specific defaults.
+#[allow(clippy::too_many_arguments)]
+pub fn generate_report_streaming_with_sampler(
+    app: &tauri::AppHandle,
+    engine: &LlmEngine,
+    report_type: ReportType,
+    patient_context: &str,
+    session_notes: &str,
+    additional_context: Option<&str>,
+    instructions: Option<&str>,
+    system_prompt: &str,
+    thinking_effort: ThinkingEffort,
+    sampler: Option<SamplerConfig>,
+) -> Result<String, AppError> {
     let summary_opt = if needs_summarization(
         engine,
         system_prompt,
@@ -119,12 +148,13 @@ pub fn generate_report_streaming_with_prompt(
         instructions,
     );
 
-    thinking::generate_with_think_budget(
+    thinking::generate_with_think_budget_and_sampler(
         engine,
         system_prompt,
         &user_message,
         GenerationTask::Report,
         thinking_effort,
+        sampler,
         &|token| {
             let _ = app.emit("report-chunk", token);
         },

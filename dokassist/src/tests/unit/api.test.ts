@@ -397,8 +397,27 @@ describe('generateReport', () => {
       sessionNotes: 'session notes',
       systemPrompt: undefined,
       thinkingEffort: null,
+      sampler: null,
     });
     expect(result).toBe('Generated report text');
+  });
+
+  it('passes a sampler override when provided', async () => {
+    mockInvoke.mockResolvedValueOnce('');
+    const sampler = {
+      temperature: 0.2,
+      top_k: 20,
+      top_p: 0.9,
+      min_p: 0,
+      repeat_penalty: 1,
+      presence_penalty: 0,
+      seed: 7,
+    };
+    await generateReport('ctx', 'type', 'notes', undefined, 'low', sampler);
+    expect(mockInvoke).toHaveBeenCalledWith(
+      'generate_report',
+      expect.objectContaining({ sampler })
+    );
   });
 
   it('passes an optional system_prompt when provided', async () => {

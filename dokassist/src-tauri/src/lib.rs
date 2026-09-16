@@ -21,6 +21,9 @@ mod touch_id;
 #[cfg(feature = "benchmark-harness")]
 #[doc(hidden)]
 pub use llm::benchmark_harness::cli_main as local_inference_benchmark_main;
+#[cfg(feature = "benchmark-harness")]
+#[doc(hidden)]
+pub use llm::referral_sweep::cli_main as referral_quality_sweep_main;
 
 #[cfg(test)]
 mod integration_tests;

@@ -1046,6 +1046,16 @@ export interface UpdateReport {
   session_ids?: string;
 }
 
+export interface SamplerConfig {
+  temperature: number;
+  top_k: number;
+  top_p: number;
+  min_p: number;
+  repeat_penalty: number;
+  presence_penalty: number;
+  seed: number;
+}
+
 // === Report API ===
 
 export async function createReport(input: CreateReport): Promise<Report> {
@@ -1081,7 +1091,8 @@ export async function generateReport(
   reportType: string,
   sessionNotes: string,
   systemPrompt?: string,
-  thinkingEffort?: ThinkingEffort
+  thinkingEffort?: ThinkingEffort,
+  sampler?: SamplerConfig
 ): Promise<string> {
   return await invoke<string>('generate_report', {
     patientContext,
@@ -1089,6 +1100,7 @@ export async function generateReport(
     sessionNotes,
     systemPrompt,
     thinkingEffort: thinkingEffort ?? null,
+    sampler: sampler ?? null,
   });
 }
 

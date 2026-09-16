@@ -16,6 +16,9 @@ pub mod memory_governor;
 mod profile_benchmark;
 mod prompts;
 pub mod quantization;
+#[cfg(any(test, feature = "benchmark-harness"))]
+#[doc(hidden)]
+pub mod referral_sweep;
 mod report;
 pub mod sanitize;
 pub mod thinking;
@@ -27,7 +30,7 @@ pub use extract::{extract_metadata_with_prompt, FileMetadata};
 pub use prompts::{LetterType, ReportType, SYSTEM_PROMPT_DE, SYSTEM_PROMPT_FR};
 pub use report::{
     generate_evidence_answer_streaming, generate_letter_streaming_with_prompt,
-    generate_report_streaming_with_prompt, generate_session_summary_streaming_with_prompt,
-    improve_text_streaming_with_prompt,
+    generate_report_streaming_with_prompt, generate_report_streaming_with_sampler,
+    generate_session_summary_streaming_with_prompt, improve_text_streaming_with_prompt,
 };
 pub use thinking::ThinkingEffort;

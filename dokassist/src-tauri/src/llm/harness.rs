@@ -6,6 +6,7 @@
 
 use super::thinking::ThinkingEffort;
 use llama_cpp_2::sampling::LlamaSampler;
+use serde::{Deserialize, Serialize};
 
 /// What the clinician asked the model to do. Sampling and grounding depend on
 /// this more than on the user's effort knob.
@@ -22,12 +23,16 @@ pub enum GenerationTask {
 }
 
 /// llama.cpp sampler chain for one generation.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct SamplerConfig {
     pub temperature: f32,
     pub top_k: i32,
     pub top_p: f32,
     pub min_p: f32,
+    pub repeat_penalty: f32,
+    pub presence_penalty: f32,
+    #[serde(default)]
+    pub seed: u32,
 }
 
 impl SamplerConfig {
@@ -40,6 +45,9 @@ impl SamplerConfig {
                 top_k: 1,
                 top_p: 1.0,
                 min_p: 0.0,
+                repeat_penalty: 1.0,
+                presence_penalty: 0.0,
+                seed: 0,
             }
         } else {
             Self {
@@ -47,17 +55,40 @@ impl SamplerConfig {
                 top_k: 40,
                 top_p: 0.9,
                 min_p: 0.05,
+                repeat_penalty: 1.0,
+                presence_penalty: 0.0,
+                seed: 0,
             }
         }
     }
 
+    pub fn validate(self) -> Result<Self, String> {
+        if !(0.0..=2.0).contains(&self.temperature) {
+            return Err("temperature must be between 0 and 2".into());
+        }
+        if !(1..=200).contains(&self.top_k) {
+            return Err("top_k must be between 1 and 200".into());
+        }
+        if !(0.0..=1.0).contains(&self.top_p) || !(0.0..=1.0).contains(&self.min_p) {
+            return Err("top_p and min_p must be between 0 and 1".into());
+        }
+        if !(0.8..=2.0).contains(&self.repeat_penalty) {
+            return Err("repeat_penalty must be between 0.8 and 2".into());
+        }
+        if !(0.0..=2.0).contains(&self.presence_penalty) {
+            return Err("presence_penalty must be between 0 and 2".into());
+        }
+        Ok(self)
+    }
+
     pub fn build(self) -> LlamaSampler {
         LlamaSampler::chain_simple([
+            LlamaSampler::penalties(64, self.repeat_penalty, 0.0, self.presence_penalty),
             LlamaSampler::temp(self.temperature),
             LlamaSampler::min_p(self.min_p.max(0.0), 1),
             LlamaSampler::top_k(self.top_k),
             LlamaSampler::top_p(self.top_p, 1),
-            LlamaSampler::dist(0),
+            LlamaSampler::dist(self.seed),
         ])
     }
 }
@@ -102,6 +133,9 @@ impl GenerationTask {
                 top_k: 20,
                 top_p: 0.9,
                 min_p: 0.1,
+                repeat_penalty: 1.0,
+                presence_penalty: 0.0,
+                seed: 0,
             },
             Self::Extract => SamplerConfig::from_temperature(0.0),
             Self::Evidence => SamplerConfig::from_temperature(0.2),
@@ -173,6 +207,13 @@ mod tests {
         let greedy = SamplerConfig::from_temperature(0.0);
         assert_eq!(greedy.top_k, 1);
         assert_eq!(greedy.min_p, 0.0);
+    }
+
+    #[test]
+    fn rejects_unsafe_custom_sampler_values() {
+        let mut sampler = SamplerConfig::from_temperature(0.35);
+        sampler.top_p = 1.5;
+        assert!(sampler.validate().is_err());
     }
 
     #[test]
