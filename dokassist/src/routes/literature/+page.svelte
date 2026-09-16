@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { resolve } from '$app/paths';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import {
     listAllLiterature,
@@ -8,12 +9,16 @@
     downloadLiterature,
     processLiterature,
     updateLiteratureMetadata,
+    getMedicationReferenceVersion,
+    searchMedicationReference,
     type Literature,
+    type SubstanceSummary,
     type AppError,
     parseError,
   } from '$lib/api';
   import ErrorDisplay from '$lib/components/ErrorDisplay.svelte';
-  import { FileText, FileType, Check, AlertTriangle } from 'lucide-svelte';
+  import MedicationInfoPanel from '$lib/components/MedicationInfoPanel.svelte';
+  import { FileText, FileType, Check, AlertTriangle, Database, Search } from 'lucide-svelte';
   import { ListSkeleton } from '$lib/components/ui';
   import { t } from '$lib/translations';
 
@@ -25,10 +30,20 @@
   let editingDescription: string | null = $state(null);
   let descriptionText = $state('');
   let confirmingDelete: string | null = $state(null);
+  let medicationReferenceVersion: string | null = $state(null);
+  let medicationQuery = $state('');
+  let medicationResults: SubstanceSummary[] = $state([]);
+  let selectedMedicationId: string | null = $state(null);
+  let medicationSearching = $state(false);
+  let medicationSearchSequence = 0;
 
   let unlisten: UnlistenFn | null = null;
 
   onMount(() => {
+    getMedicationReferenceVersion()
+      .then((version) => (medicationReferenceVersion = version))
+      .catch(() => (medicationReferenceVersion = null));
+
     loadLiterature().then(() => {
       listen<string>('literature-processed', (event) => {
         const litId = event.payload;
@@ -45,6 +60,27 @@
       }
     };
   });
+
+  async function handleMedicationSearch() {
+    const query = medicationQuery.trim();
+    const sequence = ++medicationSearchSequence;
+    selectedMedicationId = null;
+    if (query.length < 2) {
+      medicationResults = [];
+      medicationSearching = false;
+      return;
+    }
+
+    medicationSearching = true;
+    try {
+      const results = await searchMedicationReference(query);
+      if (sequence === medicationSearchSequence) medicationResults = results;
+    } catch (err) {
+      if (sequence === medicationSearchSequence) error = parseError(err);
+    } finally {
+      if (sequence === medicationSearchSequence) medicationSearching = false;
+    }
+  }
 
   async function loadLiterature() {
     loading = true;
@@ -181,6 +217,84 @@
       </div>
     {/if}
 
+    <section class="mb-8 rounded-card border border-line-subtle bg-surface-raised p-5">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div class="flex items-start gap-3">
+          <div class="rounded-control bg-accent-subtle p-2 text-accent-fg">
+            <Database size={20} />
+          </div>
+          <div>
+            <h2 class="text-heading font-semibold text-fg">
+              {$t('literature.medicationReferenceTitle')}
+            </h2>
+            <p class="mt-1 text-body text-fg-muted">
+              {$t('literature.medicationReferenceDescription')}
+            </p>
+          </div>
+        </div>
+        {#if medicationReferenceVersion}
+          <span class="rounded-full bg-success-subtle px-2.5 py-1 text-caption text-success-fg">
+            {$t('literature.medicationReferenceVersion').replace(
+              '{version}',
+              medicationReferenceVersion
+            )}
+          </span>
+        {/if}
+      </div>
+
+      {#if medicationReferenceVersion}
+        <div class="relative mt-4 max-w-2xl">
+          <Search
+            size={16}
+            class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fg-subtle"
+          />
+          <input
+            bind:value={medicationQuery}
+            oninput={handleMedicationSearch}
+            class="h-10 w-full rounded-control border border-line bg-surface pl-9 pr-3 text-body text-fg focus:border-accent focus:outline-none"
+            placeholder={$t('literature.medicationSearchPlaceholder')}
+          />
+        </div>
+
+        {#if medicationSearching}
+          <p class="mt-3 text-caption text-fg-muted">{$t('literature.medicationSearching')}</p>
+        {:else if medicationQuery.trim().length >= 2 && medicationResults.length === 0}
+          <p class="mt-3 text-caption text-fg-muted">{$t('literature.medicationNoResults')}</p>
+        {:else if medicationResults.length > 0}
+          <div class="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {#each medicationResults as medication (medication.id)}
+              <button
+                type="button"
+                onclick={() => (selectedMedicationId = medication.id)}
+                class="rounded-control border px-3 py-2 text-left transition-colors {selectedMedicationId ===
+                medication.id
+                  ? 'border-accent bg-accent-subtle'
+                  : 'border-line bg-surface hover:border-accent'}"
+              >
+                <span class="block font-medium text-fg">{medication.name_de}</span>
+                <span class="mt-0.5 block text-caption text-fg-muted">
+                  {[medication.atc_code, ...medication.trade_names.slice(0, 2)]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </span>
+              </button>
+            {/each}
+          </div>
+          <MedicationInfoPanel substanceId={selectedMedicationId} />
+        {/if}
+      {:else}
+        <div class="mt-4 flex flex-wrap items-center gap-3 rounded-control bg-surface-sunken p-3">
+          <p class="text-body text-fg-muted">{$t('literature.medicationReferenceMissing')}</p>
+          <a
+            href={resolve('/settings')}
+            class="text-body font-medium text-accent-fg hover:underline"
+          >
+            {$t('literature.openSettings')}
+          </a>
+        </div>
+      {/if}
+    </section>
+
     <!-- Upload Section -->
     <div class="mb-6">
       <label
@@ -233,7 +347,7 @@
     {:else}
       <!-- Literature List -->
       <div class="grid gap-4 grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
-        {#each literature as lit}
+        {#each literature as lit (lit.id)}
           <div class="bg-surface-raised border border-line-subtle rounded-card p-4">
             <div class="flex items-start justify-between mb-3">
               <div class="flex items-center gap-2">

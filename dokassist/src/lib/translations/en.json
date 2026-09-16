@@ -709,7 +709,15 @@
     "noDescription": "No description",
     "processingTitle": "Processing…",
     "processedTitle": "Extracted and embedded ({count} chunks)",
-    "notProcessedTitle": "Not yet processed"
+    "notProcessedTitle": "Not yet processed",
+    "medicationReferenceTitle": "Medication reference",
+    "medicationReferenceDescription": "Search the locally installed Swissmedic AIPS data by active ingredient or brand name. The AI assistant can use the same reference when answering medication questions.",
+    "medicationReferenceVersion": "Installed · {version}",
+    "medicationSearchPlaceholder": "Search active ingredient or brand name…",
+    "medicationSearching": "Searching medication reference…",
+    "medicationNoResults": "No matching medication found.",
+    "medicationReferenceMissing": "Install the medication reference database to browse it here and make it available to the AI assistant.",
+    "openSettings": "Open Settings"
   },
   "topbar": {
     "searchPlaceholder": "Quick search... (Cmd+K for command palette)",
@@ -764,6 +772,7 @@
       "create_diagnosis": "diagnoses",
       "list_medications": "medications",
       "create_medication": "medications",
+      "lookup_medication_reference": "the medication reference",
       "compare_medications": "medications",
       "draft_email": "an email draft",
       "list_treatment_plans": "treatment plans"

@@ -709,7 +709,15 @@
     "noDescription": "Keine Beschreibung",
     "processingTitle": "Wird verarbeitet…",
     "processedTitle": "Extrahiert und eingebettet ({count} Abschnitte)",
-    "notProcessedTitle": "Noch nicht verarbeitet"
+    "notProcessedTitle": "Noch nicht verarbeitet",
+    "medicationReferenceTitle": "Medikamentenreferenz",
+    "medicationReferenceDescription": "Durchsuchen Sie die lokal installierten Swissmedic-AIPS-Daten nach Wirkstoff oder Handelsname. Der KI-Assistent kann dieselbe Referenz für Medikamentenfragen verwenden.",
+    "medicationReferenceVersion": "Installiert · {version}",
+    "medicationSearchPlaceholder": "Wirkstoff oder Handelsname suchen…",
+    "medicationSearching": "Medikamentenreferenz wird durchsucht…",
+    "medicationNoResults": "Kein passendes Medikament gefunden.",
+    "medicationReferenceMissing": "Installieren Sie die Medikamenten-Referenzdatenbank, um sie hier zu durchsuchen und dem KI-Assistenten bereitzustellen.",
+    "openSettings": "Einstellungen öffnen"
   },
   "topbar": {
     "searchPlaceholder": "Schnellsuche... (Cmd+K für Befehlspalette)",
@@ -764,6 +772,7 @@
       "create_diagnosis": "Diagnosen",
       "list_medications": "Medikamente",
       "create_medication": "Medikamente",
+      "lookup_medication_reference": "Medikamentenreferenz",
       "compare_medications": "Medikamente",
       "draft_email": "E-Mail-Entwurf",
       "list_treatment_plans": "Behandlungspläne"
