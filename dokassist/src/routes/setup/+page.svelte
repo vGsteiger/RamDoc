@@ -88,6 +88,14 @@
         >
           {$t('auth.retry')}
         </button>
+        <p class="mt-4">
+          <a
+            href="/reset"
+            class="text-caption text-fg-muted hover:text-danger-fg transition-colors"
+          >
+            {$t('auth.resetLink')}
+          </a>
+        </p>
       </div>
     {:else if !showConfirmation}
       <div class="space-y-6">
