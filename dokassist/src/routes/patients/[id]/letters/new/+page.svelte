@@ -20,6 +20,7 @@
   import { thinkingEffort } from '$lib/stores/thinking';
   import { get } from 'svelte/store';
   import ThinkingEffortSelect from '$lib/components/ThinkingEffortSelect.svelte';
+  import { ThinkingIndicator } from '$lib/components/ui';
   import { stripThinkTags } from '$lib/llm/strip-think';
 
   const patientId = $derived(page.params.id!);
@@ -39,6 +40,7 @@
   let editableContent = $state('');
 
   let isGenerating = $state(false);
+  let activityStartedAt = $state<number | null>(null);
   let isLoading = $state(true);
   let isSaving = $state(false);
   let error = $state<string | null>(null);
@@ -113,6 +115,7 @@
     }
 
     isGenerating = true;
+    activityStartedAt = Date.now();
     generatedContent = '';
     error = null;
 
@@ -123,6 +126,7 @@
 
       unlistenDone = await listen('letter-done', () => {
         isGenerating = false;
+        activityStartedAt = null;
         editableContent = stripThinkTags(generatedContent);
         // Unlisten after generation completes
         if (unlistenChunk) {
@@ -147,6 +151,7 @@
     } catch (err) {
       error = String(err);
       isGenerating = false;
+      activityStartedAt = null;
       if (unlistenChunk) unlistenChunk();
       if (unlistenDone) unlistenDone();
     }
@@ -334,12 +339,17 @@
       </div>
 
       <!-- Generated Content -->
-      {#if generatedContent || editableContent}
+      {#if generatedContent || editableContent || isGenerating}
         <div>
           <label for="letter-generated" class="block text-body font-medium text-fg-muted mb-2">
             {$t('letters.generatedLetter')}
-            {#if isGenerating}
-              <span class="text-accent-fg text-caption">({$t('letters.generating')})</span>
+            {#if isGenerating && activityStartedAt}
+              <span class="ml-2 inline-flex align-middle">
+                <ThinkingIndicator
+                  startedAt={activityStartedAt}
+                  label={$t('letters.activityWriting')}
+                />
+              </span>
             {/if}
           </label>
           <p class="text-body text-fg-muted mb-2">{$t('letters.reviewBeforeSaving')}</p>

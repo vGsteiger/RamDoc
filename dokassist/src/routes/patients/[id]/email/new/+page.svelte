@@ -20,6 +20,7 @@
   } from '$lib/api';
   import { thinkingEffort } from '$lib/stores/thinking';
   import ErrorDisplay from '$lib/components/ErrorDisplay.svelte';
+  import { ThinkingIndicator } from '$lib/components/ui';
   import { t } from '$lib/translations';
 
   $: patientId = $page.params.id!;
@@ -35,6 +36,7 @@
   let showAiPanel = false;
   let aiPrompt = '';
   let isGenerating = false;
+  let activityStartedAt: number | null = null;
   let aiError = '';
   let aiDraft = '';
   let aiThinking = '';
@@ -75,6 +77,7 @@
   async function handleGenerateDraft() {
     if (!engineStatus?.is_loaded || isGenerating) return;
     isGenerating = true;
+    activityStartedAt = Date.now();
     aiError = '';
     rawDraft = '';
     aiDraft = '';
@@ -89,6 +92,7 @@
       await runAgentTurn(session.id, prompt, get(thinkingEffort));
     } catch (e) {
       isGenerating = false;
+      activityStartedAt = null;
       aiError = $errorText(e);
     }
   }
@@ -175,6 +179,7 @@
 
     unlistenDone = await listen('agent-done', () => {
       isGenerating = false;
+      activityStartedAt = null;
       const parsed = parseRawDraft(rawDraft);
       aiDraft = parsed.draft;
       aiThinking = parsed.thinking;
@@ -182,6 +187,7 @@
 
     unlistenError = await listen<{ message: string }>('agent-error', (event) => {
       isGenerating = false;
+      activityStartedAt = null;
       aiError = event.payload?.message ?? String(event.payload);
     });
   });
@@ -294,6 +300,12 @@
               <div class="flex items-center justify-between">
                 <span class="text-body font-medium text-fg-muted">{$t('email.generatedDraft')}</span
                 >
+                {#if isGenerating && activityStartedAt}
+                  <ThinkingIndicator
+                    startedAt={activityStartedAt}
+                    label={$t('email.activityWriting')}
+                  />
+                {/if}
                 {#if aiDraft && !isGenerating}
                   <button
                     on:click={() => {

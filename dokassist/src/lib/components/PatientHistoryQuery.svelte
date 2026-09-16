@@ -14,8 +14,10 @@
     linkPatientHistoryCitations,
     patientHistoryCitationHref,
   } from '$lib/patient-history-citations';
-  import { Loader2, Send, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-svelte';
+  import { Send, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-svelte';
   import ThinkingEffortSelect from './ThinkingEffortSelect.svelte';
+  import { ThinkingIndicator } from '$lib/components/ui';
+  import { chatActivityStage } from '$lib/chat-activity';
   import { thinkingEffort } from '$lib/stores/thinking';
   import { get } from 'svelte/store';
   import { stripThinkTags } from '$lib/llm/strip-think';
@@ -29,6 +31,7 @@
   let question = $state('');
   let response = $state('');
   let isQuerying = $state(false);
+  let activityStartedAt = $state<number | null>(null);
   let error = $state('');
   let isExpanded = $state(true);
   let manifest = $state<EvidenceManifest | null>(null);
@@ -71,6 +74,7 @@
 
     try {
       isQuerying = true;
+      activityStartedAt = Date.now();
       error = '';
       response = '';
       manifest = null;
@@ -92,6 +96,7 @@
 
       unlistenDone = await listen('patient-history-done', () => {
         isQuerying = false;
+        activityStartedAt = null;
         // Clean up listeners
         if (unlistenChunk) {
           unlistenChunk();
@@ -116,6 +121,7 @@
         $t('errors.referenceLine').replace('{ref}', appError.ref);
       console.error('Error querying patient history:', appError);
       isQuerying = false;
+      activityStartedAt = null;
       // Clean up listeners on error
       if (unlistenChunk) {
         unlistenChunk();
@@ -197,7 +203,6 @@
           class="h-8 px-3 bg-accent text-on-accent rounded-control hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 self-start"
         >
           {#if isQuerying}
-            <Loader2 class="w-4 h-4 animate-spin" />
             <span>{$t('patientHistory.querying')}</span>
           {:else}
             <Send class="w-4 h-4" />
@@ -218,11 +223,14 @@
         <div class="bg-surface-sunken rounded-card p-4 border border-line">
           <div class="flex items-center justify-between mb-2">
             <h4 class="text-body font-semibold text-fg-muted">{$t('patientHistory.response')}</h4>
-            {#if isQuerying}
-              <div class="flex items-center gap-2 text-body text-fg-muted">
-                <Loader2 class="w-4 h-4 animate-spin" />
-                <span>{$t('patientHistory.generating')}</span>
-              </div>
+            {#if isQuerying && activityStartedAt}
+              <ThinkingIndicator
+                stage={chatActivityStage(response)}
+                startedAt={activityStartedAt}
+                label={chatActivityStage(response) === 'writing'
+                  ? $t('chat.activity.writing')
+                  : $t('patientHistory.askingRecord')}
+              />
             {/if}
           </div>
           <div class="prose prose-sm dark:prose-invert max-w-none">
@@ -240,7 +248,7 @@
                   {:else}{part.text}{/if}
                 {/each}
               </div>
-            {:else}
+            {:else if !isQuerying}
               <div class="text-fg-muted italic">{$t('patientHistory.waitingForResponse')}</div>
             {/if}
           </div>

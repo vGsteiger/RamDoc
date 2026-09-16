@@ -7,6 +7,7 @@
   import { t } from '$lib/translations';
   import { thinkingEffort } from '$lib/stores/thinking';
   import { stripThinkTags } from '$lib/llm/strip-think';
+  import { ThinkingIndicator } from '$lib/components/ui';
 
   export let content: string = '';
   export let readonly: boolean = false;
@@ -17,6 +18,7 @@
   let suggestionInstruction = get(t)('reports.editor.defaultInstruction');
   let generatedSuggestion = '';
   let isGeneratingSuggestion = false;
+  let activityStartedAt: number | null = null;
   let error: AppError | null = null;
   let llmStatus: LlmEngineStatus | null = null;
 
@@ -71,6 +73,7 @@
       }
 
       isGeneratingSuggestion = true;
+      activityStartedAt = Date.now();
       error = null;
       generatedSuggestion = '';
       showSuggestions = true;
@@ -83,6 +86,7 @@
       unlistenDone = await listen('text-improvement-done', () => {
         generatedSuggestion = stripThinkTags(generatedSuggestion);
         isGeneratingSuggestion = false;
+        activityStartedAt = null;
         // Unlisten after completion
         if (unlistenChunk) {
           unlistenChunk();
@@ -104,6 +108,7 @@
     } catch (e) {
       error = parseError(e);
       isGeneratingSuggestion = false;
+      activityStartedAt = null;
       // Unlisten on error
       if (unlistenChunk) {
         unlistenChunk();
@@ -252,10 +257,12 @@
       <div class="flex-1 overflow-auto p-4">
         {#if isGeneratingSuggestion}
           <div class="text-body text-fg-muted">
-            <div class="flex items-center gap-2">
-              <div class="animate-pulse h-2 w-2 bg-accent rounded-full"></div>
-              <span>{$t('reports.editor.generatingSuggestion')}</span>
-            </div>
+            {#if activityStartedAt}
+              <ThinkingIndicator
+                startedAt={activityStartedAt}
+                label={$t('reports.editor.activityWriting')}
+              />
+            {/if}
             {#if generatedSuggestion}
               <pre
                 class="mt-4 whitespace-pre-wrap font-sans text-fg text-body">{generatedSuggestion}</pre>
