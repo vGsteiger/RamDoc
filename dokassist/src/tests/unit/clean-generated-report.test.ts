@@ -16,11 +16,9 @@ describe('cleanGeneratedReport', () => {
     );
   });
 
-  it('can normalize Swiss orthography when requested', () => {
-    expect(
-      cleanGeneratedReport('Mit freundlichen Grüßen\nStraße 4', {
-        normalizeSwissOrthography: true,
-      })
-    ).toBe('Mit freundlichen Grüssen\nStrasse 4');
+  it('preserves legitimate ß characters in names and addresses', () => {
+    expect(cleanGeneratedReport('Dr. Weiß\nGoethestraße 4\nGrüßen')).toBe(
+      'Dr. Weiß\nGoethestraße 4\nGrüßen'
+    );
   });
 });
