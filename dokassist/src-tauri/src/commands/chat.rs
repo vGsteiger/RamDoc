@@ -186,7 +186,10 @@ pub async fn run_agent_turn(
 
     let _ = app.emit(
         "agent-done",
-        serde_json::json!({"final_answer": result.final_answer}),
+        serde_json::json!({
+            "final_answer": result.final_answer,
+            "session_id": session_id_clone,
+        }),
     );
 
     Ok(AgentTurnResult {

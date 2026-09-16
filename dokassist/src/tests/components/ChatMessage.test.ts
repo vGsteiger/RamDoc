@@ -78,6 +78,16 @@ describe('ChatMessage', () => {
     expect(screen.queryByText('●')).not.toBeInTheDocument();
   });
 
+  it('stays on thinking when the first streamed chunk is only whitespace', () => {
+    render(ChatMessage, {
+      props: {
+        message: makeMsg({ role: 'assistant', content: '\n' }),
+        isStreaming: true,
+      },
+    });
+    expect(screen.getByRole('status')).toHaveTextContent('Thinking');
+  });
+
   it('names the tool that just ran while still streaming', () => {
     render(ChatMessage, {
       props: {
@@ -87,6 +97,17 @@ describe('ChatMessage', () => {
       },
     });
     expect(screen.getByRole('status')).toHaveTextContent('Looked up medications');
+  });
+
+  it('names a completed write tool as prepared, not looked up', () => {
+    render(ChatMessage, {
+      props: {
+        message: makeMsg({ role: 'assistant', content: '' }),
+        isStreaming: true,
+        activeToolName: 'write_report',
+      },
+    });
+    expect(screen.getByRole('status')).toHaveTextContent('Prepared the report');
   });
 
   it('uses Reasoning while a think block is still streaming', () => {

@@ -9,9 +9,16 @@ export const ELAPSED_AFTER_SECONDS = 2;
 /** Swap "Thinking" for "Still thinking" so a long wait does not look frozen. */
 export const STILL_THINKING_AFTER_SECONDS = 8;
 
+const WRITE_TOOLS = new Set(['draft_email', 'write_report']);
+
+/** Proposal/write tools; everything else is treated as a lookup. */
+export function isWriteTool(toolName: string): boolean {
+  return toolName.startsWith('create_') || WRITE_TOOLS.has(toolName);
+}
+
 export function chatActivityStage(content: string, toolName?: string | null): ChatActivityStage {
   if (toolName) return 'looking_up';
-  if (!content) return 'thinking';
+  if (!content.trim()) return 'thinking';
   if (content.startsWith(THINK_START)) {
     const end = content.indexOf(THINK_END);
     if (end === -1) return 'reasoning';
@@ -34,6 +41,22 @@ export function chatToolLabel(toolName: string, translate: (key: string) => stri
   return translated === key ? toolName.replaceAll('_', ' ') : translated;
 }
 
+export function chatToolActivityLabel(
+  toolName: string,
+  translate: (key: string) => string,
+  inProgress = false
+): string {
+  const tool = chatToolLabel(toolName, translate);
+  const key = inProgress
+    ? isWriteTool(toolName)
+      ? 'chat.activity.preparing'
+      : 'chat.activity.lookingUp'
+    : isWriteTool(toolName)
+      ? 'chat.activity.prepared'
+      : 'chat.activity.lookedUp';
+  return translate(key).replace('{tool}', tool);
+}
+
 export function chatActivityLabel(
   stage: ChatActivityStage,
   elapsedSeconds: number,
@@ -41,10 +64,7 @@ export function chatActivityLabel(
   toolName?: string | null
 ): string {
   if (stage === 'looking_up' && toolName) {
-    return translate('chat.activity.lookedUp').replace(
-      '{tool}',
-      chatToolLabel(toolName, translate)
-    );
+    return chatToolActivityLabel(toolName, translate);
   }
   if (stage === 'thinking' && elapsedSeconds >= STILL_THINKING_AFTER_SECONDS) {
     return translate('chat.activity.stillThinking');
