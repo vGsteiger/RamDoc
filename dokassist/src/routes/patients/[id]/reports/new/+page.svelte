@@ -123,7 +123,9 @@
       unlistenDone = await listen('report-done', () => {
         isGenerating = false;
         isSummarizing = false;
-        editableContent = cleanGeneratedReport(generatedContent);
+        editableContent = cleanGeneratedReport(generatedContent, {
+          normalizeSwissOrthography: selectedType === 'Ueberweisungsschreiben',
+        });
         isEditing = true;
         // Unlisten after completion
         if (unlistenSummarizing) {
