@@ -747,6 +747,7 @@
       "reasoning": "Reasoning",
       "writing": "Writing",
       "lookedUp": "Looked up {tool}",
+      "lookingUp": "Looking up {tool}",
       "looking_up": "Looking things up"
     },
     "toolNames": {

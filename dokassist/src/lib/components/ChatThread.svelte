@@ -9,8 +9,9 @@
   import { ThinkingIndicator } from '$lib/components/ui';
   import { get } from 'svelte/store';
   import { goto } from '$app/navigation';
-  import { AlertTriangle } from 'lucide-svelte';
+  import { AlertTriangle, Wrench } from 'lucide-svelte';
   import { t } from '$lib/translations';
+  import { chatToolLabel } from '$lib/chat-activity';
 
   interface Props {
     sessionId: string;
@@ -25,6 +26,7 @@
   let isStreaming = $state(false);
   let activityStartedAt = $state<number | null>(null);
   let activeToolName = $state<string | null>(null);
+  let pendingTool = $state<{ name: string; startedAt: number } | null>(null);
   let inputText = $state('');
   let isModelLoaded = $derived($engine.status ? $engine.status.is_loaded : true);
   let isLoadingModel = $derived($engine.isLoading);
@@ -34,6 +36,7 @@
 
   let unlistenChunk: UnlistenFn | null = null;
   let unlistenDone: UnlistenFn | null = null;
+  let unlistenToolStarted: UnlistenFn | null = null;
   let unlistenToolCalled: UnlistenFn | null = null;
   let unlistenError: UnlistenFn | null = null;
 
@@ -59,6 +62,7 @@
     errorMessage = '';
     activityStartedAt = Date.now();
     activeToolName = null;
+    pendingTool = null;
 
     // Optimistic user message
     const optimisticMsg: ChatMessageRow = {
@@ -81,6 +85,7 @@
       isStreaming = false;
       activityStartedAt = null;
       activeToolName = null;
+      pendingTool = null;
       const msg =
         e instanceof Error
           ? e.message
@@ -107,6 +112,7 @@
 
     unlistenChunk = await listen<string>('agent-chunk', (event) => {
       activeToolName = null;
+      pendingTool = null;
       streamingContent += event.payload;
       scrollToBottom();
     });
@@ -116,13 +122,24 @@
       streamingContent = '';
       activityStartedAt = null;
       activeToolName = null;
+      pendingTool = null;
       await loadMessages();
       scrollToBottom();
     });
 
+    unlistenToolStarted = await listen<{ name: string; args_json: string }>(
+      'agent-tool-started',
+      (event) => {
+        pendingTool = { name: event.payload.name, startedAt: Date.now() };
+        activeToolName = event.payload.name;
+        scrollToBottom();
+      }
+    );
+
     unlistenToolCalled = await listen<{ name: string; args_json: string; result_json: string }>(
       'agent-tool-called',
       async (event) => {
+        pendingTool = null;
         activeToolName = event.payload.name;
         await loadMessages();
         scrollToBottom();
@@ -134,6 +151,7 @@
       streamingContent = '';
       activityStartedAt = null;
       activeToolName = null;
+      pendingTool = null;
       errorMessage = event.payload.message;
     });
   });
@@ -141,6 +159,7 @@
   onDestroy(() => {
     unlistenChunk?.();
     unlistenDone?.();
+    unlistenToolStarted?.();
     unlistenToolCalled?.();
     unlistenError?.();
   });
@@ -178,8 +197,25 @@
       <ChatMessage {message} />
     {/each}
 
+    {#if pendingTool}
+      <div class="flex justify-start mb-2">
+        <div class="max-w-[80%] rounded-card border border-line bg-surface-hover px-3 py-2">
+          <div class="flex items-center gap-2">
+            <Wrench size={14} class="text-fg-subtle shrink-0" />
+            <ThinkingIndicator
+              startedAt={pendingTool.startedAt}
+              label={$t('chat.activity.lookingUp').replace(
+                '{tool}',
+                chatToolLabel(pendingTool.name, $t)
+              )}
+            />
+          </div>
+        </div>
+      </div>
+    {/if}
+
     <!-- Streaming assistant message -->
-    {#if isStreaming}
+    {#if isStreaming && (streamingContent || !pendingTool)}
       <ChatMessage
         message={{
           id: 'streaming',

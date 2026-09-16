@@ -184,4 +184,32 @@ describe('ChatThread', () => {
     );
     expect(screen.queryByText(/No model loaded/i)).not.toBeInTheDocument();
   });
+
+  it('shows an in-progress tool card when the agent starts a tool', async () => {
+    const handlers: Record<string, (e: { payload: unknown }) => void> = {};
+    mockListen.mockImplementation((event, handler) => {
+      handlers[event] = handler as (e: { payload: unknown }) => void;
+      return Promise.resolve(() => {});
+    });
+    mockInvoke
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce(ENGINE_LOADED)
+      .mockReturnValueOnce(new Promise(() => {}));
+    render(ChatThread, { props: { sessionId: 'sess1', scope: 'global' } });
+    await waitFor(() => expect(screen.getByRole('textbox')).not.toBeDisabled());
+
+    const textarea = screen.getByRole<HTMLTextAreaElement>('textbox');
+    textarea.value = 'What medications is she on?';
+    await fireEvent.input(textarea);
+    await fireEvent.click(screen.getByRole('button', { name: /Send/i }));
+
+    await waitFor(() => expect(handlers['agent-tool-started']).toBeDefined());
+    handlers['agent-tool-started']({
+      payload: { name: 'list_medications', args_json: '{}' },
+    });
+
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent(/Looking up medications/i)
+    );
+  });
 });
