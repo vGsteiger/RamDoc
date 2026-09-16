@@ -33,7 +33,7 @@ Thank you for your interest in contributing! This guide covers everything you ne
 | Tool | Minimum Version |
 |------|----------------|
 | Rust | 1.88 (MSRV) |
-| Node.js | 20 |
+| Node.js | 20.19 (or 22.12+ / 24+) |
 | pnpm | 8 |
 | macOS | 13 (Ventura) |
 

@@ -183,7 +183,7 @@ The pipelines are designed to be:
    - Some tests may need manual intervention
 
 2. **Frontend: Build failures**
-   - Verify Node.js version (20+)
+   - Verify Node.js version (20.19+)
    - Check pnpm-lock.yaml is committed
    - Clear pnpm cache if needed
 
