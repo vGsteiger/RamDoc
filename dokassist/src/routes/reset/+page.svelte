@@ -1,13 +1,26 @@
 <script lang="ts">
   import { errorText } from '$lib/translations/labels';
   import { goto } from '$app/navigation';
-  import { resetApp } from '$lib/api';
+  import { page } from '$app/stores';
+  import { checkAuth, resetApp } from '$lib/api';
+  import { cancelResetPath } from '$lib/auth-routes';
   import { t } from '$lib/translations';
   import { AlertTriangle, RotateCcw } from 'lucide-svelte';
 
   let confirmation = $state('');
   let isResetting = $state(false);
   let error = $state<string | null>(null);
+
+  async function handleCancel() {
+    let status = 'locked';
+    try {
+      status = await checkAuth();
+    } catch {
+      // Prefer the originating route over a stranded unlock screen.
+      status = $page.url.searchParams.get('from') === 'setup' ? 'first_run' : 'locked';
+    }
+    await goto(cancelResetPath(status));
+  }
 
   async function handleReset() {
     if (confirmation !== 'RESET' || isResetting) return;
@@ -66,12 +79,13 @@
     />
 
     <div class="flex gap-3">
-      <a
-        href="/unlock"
-        class="inline-flex items-center flex-1 rounded-card border border-line h-8 px-3 text-center text-body font-medium text-fg-muted hover:bg-surface-hover"
+      <button
+        type="button"
+        onclick={handleCancel}
+        class="inline-flex items-center justify-center flex-1 rounded-card border border-line h-8 px-3 text-center text-body font-medium text-fg-muted hover:bg-surface-hover"
       >
         {$t('common.cancel')}
-      </a>
+      </button>
       <button
         onclick={handleReset}
         disabled={confirmation !== 'RESET' || isResetting}

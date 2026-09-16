@@ -251,15 +251,24 @@ pub async fn recover_app(state: State<'_, AppState>, words: Vec<String>) -> Resu
 ///
 /// ⚠ Irreversible — all patient data, the encrypted vault, and model files
 /// stored in the data directory are permanently deleted.
+/// Refuse to wipe while `initialize_app` still holds the `Initializing` claim.
+/// That call has already released the mutex and is writing Keychain items and
+/// the database; deleting those files underneath it can leave a phrase for a
+/// vault that reset just destroyed, or keys written after the wipe.
+fn begin_factory_reset(state: &AppState) -> Result<(), AppError> {
+    let mut auth = state.auth.lock().map_err(|_| lock_poisoned())?;
+    if matches!(*auth, AuthState::Initializing) {
+        return Err(AppError::SetupInProgress);
+    }
+    *auth = AuthState::FirstRun;
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn reset_app(state: State<'_, AppState>) -> Result<(), AppError> {
     log::warn!("Factory reset requested — wiping all app data");
 
-    // 1. Transition to FirstRun and release any in-memory keys / DB handles.
-    {
-        let mut auth = state.auth.lock().map_err(|_| lock_poisoned())?;
-        *auth = AuthState::FirstRun;
-    }
+    begin_factory_reset(&state)?;
     state.clear_db()?;
     state.clear_llm();
     state.clear_embed();
@@ -299,4 +308,42 @@ pub async fn lock_app(state: State<'_, AppState>) -> Result<(), AppError> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    fn state_with(auth: AuthState) -> (tempfile::TempDir, AppState) {
+        let dir = tempfile::tempdir().unwrap();
+        let state = AppState {
+            auth: Mutex::new(auth),
+            data_dir: dir.path().to_path_buf(),
+            db: Mutex::new(None),
+            llm: Mutex::new(None),
+            llm_swap: tokio::sync::Mutex::new(()),
+            embed: Mutex::new(None),
+            medication_ref: Mutex::new(None),
+        };
+        (dir, state)
+    }
+
+    #[test]
+    fn factory_reset_refuses_to_run_while_setup_is_in_progress() {
+        let (_dir, state) = state_with(AuthState::Initializing);
+        let error = begin_factory_reset(&state).unwrap_err();
+        assert!(matches!(error, AppError::SetupInProgress));
+        assert!(matches!(
+            *state.auth.lock().unwrap(),
+            AuthState::Initializing
+        ));
+    }
+
+    #[test]
+    fn factory_reset_claims_first_run_from_locked() {
+        let (_dir, state) = state_with(AuthState::Locked);
+        begin_factory_reset(&state).unwrap();
+        assert!(matches!(*state.auth.lock().unwrap(), AuthState::FirstRun));
+    }
 }

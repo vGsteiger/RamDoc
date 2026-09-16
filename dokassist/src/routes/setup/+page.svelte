@@ -10,6 +10,7 @@
   let words = $state<string[]>([]);
   let isLoading = $state(true);
   let error = $state<string | null>(null);
+  let errorCode = $state<string | null>(null);
   let showConfirmation = $state(false);
   let confirmIndices = $state<number[]>([]);
   let userInputs = $state<{ [key: number]: string }>({});
@@ -18,6 +19,7 @@
   async function createRecoveryPhrase() {
     isLoading = true;
     error = null;
+    errorCode = null;
     try {
       const mnemonic = await initializeApp();
       words = mnemonic;
@@ -29,6 +31,7 @@
         await goto('/', { replaceState: true });
         return;
       }
+      errorCode = code;
       if (code === 'SETUP_IN_PROGRESS') {
         error = $t('auth.setupInProgress');
       } else if (code === 'KEYCHAIN_ERROR') {
@@ -88,14 +91,16 @@
         >
           {$t('auth.retry')}
         </button>
-        <p class="mt-4">
-          <a
-            href="/reset"
-            class="text-caption text-fg-muted hover:text-danger-fg transition-colors"
-          >
-            {$t('auth.resetLink')}
-          </a>
-        </p>
+        {#if errorCode !== 'SETUP_IN_PROGRESS'}
+          <p class="mt-4">
+            <a
+              href="/reset?from=setup"
+              class="text-caption text-fg-muted hover:text-danger-fg transition-colors"
+            >
+              {$t('auth.resetLink')}
+            </a>
+          </p>
+        {/if}
       </div>
     {:else if !showConfirmation}
       <div class="space-y-6">

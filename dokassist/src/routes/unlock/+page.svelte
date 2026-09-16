@@ -14,9 +14,13 @@
   // that state.
   onMount(() => {
     void (async () => {
-      if ((await checkAuth()) === 'recovery_required') {
+      const status = await checkAuth();
+      if (status === 'recovery_required') {
         authStatus.set('recovery_required');
         await goto('/recover', { replaceState: true });
+      } else if (status === 'first_run' || status === 'initializing') {
+        authStatus.set(status);
+        await goto('/setup', { replaceState: true });
       }
     })();
   });
