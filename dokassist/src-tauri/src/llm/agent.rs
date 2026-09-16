@@ -3,6 +3,7 @@
 
 use super::context_cache::InferenceSession;
 use super::engine::{AgentMessage, LlmEngine};
+use super::harness::{self, GenerationTask};
 use super::thinking::{self, ThinkingEffort};
 use super::utf8;
 use crate::database::DbPool;
@@ -17,10 +18,7 @@ const MAX_ITERATIONS: usize = 8;
 const PROBE_MAX_TOKENS: usize = 512;
 /// Tokens budget for the final streaming answer.
 const ANSWER_MAX_TOKENS: usize = 4096;
-/// Temperature for the probe (deterministic tool selection).
-const PROBE_TEMP: f32 = 0.1;
-/// Temperature for the final answer (more creative).
-const ANSWER_TEMP: f32 = 0.7;
+
 /// Maximum chars of a tool result that are fed back into the LLM.
 const TOOL_RESULT_TRIM: usize = 4_000;
 /// Tokens budget for the summarization call itself.
@@ -164,6 +162,7 @@ fn days_from_epoch(days: u64) -> (u64, u8, u8) {
 
 /// Try to extract a `<tool_call>{...}</tool_call>` block from the LLM output.
 fn parse_tool_call(output: &str) -> Option<ToolCallRequest> {
+    let output = harness::strip_think_blocks(output);
     let start = output.find("<tool_call>")?;
     let end = output.find("</tool_call>")?;
     if end <= start {
@@ -257,6 +256,13 @@ pub fn run_agent_loop(
         thinking_effort,
     } = input;
     let system_prompt = build_system_prompt(&scope, patient_context.as_deref());
+    let probe_profile = GenerationTask::ToolProbe.profile(thinking_effort);
+    let chat_profile = GenerationTask::Chat.profile(thinking_effort);
+    let probe_system = GenerationTask::ToolProbe.apply_to_system_prompt(&system_prompt);
+    let answer_system = {
+        let with_effort = chat_profile.effort.apply_to_system_prompt(&system_prompt);
+        GenerationTask::Chat.apply_to_system_prompt(&with_effort)
+    };
 
     history.push(AgentMessage {
         role: "user".to_string(),
@@ -279,21 +285,20 @@ pub fn run_agent_loop(
             history = summarize_history(engine, &system_prompt, history);
         }
 
-        let prompt = engine.format_chat_history(&system_prompt, &history)?;
+        let prompt = engine.format_chat_history(&probe_system, &history)?;
 
-        // Probe: collect output to check for tool call
+        // Probe: collect output to check for tool call. Thinking is forced off
+        // so Extra high effort cannot hide a tool call inside <think>.
         let mut probe_output = String::new();
-        engine.generate_streaming_session(
+        engine.generate_streaming_session_with_sampler(
             &inference_session,
-            &system_prompt,
+            &probe_system,
             &prompt,
-            PROBE_MAX_TOKENS,
-            PROBE_TEMP,
+            probe_profile.max_tokens,
+            probe_profile.sampler,
             |token| {
                 probe_output.push_str(token);
-                // Stop early if we see the closing tag
                 !probe_output.contains("</tool_call>")
-                    || !probe_output.contains("\n\n") && probe_output.len() < PROBE_MAX_TOKENS * 4
             },
         )?;
 
@@ -357,15 +362,13 @@ pub fn run_agent_loop(
             // No tool call — this is the final answer. Stream it with the
             // user-selected think budget. The probe stays short so tool
             // selection is not spent on a long <think> block.
-            let answer_system = thinking_effort.apply_to_system_prompt(&system_prompt);
             let final_prompt = engine.format_chat_history(&answer_system, &history)?;
             let final_answer = thinking::generate_with_think_budget_from_prompt(
                 engine,
                 &answer_system,
                 Some(&final_prompt),
                 &user_message,
-                thinking_effort,
-                ANSWER_TEMP,
+                chat_profile,
                 &|token| {
                     let _ = app.emit("agent-chunk", token);
                 },
@@ -384,15 +387,13 @@ pub fn run_agent_loop(
     }
 
     // Exceeded MAX_ITERATIONS — force a final answer from accumulated history
-    let answer_system = thinking_effort.apply_to_system_prompt(&system_prompt);
     let final_prompt = engine.format_chat_history(&answer_system, &history)?;
     let final_answer = thinking::generate_with_think_budget_from_prompt(
         engine,
         &answer_system,
         Some(&final_prompt),
         &user_message,
-        thinking_effort,
-        ANSWER_TEMP,
+        chat_profile,
         &|token| {
             let _ = app.emit("agent-chunk", token);
         },
@@ -437,5 +438,13 @@ mod tests {
     fn test_parse_tool_call_malformed_json() {
         let output = "<tool_call>{invalid json}</tool_call>";
         assert!(parse_tool_call(output).is_none());
+    }
+
+    #[test]
+    fn test_parse_tool_call_after_think_block() {
+        let output = "<think>need the record</think>\n<tool_call>{\"name\": \"get_patient\", \"args\": {\"patient_id\": \"p1\"}}</tool_call>";
+        let call = parse_tool_call(output).unwrap();
+        assert_eq!(call.name, "get_patient");
+        assert_eq!(call.args["patient_id"], "p1");
     }
 }

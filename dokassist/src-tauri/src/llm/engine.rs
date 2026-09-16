@@ -1,5 +1,6 @@
 use super::context_cache::{reusable_prefix, ContextCacheTelemetry, ContextKey, InferenceSession};
 use super::download;
+use super::harness::SamplerConfig;
 use super::inference::{
     validate_context_budget, FlashAttentionMode, InferenceDiagnostics, InferenceProfile,
     KvCacheQuantization,
@@ -13,7 +14,6 @@ use llama_cpp_2::llama_backend::LlamaBackend;
 use llama_cpp_2::llama_batch::LlamaBatch;
 use llama_cpp_2::model::params::LlamaModelParams;
 use llama_cpp_2::model::{AddBos, LlamaChatMessage, LlamaChatTemplate, LlamaModel};
-use llama_cpp_2::sampling::LlamaSampler;
 use llama_cpp_2::token::LlamaToken;
 use ring::digest::{Context as DigestContext, SHA256};
 use serde::{Deserialize, Serialize};
@@ -418,7 +418,31 @@ impl LlmEngine {
                 content: user_message.to_string(),
             }],
         )?;
-        self.generate_streaming_raw(&prompt, max_tokens, temperature, on_token)
+        self.generate_streaming_raw_with_sampler(
+            &prompt,
+            max_tokens,
+            SamplerConfig::from_temperature(temperature),
+            on_token,
+        )
+    }
+
+    /// Like [`Self::generate_streaming_raw`] with an explicit clinical sampler.
+    pub fn generate_streaming_raw_with_sampler(
+        &self,
+        prompt: &str,
+        max_tokens: usize,
+        sampler: SamplerConfig,
+        on_token: impl FnMut(&str) -> bool,
+    ) -> Result<(), AppError> {
+        let digest = sha256_bytes(prompt.as_bytes());
+        self.generate_streaming_cached(
+            &InferenceSession::isolated(format!("raw:{digest}")),
+            &digest,
+            prompt,
+            max_tokens,
+            sampler,
+            on_token,
+        )
     }
 
     /// Reference cold path retained for equivalence tests and benchmarks.
@@ -482,13 +506,8 @@ impl LlmEngine {
         }
         let gen_phase_start = Instant::now();
 
-        // 4. Sampler chain: temp → top-k → top-p → dist (terminal)
-        let mut sampler = LlamaSampler::chain_simple([
-            LlamaSampler::temp(temperature),
-            LlamaSampler::top_k(40),
-            LlamaSampler::top_p(0.9, 1),
-            LlamaSampler::dist(0),
-        ]);
+        // 4. Sampler chain from the clinical harness (greedy when temperature is 0).
+        let mut sampler = SamplerConfig::from_temperature(temperature).build();
 
         // 5. Stateful UTF-8 decoder for multi-byte tokens
         let mut utf8_dec = UTF_8.new_decoder();
@@ -604,7 +623,7 @@ impl LlmEngine {
             &digest,
             prompt,
             max_tokens,
-            temperature,
+            SamplerConfig::from_temperature(temperature),
             on_token,
         )
     }
@@ -619,12 +638,31 @@ impl LlmEngine {
         temperature: f32,
         on_token: impl FnMut(&str) -> bool,
     ) -> Result<(), AppError> {
+        self.generate_streaming_session_with_sampler(
+            session,
+            system_prompt,
+            prompt,
+            max_tokens,
+            SamplerConfig::from_temperature(temperature),
+            on_token,
+        )
+    }
+
+    pub fn generate_streaming_session_with_sampler(
+        &self,
+        session: &InferenceSession,
+        system_prompt: &str,
+        prompt: &str,
+        max_tokens: usize,
+        sampler: SamplerConfig,
+        on_token: impl FnMut(&str) -> bool,
+    ) -> Result<(), AppError> {
         self.generate_streaming_cached(
             session,
             &sha256_bytes(system_prompt.as_bytes()),
             prompt,
             max_tokens,
-            temperature,
+            sampler,
             on_token,
         )
     }
@@ -661,7 +699,7 @@ impl LlmEngine {
         system_prompt_hash: &str,
         prompt: &str,
         max_tokens: usize,
-        temperature: f32,
+        sampler_config: SamplerConfig,
         mut on_token: impl FnMut(&str) -> bool,
     ) -> Result<(), AppError> {
         let model = self
@@ -789,12 +827,7 @@ impl LlmEngine {
         let estimated_saved_ms = reused as f64 * historical_ms_per_token;
         let gen_phase_start = Instant::now();
 
-        let mut sampler = LlamaSampler::chain_simple([
-            LlamaSampler::temp(temperature),
-            LlamaSampler::top_k(40),
-            LlamaSampler::top_p(0.9, 1),
-            LlamaSampler::dist(0),
-        ]);
+        let mut sampler = sampler_config.build();
         let mut utf8_dec = UTF_8.new_decoder();
         let mut ttft_ms = 0.0;
         let mut completion_tokens = 0usize;
@@ -912,12 +945,7 @@ impl LlmEngine {
         }
         let gen_phase_start = Instant::now();
 
-        let mut sampler = LlamaSampler::chain_simple([
-            LlamaSampler::temp(temperature),
-            LlamaSampler::top_k(40),
-            LlamaSampler::top_p(0.9, 1),
-            LlamaSampler::dist(0),
-        ]);
+        let mut sampler = SamplerConfig::from_temperature(temperature).build();
 
         let mut utf8_dec = UTF_8.new_decoder();
 

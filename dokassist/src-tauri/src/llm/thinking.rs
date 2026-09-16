@@ -7,6 +7,7 @@
 //! force the model to write the actual answer.
 
 use super::engine::LlmEngine;
+use super::harness::{GenerationProfile, GenerationTask};
 use super::prompts;
 use super::utf8;
 use crate::error::AppError;
@@ -83,36 +84,36 @@ pub fn generate_with_think_budget(
     engine: &LlmEngine,
     system_prompt: &str,
     user_message: &str,
+    task: GenerationTask,
     effort: ThinkingEffort,
-    temperature: f32,
     emit: &dyn Fn(&str),
 ) -> Result<String, AppError> {
-    let system_prompt = effort.apply_to_system_prompt(system_prompt);
+    let profile = task.profile(effort);
+    let system_prompt = profile.effort.apply_to_system_prompt(system_prompt);
+    let system_prompt = task.apply_to_system_prompt(&system_prompt);
     generate_with_think_budget_from_prompt(
         engine,
         &system_prompt,
         None,
         user_message,
-        effort,
-        temperature,
+        profile,
         emit,
     )
 }
 
 /// Like [`generate_with_think_budget`], but phase 1 uses a pre-formatted prompt
-/// (multi-turn agent history). `system_prompt` must already include the effort
-/// suffix. Phase 2 still continues through the GGUF chat template.
+/// (multi-turn agent history). `system_prompt` must already include effort and
+/// task suffixes. Phase 2 still continues through the GGUF chat template.
 pub fn generate_with_think_budget_from_prompt(
     engine: &LlmEngine,
     system_prompt: &str,
     formatted_prompt: Option<&str>,
     user_message: &str,
-    effort: ThinkingEffort,
-    temperature: f32,
+    profile: GenerationProfile,
     emit: &dyn Fn(&str),
 ) -> Result<String, AppError> {
-    let max_tokens = effort.max_tokens();
-    let max_think_tokens = effort.think_token_budget();
+    let max_tokens = profile.max_tokens;
+    let max_think_tokens = profile.effort.think_token_budget();
     let mut output = String::new();
     let mut think_tokens: usize = 0;
     let mut budget_hit = false;
@@ -121,13 +122,24 @@ pub fn generate_with_think_budget_from_prompt(
 
     let phase1 = |on_token: &mut dyn FnMut(&str) -> bool| -> Result<(), AppError> {
         if let Some(prompt) = formatted_prompt {
-            engine.generate_streaming_raw(prompt, max_tokens, temperature, on_token)
-        } else {
-            engine.generate_streaming(
-                system_prompt,
-                user_message,
+            engine.generate_streaming_raw_with_sampler(
+                prompt,
                 max_tokens,
-                temperature,
+                profile.sampler,
+                on_token,
+            )
+        } else {
+            let prompt = engine.format_chat_history(
+                system_prompt,
+                &[super::engine::AgentMessage {
+                    role: "user".to_string(),
+                    content: user_message.to_string(),
+                }],
+            )?;
+            engine.generate_streaming_raw_with_sampler(
+                &prompt,
+                max_tokens,
+                profile.sampler,
                 on_token,
             )
         }
@@ -177,11 +189,17 @@ pub fn generate_with_think_budget_from_prompt(
             &output[tail_start..]
         );
 
-        engine.generate_streaming(
+        let continuation_prompt = engine.format_chat_history(
             system_prompt,
-            &continuation,
+            &[super::engine::AgentMessage {
+                role: "user".to_string(),
+                content: continuation,
+            }],
+        )?;
+        engine.generate_streaming_raw_with_sampler(
+            &continuation_prompt,
             max_tokens.saturating_sub(max_think_tokens),
-            temperature,
+            profile.sampler,
             |token| {
                 output.push_str(token);
                 emit(token);
@@ -199,11 +217,17 @@ pub fn generate_with_think_budget_from_prompt(
             let tail = &output[tail_start..];
             let continuation_msg = prompts::continuation_prompt(tail);
 
-            engine.generate_streaming(
+            let continuation_prompt = engine.format_chat_history(
                 system_prompt,
-                &continuation_msg,
+                &[super::engine::AgentMessage {
+                    role: "user".to_string(),
+                    content: continuation_msg,
+                }],
+            )?;
+            engine.generate_streaming_raw_with_sampler(
+                &continuation_prompt,
                 max_tokens,
-                temperature,
+                profile.sampler,
                 |token| {
                     output.push_str(token);
                     emit(token);

@@ -24,7 +24,7 @@ pub fn extract_metadata_with_prompt(
     system_prompt: &str,
 ) -> Result<FileMetadata, AppError> {
     let user_message = prompts::metadata_extraction_prompt(document_text);
-    let response = engine.generate(system_prompt, &user_message, 512, 0.1)?;
+    let response = engine.generate(system_prompt, &user_message, 512, 0.0)?;
     let json_str = strip_markdown_fences(&response);
     serde_json::from_str(json_str)
         .map_err(|e| AppError::Llm(format!("Failed to parse metadata JSON: {e}")))

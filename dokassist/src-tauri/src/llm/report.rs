@@ -1,5 +1,6 @@
 use super::{
     engine::{AgentMessage, LlmEngine},
+    harness::GenerationTask,
     prompts::{self, LetterType, ReportType},
     sanitize::{build_delimited_prompt, sanitize_for_prompt},
     thinking::{self, ThinkingEffort},
@@ -114,8 +115,8 @@ pub fn generate_report_streaming_with_prompt(
         engine,
         system_prompt,
         &user_message,
+        GenerationTask::Report,
         thinking_effort,
-        0.7,
         &|token| {
             let _ = app.emit("report-chunk", token);
         },
@@ -158,8 +159,8 @@ pub fn improve_text_streaming_with_prompt(
         engine,
         system_prompt,
         &user_message,
+        GenerationTask::Improve,
         thinking_effort,
-        0.7,
         &|token| {
             let _ = app.emit("text-improvement-chunk", token);
         },
@@ -218,8 +219,8 @@ pub fn generate_session_summary_streaming_with_prompt(
         engine,
         system_prompt,
         &user_message,
+        GenerationTask::Summary,
         thinking_effort,
-        0.7,
         &|token| {
             let _ = app.emit("session-summary-chunk", token);
         },
@@ -271,8 +272,8 @@ pub fn generate_letter_streaming_with_prompt(
         engine,
         system_prompt,
         &user_message,
+        GenerationTask::Letter,
         thinking_effort,
-        0.7,
         &|token| {
             let _ = app.emit("letter-chunk", token);
         },
@@ -298,8 +299,8 @@ pub fn generate_evidence_answer_streaming(
         engine,
         system_prompt,
         &user_message,
+        GenerationTask::Evidence,
         thinking_effort,
-        0.3,
         &|token| {
             let _ = app.emit("patient-history-chunk", token);
         },

@@ -23,6 +23,7 @@
   let isStreaming = $state(false);
   let inputText = $state('');
   let isModelLoaded = $state(true);
+  let modelName = $state('');
   let errorMessage = $state('');
   let messagesEndEl = $state<HTMLDivElement | null>(null);
 
@@ -44,6 +45,7 @@
     try {
       const status = await getEngineStatus();
       isModelLoaded = status.is_loaded;
+      modelName = status.model_name ?? '';
     } catch {
       // ignore
     }
@@ -221,6 +223,13 @@
         {isStreaming ? '…' : $t('chat.send')}
       </button>
     </div>
-    <ThinkingEffortSelect disabled={!isModelLoaded || isStreaming} />
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <ThinkingEffortSelect disabled={!isModelLoaded || isStreaming} />
+      {#if isModelLoaded && modelName}
+        <span class="text-caption text-fg-subtle truncate max-w-[16rem]" title={modelName}
+          >{modelName}</span
+        >
+      {/if}
+    </div>
   </div>
 </div>
