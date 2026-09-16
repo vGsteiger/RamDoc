@@ -109,6 +109,7 @@ import {
   listModels,
   getModelInfo,
   downloadAndRegisterModel,
+  inspectPromotedModel,
   importPromotedModel,
   deleteModel,
   setDefaultModel,
@@ -1579,6 +1580,32 @@ describe('downloadAndRegisterModel', () => {
   });
 });
 
+describe('inspectPromotedModel', () => {
+  it('calls inspect_promoted_model with the selected record and optional GGUF', async () => {
+    const preview = {
+      display_name: 'RamDoc clinical mix',
+      study_id: 'unit-study-v1',
+      filename: 'clinical-mix.gguf',
+      size_bytes: 4200000000,
+      quantization: 'RamDoc-Mix-v1',
+      artifact_found: false,
+      artifact_size_matches: false,
+      artifact_bytes: null,
+      artifact_path: null,
+      dominates: ['q4-standard'],
+      baseline_artifacts: ['q4-standard'],
+      worst_category_regression: 0.01,
+    };
+    mockInvoke.mockResolvedValueOnce(preview);
+    const result = await inspectPromotedModel('/tmp/clinical-mix.promotion.json');
+    expect(mockInvoke).toHaveBeenCalledWith('inspect_promoted_model', {
+      promotionPath: '/tmp/clinical-mix.promotion.json',
+      artifactPath: null,
+    });
+    expect(result).toEqual(preview);
+  });
+});
+
 describe('importPromotedModel', () => {
   it('calls import_promoted_model with the selected promotion record', async () => {
     const registered = {
@@ -1592,9 +1619,13 @@ describe('importPromotedModel', () => {
       is_default: false,
     };
     mockInvoke.mockResolvedValueOnce(registered);
-    const result = await importPromotedModel('/tmp/clinical-mix.promotion.json');
+    const result = await importPromotedModel(
+      '/tmp/clinical-mix.promotion.json',
+      '/tmp/clinical-mix.gguf'
+    );
     expect(mockInvoke).toHaveBeenCalledWith('import_promoted_model', {
       promotionPath: '/tmp/clinical-mix.promotion.json',
+      artifactPath: '/tmp/clinical-mix.gguf',
     });
     expect(result).toEqual(registered);
   });

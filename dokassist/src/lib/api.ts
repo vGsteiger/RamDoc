@@ -242,6 +242,21 @@ export interface QuantizationPromotionSummary {
   worst_category_regression: number;
 }
 
+export interface PromotedModelPreview {
+  display_name: string;
+  study_id: string;
+  filename: string;
+  size_bytes: number;
+  quantization: string;
+  artifact_found: boolean;
+  artifact_size_matches: boolean;
+  artifact_bytes: number | null;
+  artifact_path: string | null;
+  dominates: string[];
+  baseline_artifacts: string[];
+  worst_category_regression: number;
+}
+
 export interface TaskModel {
   task_type: string;
   model_id: string;
@@ -261,8 +276,24 @@ export async function downloadAndRegisterModel(model: ModelChoice): Promise<Mode
   return await invoke<Model>('download_and_register_model', { model });
 }
 
-export async function importPromotedModel(promotionPath: string): Promise<Model> {
-  return await invoke<Model>('import_promoted_model', { promotionPath });
+export async function inspectPromotedModel(
+  promotionPath: string,
+  artifactPath?: string | null
+): Promise<PromotedModelPreview> {
+  return await invoke<PromotedModelPreview>('inspect_promoted_model', {
+    promotionPath,
+    artifactPath: artifactPath ?? null,
+  });
+}
+
+export async function importPromotedModel(
+  promotionPath: string,
+  artifactPath?: string | null
+): Promise<Model> {
+  return await invoke<Model>('import_promoted_model', {
+    promotionPath,
+    artifactPath: artifactPath ?? null,
+  });
 }
 
 export async function deleteModel(modelId: string): Promise<void> {

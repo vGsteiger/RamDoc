@@ -284,8 +284,13 @@ misleading combined score.
 
 ## 7. Import into RamDoc
 
-In **Settings → Model Management**, choose **Import gated model** and select the
-promotion JSON. The GGUF named by the record must be beside it. RamDoc:
+In **Settings → Model Management**, choose **Import verified model**. The dialog
+asks for the promotion JSON first and previews the display name, size, and
+quantization label. If the GGUF named by the record sits next to the JSON,
+RamDoc offers it immediately; otherwise you can choose the GGUF from another
+folder. Import then streams a progress bar while the file is hashed and copied.
+
+RamDoc:
 
 - parses a bounded, strict schema;
 - rechecks that the Pareto decision is positive and every category is within
@@ -299,7 +304,8 @@ promotion JSON. The GGUF named by the record must be beside it. RamDoc:
 - stores the normalised promotion record beside the model and registers the
   model only after verification.
 
-The installed-model card shows the study ID, quantization label, baselines,
+The installed-model card shows a **Verified recipe** badge. Expanding
+**Verification details** reveals the quantization label, baselines, study ID,
 worst per-category regression upper bound, and abbreviated held-out evidence
 hash. Deleting the model also deletes its promotion sidecar.
 

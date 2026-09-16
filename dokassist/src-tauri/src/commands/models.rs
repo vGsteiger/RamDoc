@@ -3,7 +3,7 @@ use crate::llm::{download, quantization, ModelChoice};
 use crate::models::model::{self, Model, TaskModel, TaskType};
 use crate::state::{llm_lock_poisoned, AppState};
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
 
 /// Response for list_models command with additional context
@@ -113,15 +113,37 @@ pub async fn get_model_info(
     })
 }
 
+/// Preview a promotion record without hashing the GGUF.
+#[tauri::command]
+pub fn inspect_promoted_model(
+    promotion_path: String,
+    artifact_path: Option<String>,
+) -> Result<quantization::PromotionPreview, AppError> {
+    if promotion_path.trim().is_empty() {
+        return Err(AppError::Validation(
+            "Quantization promotion path cannot be empty".to_string(),
+        ));
+    }
+    let artifact = artifact_path
+        .as_deref()
+        .map(str::trim)
+        .filter(|path| !path.is_empty())
+        .map(std::path::PathBuf::from);
+    quantization::inspect_promotion(std::path::Path::new(&promotion_path), artifact.as_deref())
+}
+
 /// Import a GGUF that passed the offline clinical quantization promotion gate.
 ///
-/// The promotion JSON and GGUF must be adjacent. The blocking verifier copies
-/// into the app-owned model directory while hashing, rejects any mismatch, and
-/// persists the evidence sidecar before the model enters the registry.
+/// The GGUF may sit next to the promotion JSON, or the caller can pass an
+/// explicit `artifact_path`. The blocking verifier copies into the app-owned
+/// model directory while hashing, rejects any mismatch, and persists the
+/// evidence sidecar before the model enters the registry.
 #[tauri::command]
 pub async fn import_promoted_model(
+    app: AppHandle,
     state: State<'_, AppState>,
     promotion_path: String,
+    artifact_path: Option<String>,
 ) -> Result<Model, AppError> {
     if promotion_path.trim().is_empty() {
         return Err(AppError::Validation(
@@ -129,9 +151,21 @@ pub async fn import_promoted_model(
         ));
     }
     let source = std::path::PathBuf::from(promotion_path);
+    let artifact = artifact_path
+        .as_deref()
+        .map(str::trim)
+        .filter(|path| !path.is_empty())
+        .map(std::path::PathBuf::from);
     let destination_dir = state.data_dir.join("models");
     let installed = tokio::task::spawn_blocking(move || {
-        quantization::install_promotion(&source, &destination_dir)
+        quantization::install_promotion(
+            &source,
+            &destination_dir,
+            artifact.as_deref(),
+            |progress| {
+                let _ = app.emit("promoted-model-import-progress", progress);
+            },
+        )
     })
     .await
     .map_err(|error| AppError::Llm(format!("promotion import task failed: {error}")))??;

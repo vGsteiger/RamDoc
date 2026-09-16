@@ -98,6 +98,23 @@ pub struct QuantizationPromotionSummary {
     pub worst_category_regression: f64,
 }
 
+/// Fast, user-facing preview of a promotion record. Does not hash the GGUF.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PromotionPreview {
+    pub display_name: String,
+    pub study_id: String,
+    pub filename: String,
+    pub size_bytes: u64,
+    pub quantization: String,
+    pub artifact_found: bool,
+    pub artifact_size_matches: bool,
+    pub artifact_bytes: Option<u64>,
+    pub artifact_path: Option<String>,
+    pub dominates: Vec<String>,
+    pub baseline_artifacts: Vec<String>,
+    pub worst_category_regression: f64,
+}
+
 #[derive(Debug)]
 pub struct InstalledPromotion {
     pub record: QuantizationPromotion,
@@ -329,7 +346,7 @@ pub fn promotion_path_for_model(model_path: &Path) -> PathBuf {
 }
 
 pub fn read_promotion(path: &Path) -> Result<QuantizationPromotion, AppError> {
-    let mut file = File::open(path).map_err(|error| {
+    let file = File::open(path).map_err(|error| {
         AppError::Validation(format!(
             "cannot open quantization promotion '{}': {error}",
             path.display()
@@ -410,7 +427,77 @@ pub fn verify_promoted_model(
     Ok(Some(promotion.summary()))
 }
 
+fn resolve_artifact_source(
+    promotion_path: &Path,
+    record: &QuantizationPromotion,
+    artifact_path: Option<&Path>,
+) -> Result<PathBuf, AppError> {
+    if let Some(path) = artifact_path {
+        if path.as_os_str().is_empty() {
+            return validation_error("model file path cannot be empty");
+        }
+        return Ok(path.to_path_buf());
+    }
+    let source_dir = promotion_path.parent().ok_or_else(|| {
+        AppError::Validation("quantization promotion has no parent directory".to_string())
+    })?;
+    Ok(source_dir.join(&record.artifact.filename))
+}
+
+/// Parse a promotion record and report whether its GGUF is already locatable.
+///
+/// This is the Settings preview path: it must stay cheap, so it never hashes
+/// the multi-gigabyte artifact. Import still re-hashes before registration.
+pub fn inspect_promotion(
+    promotion_path: &Path,
+    artifact_path: Option<&Path>,
+) -> Result<PromotionPreview, AppError> {
+    let record = read_promotion(promotion_path)?;
+    let source = resolve_artifact_source(promotion_path, &record, artifact_path)?;
+    let (artifact_found, artifact_size_matches, artifact_bytes, located) =
+        match fs::metadata(&source) {
+            Ok(meta) if meta.is_file() => (
+                true,
+                meta.len() == record.artifact.size_bytes,
+                Some(meta.len()),
+                Some(source.to_string_lossy().into_owned()),
+            ),
+            _ => (false, false, None, None),
+        };
+    let summary = record.summary();
+    Ok(PromotionPreview {
+        display_name: record.display_name,
+        study_id: record.study_id,
+        filename: record.artifact.filename,
+        size_bytes: record.artifact.size_bytes,
+        quantization: record.artifact.quantization,
+        artifact_found,
+        artifact_size_matches,
+        artifact_bytes,
+        artifact_path: located,
+        dominates: summary.dominates,
+        baseline_artifacts: summary.baseline_artifacts,
+        worst_category_regression: summary.worst_category_regression,
+    })
+}
+
 fn hash_file(path: &Path) -> Result<(String, u64, [u8; 4]), AppError> {
+    hash_file_with_progress(path, None, |_| {})
+}
+
+fn emit_progress(last_emitted_pct: &mut i32, progress: f64, on_progress: &mut impl FnMut(f64)) {
+    let pct = (progress.clamp(0.0, 1.0) * 100.0).floor() as i32;
+    if pct != *last_emitted_pct {
+        on_progress(progress.clamp(0.0, 1.0));
+        *last_emitted_pct = pct;
+    }
+}
+
+fn hash_file_with_progress(
+    path: &Path,
+    expected_size: Option<u64>,
+    mut on_progress: impl FnMut(f64),
+) -> Result<(String, u64, [u8; 4]), AppError> {
     let mut file = File::open(path).map_err(|error| {
         AppError::Validation(format!(
             "cannot open promoted GGUF '{}': {error}",
@@ -422,6 +509,8 @@ fn hash_file(path: &Path) -> Result<(String, u64, [u8; 4]), AppError> {
     let mut magic = [0_u8; 4];
     let mut magic_len = 0_usize;
     let mut buffer = vec![0_u8; COPY_BUFFER_BYTES];
+    let mut last_emitted_pct = -1_i32;
+    emit_progress(&mut last_emitted_pct, 0.0, &mut on_progress);
     loop {
         let read = file.read(&mut buffer).map_err(|error| {
             AppError::Validation(format!(
@@ -442,7 +531,15 @@ fn hash_file(path: &Path) -> Result<(String, u64, [u8; 4]), AppError> {
             return validation_error("promoted GGUF exceeds the 60 GiB import limit");
         }
         digest.update(&buffer[..read]);
+        if let Some(expected) = expected_size.filter(|size| *size > 0) {
+            emit_progress(
+                &mut last_emitted_pct,
+                total as f64 / expected as f64,
+                &mut on_progress,
+            );
+        }
     }
+    emit_progress(&mut last_emitted_pct, 1.0, &mut on_progress);
     Ok((hex::encode(digest.finish().as_ref()), total, magic))
 }
 
@@ -530,16 +627,15 @@ fn publish_temporary_model(
 pub fn install_promotion(
     promotion_path: &Path,
     destination_dir: &Path,
+    artifact_path: Option<&Path>,
+    mut on_progress: impl FnMut(f64),
 ) -> Result<InstalledPromotion, AppError> {
     let record = read_promotion(promotion_path)?;
-    let source_dir = promotion_path.parent().ok_or_else(|| {
-        AppError::Validation("quantization promotion has no parent directory".to_string())
-    })?;
-    let source = source_dir.join(&record.artifact.filename);
-    let source_metadata = fs::metadata(&source).map_err(|error| {
+    let source = resolve_artifact_source(promotion_path, &record, artifact_path)?;
+    let source_metadata = fs::metadata(&source).map_err(|_| {
         AppError::Validation(format!(
-            "promoted GGUF '{}' must be next to its promotion JSON: {error}",
-            source.display()
+            "Could not find '{}' next to the selected promotion record. Place the GGUF in the same folder, or choose the model file in Settings.",
+            record.artifact.filename
         ))
     })?;
     if !source_metadata.is_file() {
@@ -552,7 +648,11 @@ pub fn install_promotion(
     fs::create_dir_all(destination_dir)?;
     let destination = destination_dir.join(&record.artifact.filename);
     if destination.exists() {
-        let (digest, size, magic) = hash_file(&destination)?;
+        let (digest, size, magic) = hash_file_with_progress(
+            &destination,
+            Some(record.artifact.size_bytes),
+            &mut on_progress,
+        )?;
         if magic != *b"GGUF"
             || digest != record.artifact.sha256
             || size != record.artifact.size_bytes
@@ -581,12 +681,15 @@ pub fn install_promotion(
                 temporary.display()
             ))
         })?;
+    let expected_size = record.artifact.size_bytes;
     let copy_result = (|| -> Result<(String, u64, [u8; 4]), AppError> {
         let mut digest = DigestContext::new(&SHA256);
         let mut total = 0_u64;
         let mut magic = [0_u8; 4];
         let mut magic_len = 0_usize;
         let mut buffer = vec![0_u8; COPY_BUFFER_BYTES];
+        let mut last_emitted_pct = -1_i32;
+        emit_progress(&mut last_emitted_pct, 0.0, &mut on_progress);
         loop {
             let read = source_file.read(&mut buffer)?;
             if read == 0 {
@@ -603,8 +706,16 @@ pub fn install_promotion(
             }
             digest.update(&buffer[..read]);
             destination_file.write_all(&buffer[..read])?;
+            if expected_size > 0 {
+                emit_progress(
+                    &mut last_emitted_pct,
+                    total as f64 / expected_size as f64,
+                    &mut on_progress,
+                );
+            }
         }
         destination_file.sync_all()?;
+        emit_progress(&mut last_emitted_pct, 1.0, &mut on_progress);
         Ok((hex::encode(digest.finish().as_ref()), total, magic))
     })();
 
@@ -693,6 +804,10 @@ mod tests {
         fs::write(path, serde_json::to_vec_pretty(promotion).unwrap()).unwrap();
     }
 
+    fn install(promotion_path: &Path, destination: &Path) -> Result<InstalledPromotion, AppError> {
+        install_promotion(promotion_path, destination, None, |_| {})
+    }
+
     #[test]
     fn validates_complete_pareto_promotion() {
         promotion_for(b"GGUFunit").validate().unwrap();
@@ -740,7 +855,7 @@ mod tests {
         let promotion_path = source.path().join("promotion.json");
         write_promotion(&promotion_path, &promotion_for(bytes));
 
-        let installed = install_promotion(&promotion_path, destination.path()).unwrap();
+        let installed = install(&promotion_path, destination.path()).unwrap();
         assert_eq!(fs::read(&installed.model_path).unwrap(), bytes);
         let summary = promotion_summary_for_model(&installed.model_path)
             .unwrap()
@@ -768,8 +883,64 @@ mod tests {
         let promotion_path = source.path().join("promotion.json");
         write_promotion(&promotion_path, &promotion_for(approved));
 
-        assert!(install_promotion(&promotion_path, destination.path()).is_err());
+        assert!(install(&promotion_path, destination.path()).is_err());
         assert!(!destination.path().join("clinical-mix.gguf").exists());
+    }
+
+    #[test]
+    fn inspect_reports_a_missing_sibling_without_hashing() {
+        let source = tempdir().unwrap();
+        let bytes = b"GGUFunit-preview";
+        let promotion_path = source.path().join("promotion.json");
+        write_promotion(&promotion_path, &promotion_for(bytes));
+
+        let preview = inspect_promotion(&promotion_path, None).unwrap();
+        assert!(!preview.artifact_found);
+        assert_eq!(preview.filename, "clinical-mix.gguf");
+        assert_eq!(preview.display_name, "Clinical mixed-bit unit model");
+    }
+
+    #[test]
+    fn install_accepts_an_explicit_artifact_path_outside_the_record_folder() {
+        let record_dir = tempdir().unwrap();
+        let artifact_dir = tempdir().unwrap();
+        let destination = tempdir().unwrap();
+        let bytes = b"GGUFunit-separate-gguf";
+        let artifact = artifact_dir.path().join("elsewhere.gguf");
+        fs::write(&artifact, bytes).unwrap();
+        let promotion_path = record_dir.path().join("promotion.json");
+        write_promotion(&promotion_path, &promotion_for(bytes));
+
+        let preview = inspect_promotion(&promotion_path, Some(&artifact)).unwrap();
+        assert!(preview.artifact_found);
+        assert!(preview.artifact_size_matches);
+
+        let mut progress = Vec::new();
+        let installed = install_promotion(
+            &promotion_path,
+            destination.path(),
+            Some(&artifact),
+            |value| progress.push(value),
+        )
+        .unwrap();
+        assert_eq!(fs::read(&installed.model_path).unwrap(), bytes);
+        assert!(
+            progress.first().copied() == Some(0.0) && progress.last().copied() == Some(1.0),
+            "progress should start at 0 and finish at 1, got {progress:?}"
+        );
+    }
+
+    #[test]
+    fn read_promotion_rejects_an_oversized_record_without_unbounded_read() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("huge.json");
+        let oversized = vec![b'{'; (MAX_PROMOTION_BYTES as usize) + 2];
+        fs::write(&path, oversized).unwrap();
+        let error = read_promotion(&path).unwrap_err().to_string();
+        assert!(
+            error.contains("no larger than"),
+            "unexpected error: {error}"
+        );
     }
 
     #[test]
