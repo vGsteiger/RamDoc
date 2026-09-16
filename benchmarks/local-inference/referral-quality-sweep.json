@@ -1,0 +1,143 @@
+{
+  "schema_version": 1,
+  "suite_id": "ramdoc-referral-quality-v1",
+  "data_classification": "synthetic_deidentified",
+  "model": {
+    "filename": "Qwen3-8B-Q4_K_M.gguf",
+    "artifact_sha256": "120307ba529eb2439d6c430d94104dabd578497bc7bfe7e322b5d9933b449bd4",
+    "artifact_size_bytes": 5027784512,
+    "inference_profile": "conservative"
+  },
+  "arms": [
+    {
+      "id": "greedy-low",
+      "description": "Deterministic attribution baseline; not recommended by Qwen for production.",
+      "thinking_effort": "low",
+      "no_think": false,
+      "sampler": { "temperature": 0.0, "top_k": 1, "top_p": 1.0, "min_p": 0.0, "repeat_penalty": 1.0, "presence_penalty": 0.0, "seed": 0 }
+    },
+    {
+      "id": "current-low",
+      "description": "Current RamDoc report sampler with a short reasoning budget.",
+      "thinking_effort": "low",
+      "no_think": false,
+      "sampler": { "temperature": 0.35, "top_k": 40, "top_p": 0.9, "min_p": 0.05, "repeat_penalty": 1.0, "presence_penalty": 0.0, "seed": 0 }
+    },
+    {
+      "id": "current-medium",
+      "description": "Current RamDoc report sampler with the default reasoning budget.",
+      "thinking_effort": "medium",
+      "no_think": false,
+      "sampler": { "temperature": 0.35, "top_k": 40, "top_p": 0.9, "min_p": 0.05, "repeat_penalty": 1.0, "presence_penalty": 0.0, "seed": 0 }
+    },
+    {
+      "id": "conservative-low",
+      "description": "Lower-temperature clinical arm with Qwen top-k and no min-p cutoff.",
+      "thinking_effort": "low",
+      "no_think": false,
+      "sampler": { "temperature": 0.2, "top_k": 20, "top_p": 0.9, "min_p": 0.0, "repeat_penalty": 1.0, "presence_penalty": 0.0, "seed": 0 }
+    },
+    {
+      "id": "qwen-thinking-low",
+      "description": "Qwen3 official thinking sampler with a short RamDoc reasoning budget.",
+      "thinking_effort": "low",
+      "no_think": false,
+      "sampler": { "temperature": 0.6, "top_k": 20, "top_p": 0.95, "min_p": 0.0, "repeat_penalty": 1.0, "presence_penalty": 0.0, "seed": 0 }
+    },
+    {
+      "id": "qwen-thinking-medium",
+      "description": "Qwen3 official thinking sampler with the default RamDoc reasoning budget.",
+      "thinking_effort": "medium",
+      "no_think": false,
+      "sampler": { "temperature": 0.6, "top_k": 20, "top_p": 0.95, "min_p": 0.0, "repeat_penalty": 1.0, "presence_penalty": 0.0, "seed": 0 }
+    },
+    {
+      "id": "qwen-nonthinking",
+      "description": "Qwen3 official non-thinking sampler and /no_think switch.",
+      "thinking_effort": "low",
+      "no_think": true,
+      "sampler": { "temperature": 0.7, "top_k": 20, "top_p": 0.8, "min_p": 0.0, "repeat_penalty": 1.0, "presence_penalty": 0.0, "seed": 0 }
+    },
+    {
+      "id": "qwen-nonthinking-presence",
+      "description": "Official non-thinking sampler with Qwen's optional anti-repetition presence penalty.",
+      "thinking_effort": "low",
+      "no_think": true,
+      "sampler": { "temperature": 0.7, "top_k": 20, "top_p": 0.8, "min_p": 0.0, "repeat_penalty": 1.0, "presence_penalty": 1.5, "seed": 0 }
+    },
+    {
+      "id": "current-repeat-penalty",
+      "description": "Current sampler with a mild token repetition penalty.",
+      "thinking_effort": "low",
+      "no_think": false,
+      "sampler": { "temperature": 0.35, "top_k": 40, "top_p": 0.9, "min_p": 0.05, "repeat_penalty": 1.05, "presence_penalty": 0.0, "seed": 0 }
+    }
+  ],
+  "cases": [
+    {
+      "id": "depression-active-plan",
+      "split": "development",
+      "patient_context": "Patientin: Erika Beispiel, geboren am 03.02.1980. Gesicherte Diagnose: F33.1 Rezidivierende depressive Störung, gegenwärtig mittelgradige Episode. Aktuelle Medikation: Sertralin 100 mg morgens (gut vertragen). Aktiver Behandlungsplan: Ambulante Depressionstherapie seit 01.04.2026; Interventionen Verhaltensaktivierung und medikamentöse Stabilisierung; Therapieziel: Arbeitsfähigkeit schrittweise verbessern.",
+      "session_notes": "Sitzung vom 20.08.2026: Weiterhin relevante Antriebs- und Konzentrationsminderung. Aktuelle Suizidalität und psychotische Symptome sind nicht dokumentiert.",
+      "additional_context": null,
+      "instructions": "Empfänger: Spezialambulanz für affektive Störungen. Überweisungsgrund und konkrete Fragestellung: diagnostische Mitbeurteilung und Empfehlung zum weiteren therapeutischen Vorgehen.",
+      "expected": {
+        "contains_all": ["Überweisungsgrund und Fragestellung", "Relevante Anamnese", "Diagnosen", "Aktuelle Medikation", "Beurteilung und erbetenes Vorgehen", "F33.1", "Sertralin", "100 mg", "Antriebs", "Konzentrations", "Verhaltensaktivierung", "Arbeitsfähigkeit"],
+        "contains_any": [["Spezialambulanz", "affektive Störungen"]],
+        "excludes": ["akute Suizidalität", "psychotische Symptome bestehen", "[Name", "[Praxis", "Grüße"]
+      }
+    },
+    {
+      "id": "anxiety-sparse-context",
+      "split": "development",
+      "patient_context": "Patientin: Nora Beispiel, geboren am 14.11.1992. Gesicherte Diagnose: F41.1 Generalisierte Angststörung. Aktuelle Medikation: Escitalopram 10 mg täglich. Aktiver Behandlungsplan: Ambulante Psychotherapie seit 10.05.2026; Therapieziel: Reduktion des Vermeidungsverhaltens.",
+      "session_notes": "Sitzung vom 25.08.2026: Persistierendes Sorgen- und Vermeidungsverhalten. Keine weiteren Befunde dokumentiert.",
+      "additional_context": null,
+      "instructions": "Empfänger: Angstsprechstunde. Überweisungsgrund und konkrete Fragestellung: Mitbeurteilung der persistierenden Angstsymptomatik und Empfehlung zur weiteren Behandlung.",
+      "expected": {
+        "contains_all": ["Überweisungsgrund und Fragestellung", "Relevante Anamnese", "Diagnosen", "Aktuelle Medikation", "Beurteilung und erbetenes Vorgehen", "F41.1", "Escitalopram", "10 mg", "Sorgen", "Vermeidungsverhalten"],
+        "contains_any": [["Angstsprechstunde", "Angstsymptomatik"]],
+        "excludes": ["somatische Beschwerden", "Suizidalität", "Psychose", "stationäre", "Impulsivität", "[Name", "[Praxis", "Grüße"]
+      }
+    },
+    {
+      "id": "bipolar-medication-negation",
+      "split": "development",
+      "patient_context": "Patient: Mario Beispiel, geboren am 09.06.1975. Gesicherte Diagnose: F31.4 Bipolare affektive Störung, gegenwärtig depressive Episode. Aktuelle Medikation: Lithium 900 mg abends (Spiegelkontrollen gemäss Verlauf) und Quetiapin 200 mg abends. Aktiver Behandlungsplan: Phasenprophylaxe seit 01.12.2025; Therapieziel: affektive Stabilisierung.",
+      "session_notes": "Sitzung vom 26.08.2026: Fortbestehende depressive Symptomatik. Keine manischen Symptome dokumentiert. Kein aktueller Substanzkonsum dokumentiert.",
+      "additional_context": null,
+      "instructions": "Empfänger: Zentrum für affektive Erkrankungen. Überweisungsgrund und konkrete Fragestellung: pharmakologische Mitbeurteilung der dokumentierten Medikation und möglicher Alternativen.",
+      "expected": {
+        "contains_all": ["Überweisungsgrund und Fragestellung", "Relevante Anamnese", "Diagnosen", "Aktuelle Medikation", "Beurteilung und erbetenes Vorgehen", "F31.4", "Lithium", "900 mg", "Quetiapin", "200 mg", "pharmakologische Mitbeurteilung"],
+        "contains_any": [["keine manischen", "manische Symptome sind nicht dokumentiert"]],
+        "excludes": ["Skiunfall", "Patientin", "Substanzkonsum besteht", "[Name", "[Praxis", "Grüße"]
+      }
+    },
+    {
+      "id": "ocd-psychotherapy",
+      "split": "holdout",
+      "patient_context": "Patientin: Lea Beispiel, geboren am 22.04.1988. Gesicherte Diagnose: F42.2 Zwangsgedanken und -handlungen, gemischt. Aktuelle Medikation: Fluoxetin 60 mg morgens. Aktiver Behandlungsplan: Ambulante Psychotherapie seit 12.02.2026; aktive Expositionsbehandlung; Therapieziel: Zeitaufwand für die dokumentierten Waschrituale reduzieren.",
+      "session_notes": "Sitzung vom 01.09.2026: Weiterhin zeitaufwendige Waschrituale. Psychotische Symptome und aktuelle Suizidalität sind nicht dokumentiert.",
+      "additional_context": null,
+      "instructions": "Empfänger: Spezialsprechstunde für Zwangsstörungen. Überweisungsgrund und konkrete Fragestellung: psychotherapeutische Mitbeurteilung und Empfehlung zur weiteren Expositionsbehandlung. Stelle nicht dokumentierte Befunde nicht als ausgeschlossen dar.",
+      "expected": {
+        "contains_all": ["Überweisungsgrund und Fragestellung", "Relevante Anamnese", "Diagnosen", "Aktuelle Medikation", "Beurteilung und erbetenes Vorgehen", "F42.2", "Fluoxetin", "60 mg", "Waschrituale", "Expositionsbehandlung"],
+        "contains_any": [["nicht dokumentiert", "keine Aussage"]],
+        "excludes": ["nicht nachweisbar", "ausgeschlossen", "akute Suizidalität", "[Name", "[Praxis", "Grüße"]
+      }
+    },
+    {
+      "id": "adhd-diagnostic-uncertainty",
+      "split": "holdout",
+      "patient_context": "Patient: Samuel Beispiel, geboren am 18.01.1997. Keine gesicherte ADHS-Diagnose. Aktuell keine Medikation. Aktiver Behandlungsplan: diagnostische Abklärung seit 05.08.2026; Therapieziel: differentialdiagnostische Klärung der Verdachtsdiagnose.",
+      "session_notes": "Der Patient berichtet Konzentrations- und Organisationsprobleme seit der Adoleszenz. Schulzeugnisse und Fremdanamnese liegen nicht vor. Atomoxetin wurde am 15.06.2026 wegen Übelkeit abgesetzt.",
+      "additional_context": null,
+      "instructions": "Empfänger: ADHS-Spezialsprechstunde. Überweisungsgrund und konkrete Fragestellung: diagnostische Abklärung einer möglichen ADHS und differentialdiagnostische Einordnung. Stelle ADHS nicht als gesichert und Atomoxetin nicht als aktuelle Medikation dar. Ergänze keine weiteren Symptome oder Begleiterkrankungen.",
+      "expected": {
+        "contains_all": ["Überweisungsgrund und Fragestellung", "Relevante Anamnese", "Aktuelle Medikation", "Beurteilung und erbetenes Vorgehen", "keine gesicherte", "Konzentrations", "Organisations", "Atomoxetin", "15.06.2026", "Übelkeit"],
+        "contains_any": [["keine aktuelle Medikation", "Aktuell keine Medikation", "Keine Medikation", "Keine Medikamente"]],
+        "excludes": ["ADHS (F90", "Impulsivität", "Begleiterkrankungen", "Atomoxetin aktuell", "[Name", "[Praxis", "Grüße"]
+      }
+    }
+  ]
+}

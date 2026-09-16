@@ -161,6 +161,57 @@
         "excludes": ["Insulin", "40 Einheiten"]
       },
       "ci_reference_answer": "Dokumentiert ist Escitalopram 10 mg täglich."
+    },
+    {
+      "id": "referral-letter-grounded-cold-de",
+      "scenario": "cold_prompt",
+      "categories": ["referral_letter", "report_generation", "medication", "dose", "german_swiss", "unsupported_claims"],
+      "ci": false,
+      "system_prompt": "Du verfasst ein präzises psychiatrisches Überweisungsschreiben in Schweizer Hochdeutsch. Verwende ausschliesslich die synthetischen Falldaten und erfinde keine Befunde.",
+      "context": "Synthetische Falldaten: Patientin Erika Beispiel, geboren am 03.02.1980. Gesicherte Diagnose F33.1 rezidivierende depressive Störung, gegenwärtig mittelgradige Episode. Aktuelle Medikation: Sertralin 100 mg morgens. Unter der bisherigen ambulanten Behandlung besteht weiterhin eine relevante Antriebs- und Konzentrationsminderung. Aktuelle Suizidalität und psychotische Symptome sind nicht dokumentiert. Überweisungsgrund: diagnostische Mitbeurteilung und Empfehlung zum weiteren therapeutischen Vorgehen durch die Spezialambulanz.",
+      "question": "Verfasse ein kurzes Überweisungsschreiben. Nenne den Überweisungsgrund und die konkrete Fragestellung früh, übernimm Diagnose und Medikation exakt und lasse nicht dokumentierte Befunde weg. Verwende die Überschriften Überweisungsgrund und Fragestellung, Relevante Anamnese, Diagnosen, Aktuelle Medikation und Erbetenes Vorgehen.",
+      "max_tokens": 512,
+      "pad_to_context": false,
+      "expected": {
+        "contains_all": ["Überweisungsgrund und Fragestellung", "Relevante Anamnese", "Diagnosen", "Aktuelle Medikation", "diagnostische Mitbeurteilung", "F33.1", "Sertralin", "100 mg", "Erbetenes Vorgehen"],
+        "contains_any": [["Spezialambulanz", "therapeutischen Vorgehen"]],
+        "excludes": ["akute Suizidalität", "psychotische Symptome", "nicht angegeben", "Straße", "Strasse", "Grüße"]
+      },
+      "ci_reference_answer": "Überweisungsgrund und Fragestellung\n\nIch überweise Frau Erika Beispiel zur diagnostischen Mitbeurteilung und zur Empfehlung des weiteren therapeutischen Vorgehens an die Spezialambulanz.\n\nRelevante Anamnese\n\nUnter der bisherigen ambulanten Behandlung bestehen weiterhin eine relevante Antriebs- und Konzentrationsminderung.\n\nDiagnosen\n\nF33.1 Rezidivierende depressive Störung, gegenwärtig mittelgradige Episode.\n\nAktuelle Medikation\n\nSertralin 100 mg morgens.\n\nErbetenes Vorgehen\n\nIch bitte um diagnostische Mitbeurteilung und eine Empfehlung zum weiteren therapeutischen Vorgehen. Freundliche Grüsse"
+    },
+    {
+      "id": "referral-letter-ocd-psychotherapy-de",
+      "scenario": "cold_prompt",
+      "categories": ["referral_letter", "report_generation", "medication", "dose", "german_swiss", "unsupported_claims"],
+      "ci": false,
+      "system_prompt": "Du verfasst ein präzises psychiatrisches Überweisungsschreiben in Schweizer Hochdeutsch. Verwende ausschliesslich die synthetischen Falldaten und erfinde keine Befunde.",
+      "context": "Synthetische Falldaten: Patientin Lea Beispiel. Gesicherte Diagnose F42.2 Zwangsgedanken und -handlungen, gemischt. Aktuelle Medikation: Fluoxetin 60 mg morgens. Weiterhin zeitaufwendige Waschrituale. Aktive ambulante Expositionsbehandlung mit dem Ziel, den Zeitaufwand für die dokumentierten Waschrituale zu reduzieren. Psychotische Symptome und aktuelle Suizidalität sind nicht dokumentiert.",
+      "question": "Verfasse ein kurzes Überweisungsschreiben an die Spezialsprechstunde für Zwangsstörungen zur psychotherapeutischen Mitbeurteilung und Empfehlung zur weiteren Expositionsbehandlung. Stelle nicht dokumentierte Befunde nicht als ausgeschlossen dar.",
+      "max_tokens": 512,
+      "pad_to_context": false,
+      "expected": {
+        "contains_all": ["F42.2", "Fluoxetin", "60 mg", "Waschrituale", "Expositionsbehandlung", "psychotherapeutischen Mitbeurteilung"],
+        "contains_any": [["nicht dokumentiert", "keine Aussage"]],
+        "excludes": ["nicht nachweisbar", "ausgeschlossen", "akute Suizidalität", "Grüße", "[Name", "[Praxis"]
+      },
+      "ci_reference_answer": "Überweisungsgrund und Fragestellung\n\nIch überweise Frau Lea Beispiel zur psychotherapeutischen Mitbeurteilung und zur Empfehlung der weiteren Expositionsbehandlung an die Spezialsprechstunde für Zwangsstörungen.\n\nRelevante Anamnese\n\nBei F42.2 Zwangsgedanken und -handlungen, gemischt, bestehen weiterhin zeitaufwendige Waschrituale. Psychotische Symptome und aktuelle Suizidalität sind nicht dokumentiert.\n\nAktuelle Medikation\n\nFluoxetin 60 mg morgens.\n\nBisherige Behandlung\n\nAktive ambulante Expositionsbehandlung mit dem Ziel, den Zeitaufwand für die dokumentierten Waschrituale zu reduzieren.\n\nErbetenes Vorgehen\n\nIch bitte um psychotherapeutische Mitbeurteilung und eine Empfehlung zur weiteren Expositionsbehandlung. Freundliche Grüsse"
+    },
+    {
+      "id": "referral-letter-unconfirmed-adhd-de",
+      "scenario": "cold_prompt",
+      "categories": ["referral_letter", "report_generation", "date", "negation", "german_swiss", "unsupported_claims"],
+      "ci": false,
+      "system_prompt": "Du verfasst ein präzises psychiatrisches Überweisungsschreiben in Schweizer Hochdeutsch. Verwende ausschliesslich die synthetischen Falldaten, bewahre diagnostische Unsicherheit und erfinde keine Befunde.",
+      "context": "Synthetische Falldaten: Patient Samuel Beispiel. Keine gesicherte ADHS-Diagnose. Der Patient berichtet Konzentrations- und Organisationsprobleme seit der Adoleszenz. Schulzeugnisse und Fremdanamnese liegen nicht vor. Atomoxetin wurde am 15.06.2026 wegen Übelkeit abgesetzt. Aktuell keine Medikation. Überweisungsgrund: diagnostische Abklärung einer möglichen ADHS und differentialdiagnostische Einordnung.",
+      "question": "Verfasse ein kurzes Überweisungsschreiben an die ADHS-Spezialsprechstunde. Stelle ADHS nicht als gesichert und Atomoxetin nicht als aktuelle Medikation dar. Ergänze keine weiteren Symptome oder Begleiterkrankungen.",
+      "max_tokens": 512,
+      "pad_to_context": false,
+      "expected": {
+        "contains_all": ["keine gesicherte ADHS-Diagnose", "Konzentrations", "Organisations", "Atomoxetin", "15.06.2026", "Übelkeit", "diagnostische Abklärung"],
+        "contains_any": [["aktuell keine Medikation", "keine aktuelle Medikation"]],
+        "excludes": ["ADHS (F90", "Impulsivität", "Begleiterkrankungen", "Atomoxetin aktuell", "Grüße", "[Name", "[Praxis"]
+      },
+      "ci_reference_answer": "Überweisungsgrund und Fragestellung\n\nIch überweise Herrn Samuel Beispiel zur diagnostischen Abklärung einer möglichen ADHS und zur differentialdiagnostischen Einordnung an die ADHS-Spezialsprechstunde. Eine gesicherte ADHS-Diagnose liegt nicht vor.\n\nRelevante Anamnese\n\nDer Patient berichtet Konzentrations- und Organisationsprobleme seit der Adoleszenz. Schulzeugnisse und Fremdanamnese liegen nicht vor.\n\nBisherige Behandlung und Medikation\n\nAtomoxetin wurde am 15.06.2026 wegen Übelkeit abgesetzt. Aktuell besteht keine Medikation.\n\nErbetenes Vorgehen\n\nIch bitte um diagnostische Abklärung und differentialdiagnostische Einordnung. Freundliche Grüsse"
     }
   ]
 }

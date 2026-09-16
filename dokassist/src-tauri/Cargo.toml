@@ -13,6 +13,11 @@ name = "local-inference-benchmark"
 path = "src/bin/local_inference_benchmark.rs"
 required-features = ["benchmark-harness"]
 
+[[bin]]
+name = "referral-quality-sweep"
+path = "src/bin/referral_quality_sweep.rs"
+required-features = ["benchmark-harness"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 cc = "1"
