@@ -1072,7 +1072,12 @@ describe('createVaultBackup', () => {
 
 describe('restoreVaultBackup', () => {
   it('calls restore_vault_backup with encrypted bytes and returns BackupInfo', async () => {
-    const info = { schema_version: 1, created_at: '2026-01-01T00:00:00Z', db_schema_version: 12, file_count: 5 };
+    const info = {
+      schema_version: 1,
+      created_at: '2026-01-01T00:00:00Z',
+      db_schema_version: 12,
+      file_count: 5,
+    };
     mockInvoke.mockResolvedValueOnce(info);
     const result = await restoreVaultBackup([1, 2, 3]);
     expect(mockInvoke).toHaveBeenCalledWith('restore_vault_backup', { encryptedBackup: [1, 2, 3] });
@@ -1082,10 +1087,17 @@ describe('restoreVaultBackup', () => {
 
 describe('validateBackupArchive', () => {
   it('calls validate_backup_archive and returns BackupInfo', async () => {
-    const info = { schema_version: 1, created_at: '2026-01-01T00:00:00Z', db_schema_version: 12, file_count: 3 };
+    const info = {
+      schema_version: 1,
+      created_at: '2026-01-01T00:00:00Z',
+      db_schema_version: 12,
+      file_count: 3,
+    };
     mockInvoke.mockResolvedValueOnce(info);
     const result = await validateBackupArchive([4, 5, 6]);
-    expect(mockInvoke).toHaveBeenCalledWith('validate_backup_archive', { encryptedBackup: [4, 5, 6] });
+    expect(mockInvoke).toHaveBeenCalledWith('validate_backup_archive', {
+      encryptedBackup: [4, 5, 6],
+    });
     expect(result).toEqual(info);
   });
 });
@@ -1903,7 +1915,13 @@ describe('markLetterAsSent', () => {
 describe('generateLetter', () => {
   it('calls generate_letter and returns generated content', async () => {
     mockInvoke.mockResolvedValueOnce('Dear Dr. Müller, I am writing to refer...');
-    const result = await generateLetter('referral', 'de', 'Patient context', 'Clinical summary', 'Dr. Müller');
+    const result = await generateLetter(
+      'referral',
+      'de',
+      'Patient context',
+      'Clinical summary',
+      'Dr. Müller'
+    );
     expect(mockInvoke).toHaveBeenCalledWith('generate_letter', {
       letterType: 'referral',
       language: 'de',
@@ -1936,7 +1954,12 @@ const EMAIL = {
 describe('createEmail', () => {
   it('calls create_email and returns created email', async () => {
     mockInvoke.mockResolvedValueOnce(EMAIL);
-    const input = { patient_id: 'patient1', recipient_email: 'dr@example.com', subject: 'Test', body: 'Body' };
+    const input = {
+      patient_id: 'patient1',
+      recipient_email: 'dr@example.com',
+      subject: 'Test',
+      body: 'Body',
+    };
     const result = await createEmail(input);
     expect(mockInvoke).toHaveBeenCalledWith('create_email', { input });
     expect(result).toEqual(EMAIL);
@@ -1956,7 +1979,11 @@ describe('listEmails', () => {
   it('calls list_emails and returns list', async () => {
     mockInvoke.mockResolvedValueOnce([EMAIL]);
     const result = await listEmails('patient1', 10, 0);
-    expect(mockInvoke).toHaveBeenCalledWith('list_emails', { patientId: 'patient1', limit: 10, offset: 0 });
+    expect(mockInvoke).toHaveBeenCalledWith('list_emails', {
+      patientId: 'patient1',
+      limit: 10,
+      offset: 0,
+    });
     expect(result).toEqual([EMAIL]);
   });
 });
@@ -1966,7 +1993,10 @@ describe('updateEmail', () => {
     const updated = { ...EMAIL, subject: 'Updated' };
     mockInvoke.mockResolvedValueOnce(updated);
     const result = await updateEmail('email1', { subject: 'Updated' });
-    expect(mockInvoke).toHaveBeenCalledWith('update_email', { id: 'email1', input: { subject: 'Updated' } });
+    expect(mockInvoke).toHaveBeenCalledWith('update_email', {
+      id: 'email1',
+      input: { subject: 'Updated' },
+    });
     expect(result.subject).toBe('Updated');
   });
 });
@@ -2026,8 +2056,14 @@ const TREATMENT_PLAN = {
 describe('createTreatmentPlan', () => {
   it('calls create_treatment_plan and returns plan', async () => {
     mockInvoke.mockResolvedValueOnce(TREATMENT_PLAN);
-    const result = await createTreatmentPlan({ patient_id: 'patient1', title: 'CBT Plan', start_date: '2026-01-01' });
-    expect(mockInvoke).toHaveBeenCalledWith('create_treatment_plan', { input: { patient_id: 'patient1', title: 'CBT Plan', start_date: '2026-01-01' } });
+    const result = await createTreatmentPlan({
+      patient_id: 'patient1',
+      title: 'CBT Plan',
+      start_date: '2026-01-01',
+    });
+    expect(mockInvoke).toHaveBeenCalledWith('create_treatment_plan', {
+      input: { patient_id: 'patient1', title: 'CBT Plan', start_date: '2026-01-01' },
+    });
     expect(result).toEqual(TREATMENT_PLAN);
   });
 });
@@ -2045,7 +2081,11 @@ describe('listTreatmentPlansForPatient', () => {
   it('calls list_treatment_plans_for_patient and returns list', async () => {
     mockInvoke.mockResolvedValueOnce([TREATMENT_PLAN]);
     const result = await listTreatmentPlansForPatient('patient1', 10, 0);
-    expect(mockInvoke).toHaveBeenCalledWith('list_treatment_plans_for_patient', { patientId: 'patient1', limit: 10, offset: 0 });
+    expect(mockInvoke).toHaveBeenCalledWith('list_treatment_plans_for_patient', {
+      patientId: 'patient1',
+      limit: 10,
+      offset: 0,
+    });
     expect(result).toEqual([TREATMENT_PLAN]);
   });
 });
@@ -2054,7 +2094,10 @@ describe('updateTreatmentPlan', () => {
   it('calls update_treatment_plan and returns updated plan', async () => {
     mockInvoke.mockResolvedValueOnce({ ...TREATMENT_PLAN, title: 'Updated' });
     const result = await updateTreatmentPlan('plan1', { title: 'Updated' });
-    expect(mockInvoke).toHaveBeenCalledWith('update_treatment_plan', { id: 'plan1', input: { title: 'Updated' } });
+    expect(mockInvoke).toHaveBeenCalledWith('update_treatment_plan', {
+      id: 'plan1',
+      input: { title: 'Updated' },
+    });
     expect(result.title).toBe('Updated');
   });
 });
@@ -2085,8 +2128,13 @@ const TREATMENT_GOAL = {
 describe('createTreatmentGoal', () => {
   it('calls create_treatment_goal and returns goal', async () => {
     mockInvoke.mockResolvedValueOnce(TREATMENT_GOAL);
-    const result = await createTreatmentGoal({ treatment_plan_id: 'plan1', description: 'Reduce anxiety' });
-    expect(mockInvoke).toHaveBeenCalledWith('create_treatment_goal', { input: { treatment_plan_id: 'plan1', description: 'Reduce anxiety' } });
+    const result = await createTreatmentGoal({
+      treatment_plan_id: 'plan1',
+      description: 'Reduce anxiety',
+    });
+    expect(mockInvoke).toHaveBeenCalledWith('create_treatment_goal', {
+      input: { treatment_plan_id: 'plan1', description: 'Reduce anxiety' },
+    });
     expect(result).toEqual(TREATMENT_GOAL);
   });
 });
@@ -2104,7 +2152,11 @@ describe('listTreatmentGoalsForPlan', () => {
   it('calls list_treatment_goals_for_plan', async () => {
     mockInvoke.mockResolvedValueOnce([TREATMENT_GOAL]);
     const result = await listTreatmentGoalsForPlan('plan1', 10, 0);
-    expect(mockInvoke).toHaveBeenCalledWith('list_treatment_goals_for_plan', { planId: 'plan1', limit: 10, offset: 0 });
+    expect(mockInvoke).toHaveBeenCalledWith('list_treatment_goals_for_plan', {
+      planId: 'plan1',
+      limit: 10,
+      offset: 0,
+    });
     expect(result).toEqual([TREATMENT_GOAL]);
   });
 });
@@ -2113,7 +2165,10 @@ describe('updateTreatmentGoal', () => {
   it('calls update_treatment_goal', async () => {
     mockInvoke.mockResolvedValueOnce({ ...TREATMENT_GOAL, description: 'Updated' });
     const result = await updateTreatmentGoal('goal1', { description: 'Updated' });
-    expect(mockInvoke).toHaveBeenCalledWith('update_treatment_goal', { id: 'goal1', input: { description: 'Updated' } });
+    expect(mockInvoke).toHaveBeenCalledWith('update_treatment_goal', {
+      id: 'goal1',
+      input: { description: 'Updated' },
+    });
     expect(result.description).toBe('Updated');
   });
 });
@@ -2143,8 +2198,18 @@ const INTERVENTION = {
 describe('createTreatmentIntervention', () => {
   it('calls create_treatment_intervention', async () => {
     mockInvoke.mockResolvedValueOnce(INTERVENTION);
-    const result = await createTreatmentIntervention({ treatment_plan_id: 'plan1', type: 'exposure', description: 'Gradual exposure therapy' });
-    expect(mockInvoke).toHaveBeenCalledWith('create_treatment_intervention', { input: { treatment_plan_id: 'plan1', type: 'exposure', description: 'Gradual exposure therapy' } });
+    const result = await createTreatmentIntervention({
+      treatment_plan_id: 'plan1',
+      type: 'exposure',
+      description: 'Gradual exposure therapy',
+    });
+    expect(mockInvoke).toHaveBeenCalledWith('create_treatment_intervention', {
+      input: {
+        treatment_plan_id: 'plan1',
+        type: 'exposure',
+        description: 'Gradual exposure therapy',
+      },
+    });
     expect(result).toEqual(INTERVENTION);
   });
 });
@@ -2162,7 +2227,11 @@ describe('listTreatmentInterventionsForPlan', () => {
   it('calls list_treatment_interventions_for_plan', async () => {
     mockInvoke.mockResolvedValueOnce([INTERVENTION]);
     const result = await listTreatmentInterventionsForPlan('plan1', 10, 0);
-    expect(mockInvoke).toHaveBeenCalledWith('list_treatment_interventions_for_plan', { planId: 'plan1', limit: 10, offset: 0 });
+    expect(mockInvoke).toHaveBeenCalledWith('list_treatment_interventions_for_plan', {
+      planId: 'plan1',
+      limit: 10,
+      offset: 0,
+    });
     expect(result).toEqual([INTERVENTION]);
   });
 });
@@ -2171,7 +2240,10 @@ describe('updateTreatmentIntervention', () => {
   it('calls update_treatment_intervention', async () => {
     mockInvoke.mockResolvedValueOnce({ ...INTERVENTION, type: 'cbt' });
     const result = await updateTreatmentIntervention('int1', { type: 'cbt' });
-    expect(mockInvoke).toHaveBeenCalledWith('update_treatment_intervention', { id: 'int1', input: { type: 'cbt' } });
+    expect(mockInvoke).toHaveBeenCalledWith('update_treatment_intervention', {
+      id: 'int1',
+      input: { type: 'cbt' },
+    });
     expect(result.type).toBe('cbt');
   });
 });
@@ -2204,8 +2276,15 @@ const OUTCOME_SCORE = {
 describe('createOutcomeScore', () => {
   it('calls create_outcome_score and returns score', async () => {
     mockInvoke.mockResolvedValueOnce(OUTCOME_SCORE);
-    const result = await createOutcomeScore({ session_id: 'sess1', scale_type: 'PHQ9', score: 12, administered_at: '2026-01-01' });
-    expect(mockInvoke).toHaveBeenCalledWith('create_outcome_score', { input: { session_id: 'sess1', scale_type: 'PHQ9', score: 12, administered_at: '2026-01-01' } });
+    const result = await createOutcomeScore({
+      session_id: 'sess1',
+      scale_type: 'PHQ9',
+      score: 12,
+      administered_at: '2026-01-01',
+    });
+    expect(mockInvoke).toHaveBeenCalledWith('create_outcome_score', {
+      input: { session_id: 'sess1', scale_type: 'PHQ9', score: 12, administered_at: '2026-01-01' },
+    });
     expect(result).toEqual(OUTCOME_SCORE);
   });
 });
@@ -2223,7 +2302,11 @@ describe('listScoresForSession', () => {
   it('calls list_scores_for_session', async () => {
     mockInvoke.mockResolvedValueOnce([OUTCOME_SCORE]);
     const result = await listScoresForSession('sess1', 10, 0);
-    expect(mockInvoke).toHaveBeenCalledWith('list_scores_for_session', { sessionId: 'sess1', limit: 10, offset: 0 });
+    expect(mockInvoke).toHaveBeenCalledWith('list_scores_for_session', {
+      sessionId: 'sess1',
+      limit: 10,
+      offset: 0,
+    });
     expect(result).toEqual([OUTCOME_SCORE]);
   });
 });
@@ -2232,7 +2315,11 @@ describe('listScoresByScale', () => {
   it('calls list_scores_by_scale', async () => {
     mockInvoke.mockResolvedValueOnce([OUTCOME_SCORE]);
     const result = await listScoresByScale('PHQ9', 10, 0);
-    expect(mockInvoke).toHaveBeenCalledWith('list_scores_by_scale', { scaleType: 'PHQ9', limit: 10, offset: 0 });
+    expect(mockInvoke).toHaveBeenCalledWith('list_scores_by_scale', {
+      scaleType: 'PHQ9',
+      limit: 10,
+      offset: 0,
+    });
     expect(result).toEqual([OUTCOME_SCORE]);
   });
 });
@@ -2241,7 +2328,11 @@ describe('listScoresForPatient', () => {
   it('calls list_scores_for_patient', async () => {
     mockInvoke.mockResolvedValueOnce([OUTCOME_SCORE]);
     const result = await listScoresForPatient('patient1', 10, 0);
-    expect(mockInvoke).toHaveBeenCalledWith('list_scores_for_patient', { patientId: 'patient1', limit: 10, offset: 0 });
+    expect(mockInvoke).toHaveBeenCalledWith('list_scores_for_patient', {
+      patientId: 'patient1',
+      limit: 10,
+      offset: 0,
+    });
     expect(result).toEqual([OUTCOME_SCORE]);
   });
 });
@@ -2250,7 +2341,10 @@ describe('updateOutcomeScore', () => {
   it('calls update_outcome_score', async () => {
     mockInvoke.mockResolvedValueOnce({ ...OUTCOME_SCORE, score: 8 });
     const result = await updateOutcomeScore('score1', { score: 8 });
-    expect(mockInvoke).toHaveBeenCalledWith('update_outcome_score', { id: 'score1', input: { score: 8 } });
+    expect(mockInvoke).toHaveBeenCalledWith('update_outcome_score', {
+      id: 'score1',
+      input: { score: 8 },
+    });
     expect(result.score).toBe(8);
   });
 });
@@ -2505,6 +2599,7 @@ describe('evidence assembly commands', () => {
       patientId: 'p1',
       question: 'Aktuelle Dosis?',
       tokenBudget: 4000,
+      thinkingEffort: null,
     });
     expect(preview.manifest.prompt_tokens).toBe(8123);
 
@@ -2514,6 +2609,7 @@ describe('evidence assembly commands', () => {
       patientId: 'p1',
       question: 'Aktuelle Dosis?',
       tokenBudget: undefined,
+      thinkingEffort: null,
     });
   });
 

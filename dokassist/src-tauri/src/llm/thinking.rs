@@ -6,6 +6,7 @@
 //! generator already used for reports: cap tokens spent inside `<think>`, then
 //! force the model to write the actual answer.
 
+use super::context_cache::InferenceSession;
 use super::engine::LlmEngine;
 use super::harness::{GenerationProfile, GenerationTask};
 use super::prompts;
@@ -97,6 +98,7 @@ pub fn generate_with_think_budget(
         None,
         user_message,
         profile,
+        None,
         emit,
     )
 }
@@ -110,6 +112,7 @@ pub fn generate_with_think_budget_from_prompt(
     formatted_prompt: Option<&str>,
     user_message: &str,
     profile: GenerationProfile,
+    session: Option<&InferenceSession>,
     emit: &dyn Fn(&str),
 ) -> Result<String, AppError> {
     let max_tokens = profile.max_tokens;
@@ -122,12 +125,23 @@ pub fn generate_with_think_budget_from_prompt(
 
     let phase1 = |on_token: &mut dyn FnMut(&str) -> bool| -> Result<(), AppError> {
         if let Some(prompt) = formatted_prompt {
-            engine.generate_streaming_raw_with_sampler(
-                prompt,
-                max_tokens,
-                profile.sampler,
-                on_token,
-            )
+            if let Some(session) = session {
+                engine.generate_streaming_session_with_sampler(
+                    session,
+                    system_prompt,
+                    prompt,
+                    max_tokens,
+                    profile.sampler,
+                    on_token,
+                )
+            } else {
+                engine.generate_streaming_raw_with_sampler(
+                    prompt,
+                    max_tokens,
+                    profile.sampler,
+                    on_token,
+                )
+            }
         } else {
             let prompt = engine.format_chat_history(
                 system_prompt,
@@ -189,23 +203,37 @@ pub fn generate_with_think_budget_from_prompt(
             &output[tail_start..]
         );
 
-        let continuation_prompt = engine.format_chat_history(
-            system_prompt,
-            &[super::engine::AgentMessage {
-                role: "user".to_string(),
-                content: continuation,
-            }],
-        )?;
-        engine.generate_streaming_raw_with_sampler(
-            &continuation_prompt,
-            max_tokens.saturating_sub(max_think_tokens),
-            profile.sampler,
-            |token| {
-                output.push_str(token);
-                emit(token);
-                true
-            },
-        )?;
+        if let Some(prompt) = formatted_prompt {
+            let continued = format!("{prompt}{output}");
+            engine.generate_streaming_raw_with_sampler(
+                &continued,
+                max_tokens.saturating_sub(max_think_tokens),
+                profile.sampler,
+                |token| {
+                    output.push_str(token);
+                    emit(token);
+                    true
+                },
+            )?;
+        } else {
+            let continuation_prompt = engine.format_chat_history(
+                system_prompt,
+                &[super::engine::AgentMessage {
+                    role: "user".to_string(),
+                    content: continuation,
+                }],
+            )?;
+            engine.generate_streaming_raw_with_sampler(
+                &continuation_prompt,
+                max_tokens.saturating_sub(max_think_tokens),
+                profile.sampler,
+                |token| {
+                    output.push_str(token);
+                    emit(token);
+                    true
+                },
+            )?;
+        }
     } else if let Some(stats) = phase1_stats {
         let ctx_size = engine.context_size();
         let was_cut_off = stats.completion_tokens > 0

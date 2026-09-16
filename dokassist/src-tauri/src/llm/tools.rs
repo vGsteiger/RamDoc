@@ -26,6 +26,7 @@ pub fn dispatch_tool(
     engine: &Arc<LlmEngine>,
     scope: &AgentScope,
     call: &ToolCallRequest,
+    thinking_effort: crate::llm::ThinkingEffort,
 ) -> Result<Value, AppError> {
     match call.name.as_str() {
         "get_patient" => tool_get_patient(conn, scope, &call.args),
@@ -34,7 +35,7 @@ pub fn dispatch_tool(
         "create_calendar_event" => tool_create_calendar_event(conn, scope, &call.args),
         "search" => tool_search(conn, &call.args),
         "search_literature" => tool_search_literature(conn, app, &call.args),
-        "write_report" => tool_write_report(conn, app, engine, scope, &call.args),
+        "write_report" => tool_write_report(conn, app, engine, scope, &call.args, thinking_effort),
         "list_diagnoses" => tool_list_diagnoses(conn, scope, &call.args),
         "create_diagnosis" => tool_create_diagnosis(conn, scope, &call.args),
         "list_medications" => tool_list_medications(conn, scope, &call.args),
@@ -243,6 +244,7 @@ fn tool_write_report(
     engine: &Arc<LlmEngine>,
     scope: &AgentScope,
     args: &Value,
+    thinking_effort: crate::llm::ThinkingEffort,
 ) -> Result<Value, AppError> {
     let patient_id = sanitize_for_prompt(str_arg(args, "patient_id")?);
     enforce_patient_scope(scope, &patient_id)?;
@@ -339,7 +341,7 @@ fn tool_write_report(
         None,
         None,
         crate::llm::SYSTEM_PROMPT_DE,
-        crate::llm::ThinkingEffort::Medium,
+        thinking_effort,
     )?;
 
     crate::llm::sanitize::validate_report_output(&content)?;

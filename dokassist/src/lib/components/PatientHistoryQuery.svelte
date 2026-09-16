@@ -18,6 +18,7 @@
   import ThinkingEffortSelect from './ThinkingEffortSelect.svelte';
   import { thinkingEffort } from '$lib/stores/thinking';
   import { get } from 'svelte/store';
+  import { stripThinkTags } from '$lib/llm/strip-think';
 
   interface Props {
     patientId: string;
@@ -104,7 +105,7 @@
 
       // Invoke the command; the result carries the evidence behind the answer.
       const result = await queryPatientHistory(patientId, question, undefined, get(thinkingEffort));
-      response = result.answer;
+      response = stripThinkTags(result.answer);
       manifest = result.manifest;
       audit = result.audit;
     } catch (e) {

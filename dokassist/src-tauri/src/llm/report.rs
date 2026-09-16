@@ -23,6 +23,7 @@ fn needs_summarization(
     system_prompt: &str,
     patient_context: &str,
     session_notes: &str,
+    completion_tokens: usize,
 ) -> Result<bool, AppError> {
     let message = AgentMessage {
         role: "user".to_string(),
@@ -31,7 +32,9 @@ fn needs_summarization(
         ),
     };
     let formatted = engine.format_chat_history(system_prompt, &[message])?;
-    let max_input_tokens = engine.context_size().saturating_sub(4_096 + 256);
+    let max_input_tokens = engine
+        .context_size()
+        .saturating_sub(completion_tokens.saturating_add(256));
     Ok(engine.count_tokens(&formatted) > max_input_tokens)
 }
 
@@ -86,8 +89,13 @@ pub fn generate_report_streaming_with_prompt(
     system_prompt: &str,
     thinking_effort: ThinkingEffort,
 ) -> Result<String, AppError> {
-    let summary_opt = if needs_summarization(engine, system_prompt, patient_context, session_notes)?
-    {
+    let summary_opt = if needs_summarization(
+        engine,
+        system_prompt,
+        patient_context,
+        session_notes,
+        thinking_effort.max_tokens(),
+    )? {
         let _ = app.emit("report-summarizing", ());
         Some(run_summarization(
             engine,
@@ -196,8 +204,13 @@ pub fn generate_session_summary_streaming_with_prompt(
     system_prompt: &str,
     thinking_effort: ThinkingEffort,
 ) -> Result<String, AppError> {
-    let summary_opt = if needs_summarization(engine, system_prompt, patient_context, session_notes)?
-    {
+    let summary_opt = if needs_summarization(
+        engine,
+        system_prompt,
+        patient_context,
+        session_notes,
+        thinking_effort.max_tokens(),
+    )? {
         let _ = app.emit("session-summary-summarizing", ());
         Some(run_summarization(
             engine,
@@ -243,18 +256,23 @@ pub fn generate_letter_streaming_with_prompt(
     system_prompt: &str,
     thinking_effort: ThinkingEffort,
 ) -> Result<String, AppError> {
-    let summary_opt =
-        if needs_summarization(engine, system_prompt, patient_context, clinical_summary)? {
-            let _ = app.emit("letter-summarizing", ());
-            Some(run_summarization(
-                engine,
-                system_prompt,
-                patient_context,
-                clinical_summary,
-            )?)
-        } else {
-            None
-        };
+    let summary_opt = if needs_summarization(
+        engine,
+        system_prompt,
+        patient_context,
+        clinical_summary,
+        thinking_effort.max_tokens(),
+    )? {
+        let _ = app.emit("letter-summarizing", ());
+        Some(run_summarization(
+            engine,
+            system_prompt,
+            patient_context,
+            clinical_summary,
+        )?)
+    } else {
+        None
+    };
     let (eff_ctx, eff_summary) = match &summary_opt {
         Some(s) => (s.as_str(), ""),
         None => (patient_context, clinical_summary),

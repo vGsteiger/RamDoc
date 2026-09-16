@@ -478,8 +478,6 @@ pub async fn generate_letter(
 }
 
 /// Tokens reserved for the answer when sizing the evidence block.
-const EVIDENCE_COMPLETION_TOKENS: usize = 4_096;
-
 /// An assembled evidence block together with its manifest.
 #[derive(Debug, Serialize)]
 pub struct EvidencePreview {
@@ -635,6 +633,7 @@ pub async fn preview_patient_evidence(
     patient_id: String,
     question: String,
     token_budget: Option<usize>,
+    thinking_effort: Option<ThinkingEffort>,
 ) -> Result<EvidencePreview, AppError> {
     check_auth(&state)?;
 
@@ -646,11 +645,10 @@ pub async fn preview_patient_evidence(
     };
     let query_vec = embed_question_if_available(&state, &question).await;
 
+    let completion_tokens = thinking_effort.unwrap_or_default().max_tokens();
     let budget = token_budget.unwrap_or_else(|| match &engine {
-        Some(engine) => {
-            evidence::budget_for_context(engine.context_size(), EVIDENCE_COMPLETION_TOKENS)
-        }
-        None => evidence::budget_for_context(16_384, EVIDENCE_COMPLETION_TOKENS),
+        Some(engine) => evidence::budget_for_context(engine.context_size(), completion_tokens),
+        None => evidence::budget_for_context(16_384, completion_tokens),
     });
 
     let pool = state.get_db()?;

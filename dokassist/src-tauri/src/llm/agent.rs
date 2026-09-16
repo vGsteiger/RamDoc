@@ -14,10 +14,6 @@ use tauri::Emitter;
 
 /// Maximum tool-call iterations per agent turn before forcing a final answer.
 const MAX_ITERATIONS: usize = 8;
-/// Tokens budget for the "is there a tool call?" probe.
-const PROBE_MAX_TOKENS: usize = 512;
-/// Tokens budget for the final streaming answer.
-const ANSWER_MAX_TOKENS: usize = 4096;
 
 /// Maximum chars of a tool result that are fed back into the LLM.
 const TOOL_RESULT_TRIM: usize = 4_000;
@@ -272,11 +268,11 @@ pub fn run_agent_loop(
     let mut tool_calls_made: Vec<ExecutedToolCall> = Vec::new();
     let summarize_threshold = engine
         .context_size()
-        .saturating_sub(PROBE_MAX_TOKENS + ANSWER_MAX_TOKENS + 512);
+        .saturating_sub(probe_profile.max_tokens + chat_profile.max_tokens + 512);
 
     for iteration in 0..MAX_ITERATIONS {
         // Summarize history if it is getting too large to fit in the context window
-        let formatted = engine.format_chat_history(&system_prompt, &history)?;
+        let formatted = engine.format_chat_history(&answer_system, &history)?;
         let estimated_tokens = estimate_tokens(&formatted);
         if estimated_tokens > summarize_threshold {
             log::warn!(
@@ -315,7 +311,7 @@ pub fn run_agent_loop(
 
             let result = {
                 let conn = pool.conn()?;
-                super::tools::dispatch_tool(&conn, app, engine, &scope, &call)
+                super::tools::dispatch_tool(&conn, app, engine, &scope, &call, thinking_effort)
             };
 
             let result_json = match result {
@@ -369,6 +365,7 @@ pub fn run_agent_loop(
                 Some(&final_prompt),
                 &user_message,
                 chat_profile,
+                Some(&inference_session),
                 &|token| {
                     let _ = app.emit("agent-chunk", token);
                 },
@@ -394,6 +391,7 @@ pub fn run_agent_loop(
         Some(&final_prompt),
         &user_message,
         chat_profile,
+        Some(&inference_session),
         &|token| {
             let _ = app.emit("agent-chunk", token);
         },
