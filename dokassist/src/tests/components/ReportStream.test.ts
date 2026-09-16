@@ -13,26 +13,26 @@ describe('ReportStream — idle (not streaming)', () => {
     expect(screen.getByText('Patient summary report')).toBeInTheDocument();
   });
 
-  it('does not show the Generating indicator when not streaming', () => {
+  it('does not show the writing indicator when not streaming', () => {
     render(ReportStream, { content: 'Some content', isStreaming: false });
-    expect(screen.queryByText('Generating...')).not.toBeInTheDocument();
+    expect(screen.queryByText('Writing the report')).not.toBeInTheDocument();
   });
 });
 
 describe('ReportStream — streaming', () => {
-  it('shows the Generating indicator when isStreaming is true with partial content', () => {
+  it('shows the writing indicator when isStreaming is true with partial content', () => {
     render(ReportStream, { content: 'Partial report...', isStreaming: true });
-    expect(screen.getByText('Generating...')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Writing the report');
   });
 
-  it('shows the waiting message when streaming with no content yet', () => {
+  it('shows a thinking status when streaming with no content yet', () => {
     render(ReportStream, { content: '', isStreaming: true });
-    expect(screen.getByText('Waiting for the language model...')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Thinking');
   });
 
-  it('shows both the Generating indicator and partial content while streaming', () => {
+  it('shows both the writing indicator and partial content while streaming', () => {
     render(ReportStream, { content: 'Partial output so far...', isStreaming: true });
-    expect(screen.getByText('Generating...')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Writing the report');
     expect(screen.getByText('Partial output so far...')).toBeInTheDocument();
   });
 
