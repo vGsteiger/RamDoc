@@ -243,7 +243,6 @@ fn tool_lookup_medication_reference(
     app: &tauri::AppHandle,
     args: &Value,
 ) -> Result<Value, AppError> {
-    let query = sanitize_for_prompt(str_arg(args, "query")?);
     let state = app.state::<crate::state::AppState>();
     let guard = state
         .get_medication_ref()
@@ -252,9 +251,49 @@ fn tool_lookup_medication_reference(
         .as_ref()
         .ok_or_else(|| AppError::NotFound("medication reference DB not installed".to_string()))?;
 
-    let details = crate::medication_reference::search_substance_details(conn, &query, 5)?;
+    lookup_medication_reference(conn, args)
+}
 
-    Ok(serde_json::to_value(details).unwrap_or(json!({"error": "serialize"})))
+fn truncate_reference_text(value: Option<String>, limit: usize) -> Option<String> {
+    value.map(|text| {
+        let mut chars = text.chars();
+        let shortened: String = chars.by_ref().take(limit).collect();
+        if chars.next().is_some() {
+            format!("{shortened}…")
+        } else {
+            shortened
+        }
+    })
+}
+
+fn lookup_medication_reference(conn: &Connection, args: &Value) -> Result<Value, AppError> {
+    let query = sanitize_for_prompt(str_arg(args, "query")?);
+    let mut matches = crate::medication_reference::search_substance_details(conn, &query, 3)?;
+    let best_match = matches.first_mut().map(|detail| {
+        detail.trade_names.truncate(5);
+        detail.indication = truncate_reference_text(detail.indication.take(), 650);
+        detail.side_effects = truncate_reference_text(detail.side_effects.take(), 900);
+        detail.contraindications = truncate_reference_text(detail.contraindications.take(), 650);
+        detail.clone()
+    });
+    let alternatives: Vec<_> = matches
+        .into_iter()
+        .skip(1)
+        .map(|detail| {
+            json!({
+                "id": detail.id,
+                "name_de": detail.name_de,
+                "atc_code": detail.atc_code,
+                "trade_names": detail.trade_names.into_iter().take(3).collect::<Vec<_>>(),
+            })
+        })
+        .collect();
+
+    Ok(json!({
+        "best_match": best_match,
+        "alternatives": alternatives,
+        "note": "Text fields are bounded for model context. Search a more specific name for another full match.",
+    }))
 }
 
 fn tool_write_report(
@@ -671,5 +710,41 @@ mod tests {
         };
         let result = tool_list_patients(&conn, &scope);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn medication_lookup_is_bounded_and_serializes_grounding_fields() {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::medication_reference::open_reference_db_for_tests(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO substances (
+                id, name_de, atc_code, trade_names, indication,
+                side_effects, contraindications, source_version
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            rusqlite::params![
+                "substance-1",
+                "Beispielstoff",
+                "N06AB00",
+                r#"["Beispielmed"]"#,
+                "I".repeat(2_000),
+                "N".repeat(2_000),
+                "K".repeat(2_000),
+                "test-version"
+            ],
+        )
+        .unwrap();
+
+        let value = lookup_medication_reference(&conn, &json!({"query": "Beispielmed"})).unwrap();
+        let serialized = value.to_string();
+
+        assert!(serialized.len() < 4_000);
+        assert_eq!(value["best_match"]["name_de"], "Beispielstoff");
+        assert_eq!(value["best_match"]["source_version"], "test-version");
+    }
+
+    #[test]
+    fn medication_lookup_requires_a_query() {
+        let conn = Connection::open_in_memory().unwrap();
+        assert!(lookup_medication_reference(&conn, &json!({})).is_err());
     }
 }

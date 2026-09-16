@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { resolve } from '$app/paths';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import {
@@ -36,6 +36,7 @@
   let selectedMedicationId: string | null = $state(null);
   let medicationSearching = $state(false);
   let medicationSearchSequence = 0;
+  let medicationSearchTimer: ReturnType<typeof setTimeout> | null = null;
 
   let unlisten: UnlistenFn | null = null;
 
@@ -61,10 +62,31 @@
     };
   });
 
-  async function handleMedicationSearch() {
+  onDestroy(() => {
+    if (medicationSearchTimer) clearTimeout(medicationSearchTimer);
+  });
+
+  async function runMedicationSearch(query: string, sequence: number) {
+    try {
+      const results = await searchMedicationReference(query);
+      if (sequence === medicationSearchSequence) medicationResults = results;
+    } catch (err) {
+      if (sequence === medicationSearchSequence) {
+        medicationResults = [];
+        error = parseError(err);
+      }
+    } finally {
+      if (sequence === medicationSearchSequence) medicationSearching = false;
+    }
+  }
+
+  function handleMedicationSearch() {
     const query = medicationQuery.trim();
     const sequence = ++medicationSearchSequence;
     selectedMedicationId = null;
+    error = null;
+    if (medicationSearchTimer) clearTimeout(medicationSearchTimer);
+
     if (query.length < 2) {
       medicationResults = [];
       medicationSearching = false;
@@ -72,14 +94,10 @@
     }
 
     medicationSearching = true;
-    try {
-      const results = await searchMedicationReference(query);
-      if (sequence === medicationSearchSequence) medicationResults = results;
-    } catch (err) {
-      if (sequence === medicationSearchSequence) error = parseError(err);
-    } finally {
-      if (sequence === medicationSearchSequence) medicationSearching = false;
-    }
+    medicationSearchTimer = setTimeout(() => {
+      medicationSearchTimer = null;
+      void runMedicationSearch(query, sequence);
+    }, 300);
   }
 
   async function loadLiterature() {
@@ -251,6 +269,7 @@
           <input
             bind:value={medicationQuery}
             oninput={handleMedicationSearch}
+            aria-label={$t('literature.medicationSearchPlaceholder')}
             class="h-10 w-full rounded-control border border-line bg-surface pl-9 pr-3 text-body text-fg focus:border-accent focus:outline-none"
             placeholder={$t('literature.medicationSearchPlaceholder')}
           />

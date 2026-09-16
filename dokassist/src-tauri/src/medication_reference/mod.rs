@@ -90,6 +90,11 @@ fn ensure_schema(conn: &Connection) -> Result<(), AppError> {
     Ok(())
 }
 
+#[cfg(test)]
+pub(crate) fn open_reference_db_for_tests(conn: &Connection) -> Result<(), AppError> {
+    ensure_schema(conn)
+}
+
 /// FTS5 prefix search — returns up to `limit` matching substances.
 pub fn search_substances(
     conn: &Connection,
