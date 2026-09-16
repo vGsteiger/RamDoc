@@ -24,6 +24,7 @@
     "multi_hop_evidence",
     "tool_call_validity",
     "german_swiss",
+    "referral_letter",
     "unsupported_claims",
     "prompt_injection"
   ],

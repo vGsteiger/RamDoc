@@ -10,7 +10,7 @@ Richtlinien:\n\
 - Respektieren Sie den Datenschutz und die ärztliche Schweigepflicht\n\
 - Verwenden Sie korrekte psychiatrische Terminologie (ICD-10/DSM-5)\n\
 - Strukturieren Sie Berichte nach deutschen medizinischen Standards\n\
-- Verwenden Sie KEIN Markdown, KEINE Sterne, KEINE Rauten, KEINE Listen mit Bindestrichen und KEINE sonstige Formatierung — nur reinen Fliesstext mit Zeilenumbrüchen zur Abschnittstrennung";
+- Verwenden Sie KEIN Markdown, KEINE Sterne, KEINE Rauten und KEINE Listen mit Bindestrichen. Kurze Abschnittsüberschriften als eigene Zeile sind erlaubt";
 
 /// French system prompt for a psychiatric documentation assistant.
 pub const SYSTEM_PROMPT_FR: &str = "\
@@ -24,7 +24,7 @@ Directives:\n\
 - Respectez la protection des données et le secret médical\n\
 - Utilisez la terminologie psychiatrique correcte (CIM-10/DSM-5)\n\
 - Structurez les rapports selon les normes médicales françaises et suisses\n\
-- N'utilisez PAS de Markdown, PAS d'astérisques, PAS de dièses, PAS de listes à tirets ni aucune autre mise en forme — uniquement du texte brut avec des sauts de ligne pour séparer les sections";
+- N'utilisez PAS de Markdown, PAS d'astérisques, PAS de dièses et PAS de listes à tirets. De courts intertitres sur une ligne séparée sont autorisés";
 
 #[derive(Debug, Clone)]
 pub enum ReportType {
@@ -103,13 +103,32 @@ pub fn report_generation_prompt(
             5. Weiteres Vorgehen und Therapieziele"
         }
         ReportType::Ueberweisungsschreiben => {
-            "Erstellen Sie ein formelles Überweisungsschreiben mit folgenden Abschnitten:\n\
-            1. Anrede (An den zuweisenden bzw. aufnehmenden Arzt)\n\
-            2. Vorstellung des Patienten\n\
-            3. Bisherige Diagnosen und Behandlung\n\
-            4. Aktueller psychischer Befund\n\
-            5. Überweisungsgrund und Fragestellung\n\
-            6. Freundliche Schlussformel"
+            "Verfassen Sie ein versandfertiges psychiatrisches Überweisungsschreiben an eine \
+            ärztliche oder psychotherapeutische Fachperson. Das Schreiben soll die klinische \
+            Entscheidung der empfangenden Fachperson unterstützen, nicht die gesamte Akte \
+            nacherzählen.\n\n\
+            Verwenden Sie diese Reihenfolge:\n\
+            1. Passender Betreff mit Überweisungsziel; keine Überschrift 'Überweisungsschreiben'\n\
+            2. Persönliche Anrede, sofern ein Empfänger genannt ist, sonst neutrale Anrede\n\
+            3. Einleitung in ein bis zwei Sätzen: Patient, aktueller Anlass und gewünschte Übernahme, \
+            Mitbeurteilung oder Behandlung\n\
+            4. Überweisungsgrund und konkrete Fragestellung; dieser Abschnitt muss früh und eindeutig sein\n\
+            5. Klinisch relevante Anamnese und aktueller Befund, problemorientiert und ohne irrelevante Details\n\
+            6. Diagnosen mit ICD-10-Codes, aber nur wenn sie in den Quelldaten vorkommen\n\
+            7. Bisheriger Verlauf, relevante Behandlungen und Wirkung beziehungsweise Verträglichkeit\n\
+            8. Aktuelle Medikation mit Dosierung und Einnahmeschema, falls vorhanden\n\
+            9. Kurze Beurteilung, erbetenes Vorgehen und höfliche Schlussformel\n\n\
+            Qualitätsregeln:\n\
+            - Verwenden Sie ausschliesslich Angaben aus den bereitgestellten Daten und zusätzlichen Vorgaben.\n\
+            - Erfinden Sie keine Befunde, Diagnosen, Risiken, Behandlungen, Namen, Adressen oder Daten.\n\
+            - Fehlt eine Information, lassen Sie sie weg; schreiben Sie keine Platzhalter und keine \
+              Formulierungen wie 'nicht angegeben'.\n\
+            - Unterscheiden Sie aktuelle Tatsachen, anamnestische Angaben und klinische Einschätzungen.\n\
+            - Priorisieren Sie Informationen nach Relevanz für Überweisungsgrund und Fragestellung.\n\
+            - Vermeiden Sie Wiederholungen, administrative Meta-Kommentare und eine separate Patientenstammdatenliste; \
+              die Stammdaten werden im Dokumentkopf dargestellt.\n\
+            - Schreiben Sie präzise, kollegial und gut lesbar. Nutzen Sie kurze Absätze und nur die \
+              tatsächlich benötigten Abschnittsüberschriften. Zielumfang: ungefähr eine bis zwei Seiten."
         }
     };
 
@@ -129,7 +148,10 @@ pub fn report_generation_prompt(
     };
 
     let delimited = build_delimited_prompt(&full_instructions, &combined_data);
-    format!("{delimited}\nWICHTIG: Nur reiner Fliesstext, kein Markdown, keine Sterne, keine Rauten.\nBericht:")
+    format!(
+        "{delimited}\nWICHTIG: Nur reiner Text, kein Markdown, keine Sterne und keine Rauten. \
+        Abschnittsüberschriften stehen ohne Nummerierung oder Satzzeichen auf einer eigenen Zeile.\nBericht:"
+    )
 }
 
 /// Prompt for generating a structured clinical session summary.
@@ -410,4 +432,41 @@ pub fn evidence_query_prompt(evidence: &str, question: &str) -> String {
 
     let delimited = build_delimited_prompt(&instructions, evidence);
     format!("{delimited}\nAntwort mit Quellenangaben:")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn referral_prompt_prioritizes_question_and_forbids_invention() {
+        let prompt = report_generation_prompt(
+            ReportType::Ueberweisungsschreiben,
+            "Name: Erika Muster\nDiagnose: F33.1",
+            "Anhaltende depressive Symptomatik",
+            None,
+            Some("Überweisungsgrund und konkrete Fragestellung: Bitte um Mitbeurteilung"),
+        );
+
+        assert!(prompt.contains("früh und eindeutig"));
+        assert!(prompt.contains("Erfinden Sie keine Befunde"));
+        assert!(prompt.contains("Priorisieren Sie Informationen nach Relevanz"));
+        assert!(prompt.contains("Bitte um Mitbeurteilung"));
+        assert!(prompt.contains("Abschnittsüberschriften stehen ohne Nummerierung"));
+    }
+
+    #[test]
+    fn referral_prompt_keeps_clinical_data_delimited() {
+        let prompt = report_generation_prompt(
+            ReportType::Ueberweisungsschreiben,
+            "Patientenkontext",
+            "Sitzungsnotizen",
+            Some("Zusatzdokument"),
+            None,
+        );
+
+        assert_eq!(prompt.matches("===== CLINICAL DATA START =====").count(), 1);
+        assert_eq!(prompt.matches("===== CLINICAL DATA END =====").count(), 1);
+        assert!(prompt.contains("Zusatzdokument"));
+    }
 }

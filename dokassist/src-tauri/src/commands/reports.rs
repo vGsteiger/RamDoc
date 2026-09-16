@@ -140,6 +140,7 @@ fn load_system_font(filename: &str) -> Option<ParsedFont> {
 }
 
 /// A line to render in the PDF, with style information derived from markdown.
+#[derive(Debug, PartialEq)]
 enum PdfLine {
     Heading { text: String, level: u8 },
     Body(String),
@@ -147,7 +148,47 @@ enum PdfLine {
     Blank,
 }
 
-/// Convert markdown content into a flat list of renderable lines.
+const CLINICAL_SECTION_HEADINGS: &[&str] = &[
+    "anamnese",
+    "beurteilung",
+    "diagnosen",
+    "diagnose",
+    "fragestellung",
+    "medikation",
+    "psychischer befund",
+    "aktueller befund",
+    "relevante anamnese",
+    "bisheriger verlauf",
+    "bisherige behandlung",
+    "bisherige behandlungen",
+    "therapie",
+    "therapieverlauf",
+    "überweisungsgrund",
+    "überweisungsgrund und fragestellung",
+    "zuweisungsgrund",
+    "zuweisungsgrund und fragestellung",
+    "erbetenes vorgehen",
+    "weiteres vorgehen",
+    "vorgehen",
+];
+
+fn is_plain_heading(text: &str) -> bool {
+    let trimmed = text.trim().trim_end_matches(':');
+    let normalized = trimmed.to_lowercase();
+    let word_count = trimmed.split_whitespace().count();
+
+    (word_count <= 8
+        && trimmed.chars().count() <= 80
+        && CLINICAL_SECTION_HEADINGS
+            .iter()
+            .any(|heading| normalized == *heading))
+        || (normalized.starts_with("betreff:") && trimmed.chars().count() <= 120)
+}
+
+/// Convert generated plain text or clinician-authored markdown into renderable blocks.
+///
+/// The model is intentionally asked for plain text, so standalone clinical section names
+/// must be recognized even when they do not carry Markdown `#` markers.
 fn markdown_to_pdf_lines(markdown: &str) -> Vec<PdfLine> {
     let mut lines = Vec::new();
     let parser = Parser::new_ext(markdown, Options::empty());
@@ -208,23 +249,119 @@ fn markdown_to_pdf_lines(markdown: &str) -> Vec<PdfLine> {
         let _ = in_strong; // used implicitly via current_text accumulation
     }
 
+    if lines
+        .iter()
+        .any(|line| matches!(line, PdfLine::Heading { .. }))
+    {
+        return lines;
+    }
+
+    let mut plain_lines = Vec::new();
+    let mut paragraph = Vec::new();
+    let flush_paragraph = |paragraph: &mut Vec<&str>, output: &mut Vec<PdfLine>| {
+        if !paragraph.is_empty() {
+            output.push(PdfLine::Body(paragraph.join(" ")));
+            output.push(PdfLine::Blank);
+            paragraph.clear();
+        }
+    };
+
+    for raw_line in markdown.lines() {
+        let line = raw_line.trim();
+        if line.is_empty() {
+            flush_paragraph(&mut paragraph, &mut plain_lines);
+        } else if is_plain_heading(line) {
+            flush_paragraph(&mut paragraph, &mut plain_lines);
+            plain_lines.push(PdfLine::Heading {
+                text: line.to_string(),
+                level: 2,
+            });
+        } else {
+            paragraph.push(line);
+        }
+    }
+    flush_paragraph(&mut paragraph, &mut plain_lines);
+    plain_lines
+}
+
+/// Estimate Helvetica/Arial text width closely enough for safe wrapping. Wide characters are
+/// deliberately over-estimated so text never crosses the right margin when a system font is absent.
+fn estimated_text_width_mm(text: &str, font_size_pt: f32) -> f32 {
+    let units: f32 = text
+        .chars()
+        .map(|character| match character {
+            'i' | 'l' | 'I' | 'j' | 't' | 'f' | ' ' | '.' | ',' | ':' | ';' | '!' | '|' => 0.30,
+            'm' | 'w' | 'M' | 'W' | '@' | '%' => 0.90,
+            _ if character.is_ascii_uppercase() => 0.68,
+            _ => 0.55,
+        })
+        .sum();
+    units * font_size_pt * 0.352_778
+}
+
+fn wrap_pdf_text(text: &str, font_size_pt: f32, max_width_mm: f32) -> Vec<String> {
+    let mut lines = Vec::new();
+    let mut current = String::new();
+
+    for word in text.split_whitespace() {
+        if estimated_text_width_mm(word, font_size_pt) > max_width_mm {
+            if !current.is_empty() {
+                lines.push(std::mem::take(&mut current));
+            }
+
+            let mut chunk = String::new();
+            for character in word.chars() {
+                let candidate = format!("{chunk}{character}");
+                if !chunk.is_empty()
+                    && estimated_text_width_mm(&candidate, font_size_pt) > max_width_mm
+                {
+                    lines.push(std::mem::take(&mut chunk));
+                }
+                chunk.push(character);
+            }
+            current = chunk;
+            continue;
+        }
+
+        let candidate = if current.is_empty() {
+            word.to_string()
+        } else {
+            format!("{current} {word}")
+        };
+        if !current.is_empty() && estimated_text_width_mm(&candidate, font_size_pt) > max_width_mm {
+            lines.push(std::mem::take(&mut current));
+            current.push_str(word);
+        } else {
+            current = candidate;
+        }
+    }
+    if !current.is_empty() {
+        lines.push(current);
+    }
+    if lines.is_empty() {
+        lines.push(String::new());
+    }
     lines
 }
 
 fn generate_pdf_bytes(report: Report, patient: Patient) -> Result<Vec<u8>, AppError> {
-    use printpdf::{Op, PdfPage, PdfSaveOptions, Point, Pt, TextItem};
+    use printpdf::{Color, Line, LinePoint, Op, PdfPage, PdfSaveOptions, Point, Pt, Rgb, TextItem};
 
-    // Format dates
     let generated_at = NaiveDateTime::parse_from_str(&report.generated_at, "%Y-%m-%d %H:%M:%S%.f")
         .or_else(|_| NaiveDateTime::parse_from_str(&report.generated_at, "%Y-%m-%dT%H:%M:%S%.f"))
-        .map(|dt| dt.format("%d.%m.%Y %H:%M").to_string())
+        .map(|dt| dt.format("%d.%m.%Y").to_string())
         .unwrap_or_else(|_| report.generated_at.clone());
 
     let dob = NaiveDate::parse_from_str(&patient.date_of_birth, "%Y-%m-%d")
         .map(|d| d.format("%d.%m.%Y").to_string())
         .unwrap_or_else(|_| patient.date_of_birth.clone());
 
-    let mut doc = PdfDocument::new("Report");
+    let document_title = format_report_type(&report.report_type);
+    let patient_name = format!("{} {}", patient.first_name, patient.last_name);
+    let mut doc = PdfDocument::new(&document_title);
+    doc.metadata.info.document_title = document_title.clone();
+    doc.metadata.info.creator = "RamDoc".to_string();
+    doc.metadata.info.producer = "RamDoc".to_string();
 
     // Load Unicode-capable fonts; fall back to builtins if not found
     let (font, font_bold) = if let (Some(regular), Some(bold)) = (
@@ -244,169 +381,190 @@ fn generate_pdf_bytes(report: Report, patient: Patient) -> Result<Vec<u8>, AppEr
         )
     };
 
-    // Helper: emit a single line of text at (x_mm, y_mm) with given font & size
-    let text_op = |text: String, size: f32, x: Mm, y: Mm, fh: &PdfFontHandle| -> Vec<Op> {
-        vec![
-            Op::StartTextSection,
-            Op::SetFont {
-                font: fh.clone(),
-                size: Pt(size),
-            },
-            Op::SetTextCursor {
-                pos: Point::new(x, y),
-            },
-            Op::ShowText {
-                items: vec![TextItem::Text(text)],
-            },
-            Op::EndTextSection,
-        ]
-    };
+    let dark = Color::Rgb(Rgb::new(0.12, 0.15, 0.19, None));
+    let muted = Color::Rgb(Rgb::new(0.38, 0.42, 0.47, None));
+    let accent = Color::Rgb(Rgb::new(0.08, 0.32, 0.42, None));
+    let rule = Color::Rgb(Rgb::new(0.75, 0.79, 0.82, None));
+
+    let text_ops =
+        |text: String, size: f32, x: Mm, y: Mm, fh: &PdfFontHandle, color: &Color| -> Vec<Op> {
+            vec![
+                Op::StartTextSection,
+                Op::SetFillColor { col: color.clone() },
+                Op::SetFont {
+                    font: fh.clone(),
+                    size: Pt(size),
+                },
+                Op::SetTextCursor {
+                    pos: Point::new(x, y),
+                },
+                Op::ShowText {
+                    items: vec![TextItem::Text(text)],
+                },
+                Op::EndTextSection,
+            ]
+        };
 
     let page_w = Mm(210.0);
     let page_h = Mm(297.0);
-    let left = Mm(20.0);
-    let lh = Mm(5.0);
-    let max_chars = 90usize;
+    let left = Mm(24.0);
+    let right = Mm(186.0);
+    let content_width = right.0 - left.0;
+    let body_line_height = Mm(5.15);
+    let bottom = 24.0;
 
     let mut all_ops: Vec<Op> = Vec::new();
     let mut pages: Vec<PdfPage> = Vec::new();
-    let mut y = Mm(270.0);
+    let mut y = Mm(274.0);
 
     let flush_page = |ops: Vec<Op>, pages: &mut Vec<PdfPage>| {
         pages.push(PdfPage::new(page_w, page_h, ops));
     };
 
-    // Helper: word-wrap a text string and emit lines, mutating y
+    let add_rule = |ops: &mut Vec<Op>, y: Mm| {
+        ops.extend([
+            Op::SetOutlineColor { col: rule.clone() },
+            Op::SetOutlineThickness { pt: Pt(0.6) },
+            Op::DrawLine {
+                line: Line {
+                    points: vec![
+                        LinePoint {
+                            p: Point::new(left, y),
+                            bezier: false,
+                        },
+                        LinePoint {
+                            p: Point::new(right, y),
+                            bezier: false,
+                        },
+                    ],
+                    is_closed: false,
+                },
+            },
+        ]);
+    };
+
+    let add_continuation_header = |ops: &mut Vec<Op>| {
+        ops.extend(text_ops(
+            document_title.clone(),
+            8.5,
+            left,
+            Mm(279.0),
+            &font_bold,
+            &muted,
+        ));
+        let name_width = estimated_text_width_mm(&patient_name, 8.5);
+        ops.extend(text_ops(
+            patient_name.clone(),
+            8.5,
+            Mm((right.0 - name_width).max(left.0)),
+            Mm(279.0),
+            &font,
+            &muted,
+        ));
+        add_rule(ops, Mm(274.0));
+    };
+
     let emit_wrapped = |text: &str,
                         size: f32,
                         fh: &PdfFontHandle,
+                        color: &Color,
                         all_ops: &mut Vec<Op>,
                         pages: &mut Vec<PdfPage>,
                         y: &mut Mm| {
-        let char_indices: Vec<(usize, char)> = text.char_indices().collect();
-        let mut start_idx = 0;
-
-        while start_idx < char_indices.len() {
-            let end_idx = (start_idx + max_chars).min(char_indices.len());
-            let break_idx = if end_idx < char_indices.len() {
-                char_indices[start_idx..end_idx]
-                    .iter()
-                    .rposition(|(_, c)| *c == ' ')
-                    .map(|pos| start_idx + pos)
-                    .unwrap_or(end_idx)
-            } else {
-                end_idx
-            };
-
-            let byte_start = char_indices[start_idx].0;
-            let byte_end = if break_idx < char_indices.len() {
-                char_indices[break_idx].0
-            } else {
-                text.len()
-            };
-            let chunk = text[byte_start..byte_end].trim().to_string();
-
-            if y.0 < 30.0 {
+        for line in wrap_pdf_text(text, size, content_width) {
+            if y.0 < bottom + body_line_height.0 {
                 flush_page(std::mem::take(all_ops), pages);
-                *y = Mm(270.0);
+                add_continuation_header(all_ops);
+                *y = Mm(265.0);
             }
-
-            all_ops.extend(text_op(chunk, size, left, *y, fh));
-            *y -= lh;
-
-            start_idx = break_idx;
-            while start_idx < char_indices.len() && char_indices[start_idx].1.is_whitespace() {
-                start_idx += 1;
-            }
+            all_ops.extend(text_ops(line, size, left, *y, fh, color));
+            *y -= body_line_height;
         }
     };
 
-    // Title
-    emit_wrapped(
-        &format_report_type(&report.report_type),
-        24.0,
-        &font_bold,
-        &mut all_ops,
-        &mut pages,
-        &mut y,
-    );
-    y -= lh;
-
-    // Patient information header
-    all_ops.extend(text_op(
-        "Patienteninformation".to_string(),
-        14.0,
+    all_ops.extend(text_ops(
+        document_title.clone(),
+        19.0,
         left,
         y,
         &font_bold,
+        &accent,
     ));
-    y -= lh;
+    let date_label = format!("Erstellt am {generated_at}");
+    let date_width = estimated_text_width_mm(&date_label, 9.0);
+    all_ops.extend(text_ops(
+        date_label,
+        9.0,
+        Mm((right.0 - date_width).max(left.0)),
+        Mm(274.0),
+        &font,
+        &muted,
+    ));
+    add_rule(&mut all_ops, Mm(265.0));
 
-    emit_wrapped(
-        &format!("Name: {} {}", patient.first_name, patient.last_name),
-        11.0,
-        &font,
-        &mut all_ops,
-        &mut pages,
-        &mut y,
-    );
-    emit_wrapped(
-        &format!("Geburtsdatum: {}", dob),
-        11.0,
-        &font,
-        &mut all_ops,
-        &mut pages,
-        &mut y,
-    );
-    emit_wrapped(
-        &format!("AHV-Nummer: {}", patient.ahv_number),
-        11.0,
-        &font,
-        &mut all_ops,
-        &mut pages,
-        &mut y,
-    );
-    y -= lh;
+    y = Mm(255.0);
+    all_ops.extend(text_ops(
+        format!("Patientin/Patient: {patient_name}"),
+        10.5,
+        left,
+        y,
+        &font_bold,
+        &dark,
+    ));
+    y -= body_line_height;
+    let identifiers = format!("Geburtsdatum: {dob}    AHV-Nummer: {}", patient.ahv_number);
+    all_ops.extend(text_ops(identifiers, 9.5, left, y, &font, &muted));
+    y -= Mm(9.0);
 
-    emit_wrapped(
-        &format!("Erstellt: {}", generated_at),
-        10.0,
-        &font,
-        &mut all_ops,
-        &mut pages,
-        &mut y,
-    );
-    y -= lh;
-
-    // Report content — parse markdown
     for line in markdown_to_pdf_lines(&report.content) {
-        if y.0 < 30.0 {
-            flush_page(std::mem::take(&mut all_ops), &mut pages);
-            y = Mm(270.0);
-        }
         match line {
             PdfLine::Heading { text, level } => {
-                let size = if level == 1 {
-                    16.0
-                } else if level == 2 {
-                    14.0
-                } else {
-                    12.0
+                let size = match level {
+                    1 => 14.0,
+                    2 => 12.0,
+                    _ => 11.0,
                 };
-                emit_wrapped(&text, size, &font_bold, &mut all_ops, &mut pages, &mut y);
-                y -= lh * 0.3;
+                if y.0 < bottom + 18.0 {
+                    flush_page(std::mem::take(&mut all_ops), &mut pages);
+                    add_continuation_header(&mut all_ops);
+                    y = Mm(265.0);
+                }
+                y -= Mm(2.2);
+                emit_wrapped(
+                    &text,
+                    size,
+                    &font_bold,
+                    &accent,
+                    &mut all_ops,
+                    &mut pages,
+                    &mut y,
+                );
+                y -= Mm(1.3);
             }
             PdfLine::Body(text) => {
-                emit_wrapped(&text, 10.0, &font, &mut all_ops, &mut pages, &mut y);
+                emit_wrapped(&text, 10.5, &font, &dark, &mut all_ops, &mut pages, &mut y);
             }
             PdfLine::Separator | PdfLine::Blank => {
-                y -= lh * 0.5;
+                y -= Mm(2.6);
             }
         }
     }
 
-    // Flush last page
     flush_page(all_ops, &mut pages);
+    let page_count = pages.len();
+    for (index, page) in pages.iter_mut().enumerate() {
+        add_rule(&mut page.ops, Mm(17.0));
+        let footer = format!("Seite {} von {}", index + 1, page_count);
+        let footer_width = estimated_text_width_mm(&footer, 8.0);
+        page.ops.extend(text_ops(
+            footer,
+            8.0,
+            Mm((right.0 - footer_width).max(left.0)),
+            Mm(11.0),
+            &font,
+            &muted,
+        ));
+    }
     doc.pages = pages;
 
     let pdf_bytes = doc.save(&PdfSaveOptions::default(), &mut Vec::new());
@@ -621,5 +779,133 @@ fn format_report_type(report_type: &str) -> String {
         "Verlaufsbericht" => "Verlaufsbericht".to_string(),
         "Ueberweisungsschreiben" => "Überweisungsschreiben".to_string(),
         _ => report_type.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_report(content: String) -> Report {
+        Report {
+            id: "report-1".to_string(),
+            patient_id: "patient-1".to_string(),
+            report_type: "Ueberweisungsschreiben".to_string(),
+            content,
+            generated_at: "2026-08-27 10:15:00".to_string(),
+            model_name: Some("test-model".to_string()),
+            prompt_hash: None,
+            session_ids: None,
+            created_at: "2026-08-27 10:15:00".to_string(),
+        }
+    }
+
+    fn sample_patient() -> Patient {
+        Patient {
+            id: "patient-1".to_string(),
+            ahv_number: "756.1234.5678.97".to_string(),
+            first_name: "Erika".to_string(),
+            last_name: "Muster".to_string(),
+            date_of_birth: "1980-02-03".to_string(),
+            gender: None,
+            address: None,
+            phone: None,
+            email: None,
+            insurance: None,
+            gp_name: None,
+            gp_address: None,
+            notes: None,
+            created_at: "2026-01-01 00:00:00".to_string(),
+            updated_at: "2026-01-01 00:00:00".to_string(),
+        }
+    }
+
+    #[test]
+    fn recognizes_plain_text_clinical_headings() {
+        let lines = markdown_to_pdf_lines(
+            "Betreff: Mitbeurteilung\n\nSehr geehrte Frau Kollegin\n\n\
+             Überweisungsgrund und Fragestellung\n\nBitte um diagnostische Mitbeurteilung.\n\n\
+             Aktuelle Medikation\n\nSertralin 100 mg morgens.",
+        );
+
+        assert!(lines.contains(&PdfLine::Heading {
+            text: "Betreff: Mitbeurteilung".to_string(),
+            level: 2,
+        }));
+        assert!(lines.contains(&PdfLine::Heading {
+            text: "Überweisungsgrund und Fragestellung".to_string(),
+            level: 2,
+        }));
+        assert!(lines.contains(&PdfLine::Body(
+            "Bitte um diagnostische Mitbeurteilung.".to_string()
+        )));
+    }
+
+    #[test]
+    fn wraps_text_to_the_available_width() {
+        let wrapped = wrap_pdf_text(
+            "Klinisch relevante Überweisung mit ausführlicher psychiatrischer Beurteilung",
+            10.5,
+            55.0,
+        );
+
+        assert!(wrapped.len() > 1);
+        assert!(wrapped
+            .iter()
+            .all(|line| estimated_text_width_mm(line, 10.5) <= 55.0));
+    }
+
+    #[test]
+    fn wraps_long_medical_compounds_without_crossing_the_margin() {
+        let wrapped = wrap_pdf_text(
+            "Psychopharmakotherapieunverträglichkeitsbeurteilungsanfrage",
+            10.5,
+            32.0,
+        );
+
+        assert!(wrapped.len() > 1);
+        assert!(wrapped
+            .iter()
+            .all(|line| estimated_text_width_mm(line, 10.5) <= 32.0));
+    }
+
+    #[test]
+    fn generated_pdf_contains_header_body_and_footer() {
+        let report = sample_report(
+            "Betreff: Mitbeurteilung\n\nSehr geehrte Frau Kollegin\n\n\
+             Überweisungsgrund und Fragestellung\n\nBitte um diagnostische Mitbeurteilung.\n\n\
+             Mit freundlichen Grüssen"
+                .to_string(),
+        );
+        let bytes = generate_pdf_bytes(report, sample_patient()).unwrap();
+
+        assert!(bytes.starts_with(b"%PDF-"));
+        let extracted = pdf_extract::extract_text_from_mem(&bytes).unwrap();
+        assert!(extracted.contains("Überweisungsschreiben"));
+        assert!(extracted.contains("Erika Muster"));
+        assert!(extracted.contains("diagnostische Mitbeurteilung"));
+        assert!(extracted.contains("Seite 1 von 1"));
+    }
+
+    #[test]
+    fn generated_pdf_repeats_context_and_page_numbers_after_page_breaks() {
+        let content = (1..=45)
+            .map(|index| {
+                format!(
+                    "Klinischer Verlauf {index}: Anhaltende Symptomatik mit relevanter \
+                     funktioneller Beeinträchtigung; die dokumentierte Behandlung wird fortgeführt."
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        let bytes = generate_pdf_bytes(sample_report(content), sample_patient()).unwrap();
+        let pages = pdf_extract::extract_text_from_mem_by_pages(&bytes).unwrap();
+
+        assert!(pages.len() > 1);
+        for (index, page) in pages.iter().enumerate() {
+            assert!(page.contains("Überweisungsschreiben"));
+            assert!(page.contains("Erika Muster"));
+            assert!(page.contains(&format!("Seite {} von {}", index + 1, pages.len())));
+        }
     }
 }
