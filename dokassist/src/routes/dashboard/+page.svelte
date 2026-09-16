@@ -6,7 +6,7 @@
   import { t } from '$lib/translations';
   import { language } from '$lib/stores/language';
   import { Calendar, Users, FileText, Plus } from 'lucide-svelte';
-  import { Alert, Badge, Button, Card, PageHeader, Spinner } from '$lib/components/ui';
+  import { Alert, Badge, Button, Card, ListSkeleton, PageHeader } from '$lib/components/ui';
 
   let data = $state<DashboardData | null>(null);
   let isLoading = $state(true);
@@ -38,9 +38,7 @@
   <PageHeader title={$t('dashboard.title')} />
 
   {#if isLoading}
-    <div class="flex justify-center py-12">
-      <Spinner label={$t('common.loading')} />
-    </div>
+    <ListSkeleton variant="dashboard" count={3} />
   {:else if error}
     <Alert tone="danger">{error}</Alert>
   {:else if data}

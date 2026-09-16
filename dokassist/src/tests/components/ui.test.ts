@@ -7,6 +7,7 @@ import IconButton from '$lib/components/ui/IconButton.svelte';
 import Input from '$lib/components/ui/Input.svelte';
 import Spinner from '$lib/components/ui/Spinner.svelte';
 import ThinkingIndicator from '$lib/components/ui/ThinkingIndicator.svelte';
+import ListSkeleton from '$lib/components/ui/ListSkeleton.svelte';
 
 /**
  * These guard the contract the rest of the app relies on: primitives must emit
@@ -193,6 +194,18 @@ describe('Spinner', () => {
   it('uses the provided label as the accessible name', () => {
     render(Spinner, { label: 'Generating report' });
     expect(screen.getByRole('status')).toHaveTextContent('Generating report');
+  });
+});
+
+describe('ListSkeleton', () => {
+  it('exposes a status role named with the loading label', () => {
+    render(ListSkeleton, { count: 3 });
+    expect(screen.getByRole('status')).toHaveAccessibleName('Loading...');
+  });
+
+  it('renders the requested number of placeholder rows', () => {
+    const { container } = render(ListSkeleton, { count: 3, variant: 'row' });
+    expect(container.querySelectorAll('.skeleton').length).toBeGreaterThanOrEqual(3);
   });
 });
 

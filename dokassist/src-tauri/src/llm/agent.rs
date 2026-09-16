@@ -309,6 +309,14 @@ pub fn run_agent_loop(
 
             let args_json = serde_json::to_string(&call.args).unwrap_or_default();
 
+            let _ = app.emit(
+                "agent-tool-started",
+                serde_json::json!({
+                    "name": call.name,
+                    "args_json": args_json,
+                }),
+            );
+
             let result = {
                 let conn = pool.conn()?;
                 super::tools::dispatch_tool(&conn, app, engine, &scope, &call, thinking_effort)

@@ -10,9 +10,9 @@
     Button,
     EmptyState,
     Input,
+    ListSkeleton,
     PageHeader,
     Select,
-    Spinner,
   } from '$lib/components/ui';
   import { Plus, Users } from 'lucide-svelte';
   import { t } from '$lib/translations';
@@ -145,9 +145,7 @@
     {/if}
 
     {#if isLoading}
-      <div class="flex justify-center py-12">
-        <Spinner label={$t('common.loading')} />
-      </div>
+      <ListSkeleton count={5} />
     {:else if error}
       <Alert tone="danger">{error}</Alert>
     {:else if sortedPatients.length === 0}
