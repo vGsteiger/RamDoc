@@ -92,7 +92,7 @@ RamDoc is designed with a defence-in-depth approach:
 ### Prerequisites
 
 - Rust 1.88+ (MSRV)
-- Node.js 20+
+- Node.js 20.19+ (or 22.12+ / 24+)
 - pnpm 8+
 - macOS 13+ on Apple Silicon (Intel Macs are not supported)
 
