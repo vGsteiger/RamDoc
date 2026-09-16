@@ -10,7 +10,6 @@
     getEngineStatus,
     getRecommendedModel,
     downloadModel,
-    loadModel,
     resetApp,
     checkForUpdates,
     installUpdate,
@@ -51,6 +50,8 @@
   } from '$lib/api';
   import { themePreference } from '$lib/stores/theme';
   import { language } from '$lib/stores/language';
+  import { engine, loadEngineModel, loadingModelLabel } from '$lib/stores/engine';
+  import { ThinkingIndicator } from '$lib/components/ui';
   import { t } from '$lib/translations';
   import PromotedModelImportDialog from '$lib/components/PromotedModelImportDialog.svelte';
 
@@ -313,8 +314,8 @@
     phase = 'loading';
     errorMsg = '';
     try {
-      await loadModel(recommended.filename, inferenceProfile);
-      status = await getEngineStatus();
+      await loadEngineModel(recommended.filename, inferenceProfile);
+      status = get(engine).status;
       phase = 'done';
     } catch (e) {
       phase = 'error';
@@ -359,8 +360,8 @@
     phase = 'loading';
     errorMsg = '';
     try {
-      await loadModel(filename, inferenceProfile);
-      status = await getEngineStatus();
+      await loadEngineModel(filename, inferenceProfile);
+      status = get(engine).status;
       await loadInstalledModels(); // Refresh list to show loaded badge
       phase = 'done';
     } catch (e) {
@@ -898,7 +899,7 @@
       <select
         id="inference-profile"
         bind:value={inferenceProfile}
-        disabled={phase === 'loading'}
+        disabled={phase === 'loading' || $engine.isLoading}
         class="w-full max-w-md rounded-control border border-line bg-surface-raised px-3 py-2 text-body text-fg"
       >
         <option value="conservative">{$t('settings.inferenceConservative')}</option>
@@ -913,25 +914,38 @@
 
     <!-- Currently loaded model status -->
     <div class="bg-surface-hover rounded-card p-4 mb-6">
-      <div class="flex items-center gap-3 mb-4">
-        <div
-          class="w-3 h-3 rounded-full shrink-0 {status?.is_loaded
-            ? 'bg-success'
-            : 'bg-surface-selected'}"
-        ></div>
-        <div class="flex-1">
-          <p class="text-body font-medium text-fg">
-            {status?.is_loaded
-              ? $t('settings.loadedModel').replace('{name}', status.model_name ?? '')
-              : $t('settings.noModelLoaded')}
-          </p>
-          {#if status?.total_ram_bytes}
-            <p class="text-caption text-fg-muted">
-              {$t('settings.systemRam').replace('{ram}', formatBytes(status.total_ram_bytes))}
-            </p>
-          {/if}
+      {#if $engine.isLoading && $engine.loadingStartedAt}
+        <div class="mb-4">
+          <ThinkingIndicator
+            startedAt={$engine.loadingStartedAt}
+            label={$t('settings.loadingModelIntoMemory').replace(
+              '{name}',
+              loadingModelLabel($engine.loadingFilename)
+            )}
+          />
+          <p class="text-caption text-fg-muted mt-2">{$t('settings.loadingModelHint')}</p>
         </div>
-      </div>
+      {:else}
+        <div class="flex items-center gap-3 mb-4">
+          <div
+            class="w-3 h-3 rounded-full shrink-0 {status?.is_loaded
+              ? 'bg-success'
+              : 'bg-surface-selected'}"
+          ></div>
+          <div class="flex-1">
+            <p class="text-body font-medium text-fg">
+              {status?.is_loaded
+                ? $t('settings.loadedModel').replace('{name}', status.model_name ?? '')
+                : $t('settings.noModelLoaded')}
+            </p>
+            {#if status?.total_ram_bytes}
+              <p class="text-caption text-fg-muted">
+                {$t('settings.systemRam').replace('{ram}', formatBytes(status.total_ram_bytes))}
+              </p>
+            {/if}
+          </div>
+        </div>
+      {/if}
 
       {#if status?.inference_config}
         {@const config = status.inference_config}
@@ -1114,7 +1128,7 @@
                 {#if model.exists_on_disk && !model.is_loaded}
                   <button
                     onclick={() => handleLoadModel(model.filename)}
-                    disabled={phase === 'loading'}
+                    disabled={phase === 'loading' || $engine.isLoading}
                     class="h-7 px-2.5 text-caption rounded-control bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-on-accent transition-colors"
                   >
                     {$t('settings.load')}
@@ -1237,7 +1251,10 @@
 
                   <button
                     onclick={() => handleDownloadNewModel(modelChoice)}
-                    disabled={phase === 'downloading' || phase === 'loading' || !canRunModel}
+                    disabled={phase === 'downloading' ||
+                      phase === 'loading' ||
+                      $engine.isLoading ||
+                      !canRunModel}
                     class="h-8 px-3 text-body rounded-control bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-on-accent transition-colors"
                   >
                     {phase === 'downloading' && activeDownloadFilename === model.filename
@@ -1304,7 +1321,7 @@
 
           <button
             onclick={() => handleDownloadNewModel(recommended!)}
-            disabled={phase === 'downloading' || phase === 'loading'}
+            disabled={phase === 'downloading' || phase === 'loading' || $engine.isLoading}
             class="h-8 px-3 text-body rounded-control bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-on-accent transition-colors"
           >
             {phase === 'downloading'

@@ -212,4 +212,12 @@ describe('ThinkingIndicator', () => {
     });
     expect(screen.getByRole('status')).toHaveTextContent('Looked up medications');
   });
+
+  it('uses an explicit label for non-chat activity such as model loading', () => {
+    render(ThinkingIndicator, {
+      startedAt: Date.now(),
+      label: 'Loading phi4 into memory',
+    });
+    expect(screen.getByRole('status')).toHaveTextContent('Loading phi4 into memory');
+  });
 });
