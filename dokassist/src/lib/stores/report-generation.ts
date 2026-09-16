@@ -1,6 +1,6 @@
 import { browser } from '$app/environment';
 import { writable } from 'svelte/store';
-import type { SamplerConfig } from '$lib/api';
+import type { SamplerConfig, ThinkingEffort } from '$lib/api';
 
 const STORAGE_KEY = 'report-generation-settings-v1';
 
@@ -9,6 +9,14 @@ export type ReportGenerationPreset = 'clinical' | 'conservative' | 'varied' | 'c
 export interface ReportGenerationSettings {
   preset: ReportGenerationPreset;
   custom: SamplerConfig;
+}
+
+export function resolveReportThinkingEffort(
+  reportType: string,
+  storedPreference: ThinkingEffort | null
+): ThinkingEffort {
+  if (storedPreference) return storedPreference;
+  return reportType === 'Ueberweisungsschreiben' ? 'low' : 'medium';
 }
 
 // Presets deliberately change sampling only. Reasoning effort remains an

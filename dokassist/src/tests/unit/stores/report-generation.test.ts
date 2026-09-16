@@ -8,11 +8,18 @@ describe('report generation settings', () => {
   });
 
   it('defaults to the clinical preset', async () => {
-    const { reportGenerationSettings, resolveReportSampler, REPORT_SAMPLER_PRESETS } =
-      await import('$lib/stores/report-generation');
+    const {
+      reportGenerationSettings,
+      resolveReportSampler,
+      resolveReportThinkingEffort,
+      REPORT_SAMPLER_PRESETS,
+    } = await import('$lib/stores/report-generation');
     const settings = get(reportGenerationSettings);
     expect(settings.preset).toBe('clinical');
     expect(resolveReportSampler(settings)).toEqual(REPORT_SAMPLER_PRESETS.clinical);
+    expect(resolveReportThinkingEffort('Ueberweisungsschreiben', null)).toBe('low');
+    expect(resolveReportThinkingEffort('Befundbericht', null)).toBe('medium');
+    expect(resolveReportThinkingEffort('Ueberweisungsschreiben', 'high')).toBe('high');
   });
 
   it('persists a valid custom sampler', async () => {

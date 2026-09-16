@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import ChatThread from '../../lib/components/ChatThread.svelte';
-import type { ChatMessageRow } from '$lib/api';
+import type { ChatMessageRow, LlmEngineStatus } from '$lib/api';
 import { resetEngineState } from '$lib/stores/engine';
 
 vi.mock('@tauri-apps/api/event', () => ({
@@ -17,6 +17,18 @@ vi.mock('$app/navigation', () => ({
 const mockInvoke = vi.mocked(invoke);
 const mockListen = vi.mocked(listen);
 
+const EMPTY_CONTEXT_CACHE = {
+  hits: 0,
+  misses: 0,
+  invalidations: 0,
+  evictions: 0,
+  reused_tokens: 0,
+  evaluated_tokens: 0,
+  estimated_prefill_saved_ms: 0,
+  resident_contexts: 0,
+  max_contexts: 0,
+};
+
 const ENGINE_LOADED = {
   is_loaded: true,
   model_name: 'Phi-4 Mini',
@@ -24,7 +36,10 @@ const ENGINE_LOADED = {
   total_ram_bytes: 16 * 1024 ** 3,
   is_downloaded: true,
   downloaded_filename: 'phi4.gguf',
-};
+  last_generation_stats: null,
+  inference_config: null,
+  context_cache: EMPTY_CONTEXT_CACHE,
+} satisfies LlmEngineStatus;
 
 const ENGINE_NOT_LOADED = {
   is_loaded: false,
@@ -33,7 +48,10 @@ const ENGINE_NOT_LOADED = {
   total_ram_bytes: 8 * 1024 ** 3,
   is_downloaded: false,
   downloaded_filename: null,
-};
+  last_generation_stats: null,
+  inference_config: null,
+  context_cache: EMPTY_CONTEXT_CACHE,
+} satisfies LlmEngineStatus;
 
 const USER_MSG: ChatMessageRow = {
   id: 'm1',

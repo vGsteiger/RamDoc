@@ -32,8 +32,12 @@
   import { get } from 'svelte/store';
   import { t } from '$lib/translations';
   import ThinkingEffortSelect from '$lib/components/ThinkingEffortSelect.svelte';
-  import { thinkingEffort } from '$lib/stores/thinking';
-  import { reportGenerationSettings, resolveReportSampler } from '$lib/stores/report-generation';
+  import { thinkingEffort, getStoredThinkingEffort } from '$lib/stores/thinking';
+  import {
+    reportGenerationSettings,
+    resolveReportSampler,
+    resolveReportThinkingEffort,
+  } from '$lib/stores/report-generation';
   import { cleanGeneratedReport } from '$lib/llm/clean-generated-report';
 
   $: patientId = $page.params.id!;
@@ -58,6 +62,12 @@
   let unlistenChunk: UnlistenFn | null = null;
   let unlistenDone: UnlistenFn | null = null;
   let unlistenSummarizing: UnlistenFn | null = null;
+
+  $: {
+    thinkingEffort.setTransient(
+      resolveReportThinkingEffort(selectedType, getStoredThinkingEffort())
+    );
+  }
 
   async function checkLlmStatus() {
     try {
@@ -363,6 +373,7 @@
   });
 
   onDestroy(() => {
+    thinkingEffort.setTransient(getStoredThinkingEffort() ?? 'medium');
     if (unlistenSummarizing) unlistenSummarizing();
     if (unlistenChunk) unlistenChunk();
     if (unlistenDone) unlistenDone();
