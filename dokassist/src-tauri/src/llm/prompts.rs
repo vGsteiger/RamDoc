@@ -121,14 +121,24 @@ pub fn report_generation_prompt(
             Qualitätsregeln:\n\
             - Verwenden Sie ausschliesslich Angaben aus den bereitgestellten Daten und zusätzlichen Vorgaben.\n\
             - Erfinden Sie keine Befunde, Diagnosen, Risiken, Behandlungen, Namen, Adressen oder Daten.\n\
+            - Erweitern oder konkretisieren Sie dokumentierte Symptome nicht. Erfinden Sie insbesondere keine \
+              Dauer, Schweregrade, Funktionsbereiche, direkten Zitate oder Beispiele.\n\
+            - Leiten Sie Alter, Geschlecht oder Anrede nicht aus Namen oder Geburtsdatum ab. Fehlt eine passende \
+              Angabe, formulieren Sie neutral.\n\
             - Fehlt eine Information, lassen Sie sie weg; schreiben Sie keine Platzhalter und keine \
               Formulierungen wie 'nicht angegeben'.\n\
             - Unterscheiden Sie aktuelle Tatsachen, anamnestische Angaben und klinische Einschätzungen.\n\
             - Priorisieren Sie Informationen nach Relevanz für Überweisungsgrund und Fragestellung.\n\
             - Vermeiden Sie Wiederholungen, administrative Meta-Kommentare und eine separate Patientenstammdatenliste; \
               die Stammdaten werden im Dokumentkopf dargestellt.\n\
-            - Schreiben Sie präzise, kollegial und gut lesbar. Nutzen Sie kurze Absätze und nur die \
-              tatsächlich benötigten Abschnittsüberschriften. Zielumfang: ungefähr eine bis zwei Seiten."
+            - Verwenden Sie durchgehend Schweizer Rechtschreibung mit 'ss', insbesondere 'Grüsse', niemals 'Grüße'.\n\
+            - Geben Sie ausschliesslich den fertigen Brieftext aus, ohne Entwurfsvermerke, eckige Klammern, \
+              Unterschriftsplatzhalter oder Erläuterungen an die schreibende Person.\n\
+            - Schreiben Sie präzise, kollegial und gut lesbar. Nutzen Sie kurze Absätze. Verwenden Sie die \
+              folgenden unnummerierten Abschnittsüberschriften, sofern passende Quelldaten vorhanden sind: \
+              'Überweisungsgrund und Fragestellung', 'Relevante Anamnese und aktueller Befund', 'Diagnosen', \
+              'Bisheriger Verlauf und Behandlung', 'Aktuelle Medikation' sowie \
+              'Beurteilung und erbetenes Vorgehen'. Zielumfang: ungefähr eine bis zwei Seiten."
         }
     };
 
@@ -150,7 +160,13 @@ pub fn report_generation_prompt(
     let delimited = build_delimited_prompt(&full_instructions, &combined_data);
     format!(
         "{delimited}\nWICHTIG: Nur reiner Text, kein Markdown, keine Sterne und keine Rauten. \
-        Abschnittsüberschriften stehen ohne Nummerierung oder Satzzeichen auf einer eigenen Zeile.\nBericht:"
+        Abschnittsüberschriften stehen ohne Nummerierung oder Satzzeichen auf einer eigenen Zeile.\n\
+        FINALER SELBSTCHECK VOR DER AUSGABE:\n\
+        - Jede klinische Aussage muss unmittelbar auf eine konkrete Angabe in den klinischen Daten zurückgehen.\n\
+        - Nicht vorhandene Angaben vollständig weglassen; weder das Fehlen erwähnen noch Details ergänzen.\n\
+        - Keine eckigen Klammern, Unterschriftsfelder, Platzhalter oder Hinweise an die schreibende Person.\n\
+        - Schweizer Rechtschreibung mit ss verwenden; das Zeichen ß darf nicht vorkommen.\n\
+        - Nur den fertigen Brief ausgeben.\nBericht:"
     )
 }
 
@@ -451,6 +467,9 @@ mod tests {
         assert!(prompt.contains("früh und eindeutig"));
         assert!(prompt.contains("Erfinden Sie keine Befunde"));
         assert!(prompt.contains("Priorisieren Sie Informationen nach Relevanz"));
+        assert!(prompt.contains("Erweitern oder konkretisieren Sie dokumentierte Symptome nicht"));
+        assert!(prompt.contains("Unterschriftsplatzhalter"));
+        assert!(prompt.contains("Schweizer Rechtschreibung"));
         assert!(prompt.contains("Bitte um Mitbeurteilung"));
         assert!(prompt.contains("Abschnittsüberschriften stehen ohne Nummerierung"));
     }

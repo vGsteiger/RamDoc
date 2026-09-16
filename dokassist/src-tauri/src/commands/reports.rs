@@ -155,6 +155,7 @@ const CLINICAL_SECTION_HEADINGS: &[&str] = &[
     "diagnose",
     "fragestellung",
     "medikation",
+    "aktuelle medikation",
     "psychischer befund",
     "aktueller befund",
     "relevante anamnese",
@@ -247,6 +248,17 @@ fn markdown_to_pdf_lines(markdown: &str) -> Vec<PdfLine> {
             _ => {}
         }
         let _ = in_strong; // used implicitly via current_text accumulation
+    }
+
+    for line in &mut lines {
+        if let PdfLine::Body(text) = line {
+            if is_plain_heading(text) {
+                *line = PdfLine::Heading {
+                    text: text.clone(),
+                    level: 2,
+                };
+            }
+        }
     }
 
     if lines
@@ -342,6 +354,24 @@ fn wrap_pdf_text(text: &str, font_size_pt: f32, max_width_mm: f32) -> Vec<String
         lines.push(String::new());
     }
     lines
+}
+
+fn truncate_pdf_text(text: &str, font_size_pt: f32, max_width_mm: f32) -> String {
+    if estimated_text_width_mm(text, font_size_pt) <= max_width_mm {
+        return text.to_string();
+    }
+
+    let ellipsis = "...";
+    let mut fitted = String::new();
+    for character in text.chars() {
+        let candidate = format!("{fitted}{character}{ellipsis}");
+        if estimated_text_width_mm(&candidate, font_size_pt) > max_width_mm {
+            break;
+        }
+        fitted.push(character);
+    }
+    fitted.push_str(ellipsis);
+    fitted
 }
 
 fn generate_pdf_bytes(report: Report, patient: Patient) -> Result<Vec<u8>, AppError> {
@@ -452,9 +482,10 @@ fn generate_pdf_bytes(report: Report, patient: Patient) -> Result<Vec<u8>, AppEr
             &font_bold,
             &muted,
         ));
-        let name_width = estimated_text_width_mm(&patient_name, 8.5);
+        let header_name = truncate_pdf_text(&patient_name, 8.5, content_width / 2.0);
+        let name_width = estimated_text_width_mm(&header_name, 8.5);
         ops.extend(text_ops(
-            patient_name.clone(),
+            header_name,
             8.5,
             Mm((right.0 - name_width).max(left.0)),
             Mm(279.0),
@@ -503,15 +534,15 @@ fn generate_pdf_bytes(report: Report, patient: Patient) -> Result<Vec<u8>, AppEr
     add_rule(&mut all_ops, Mm(265.0));
 
     y = Mm(255.0);
-    all_ops.extend(text_ops(
-        format!("Patientin/Patient: {patient_name}"),
+    emit_wrapped(
+        &format!("Patientin/Patient: {patient_name}"),
         10.5,
-        left,
-        y,
         &font_bold,
         &dark,
-    ));
-    y -= body_line_height;
+        &mut all_ops,
+        &mut pages,
+        &mut y,
+    );
     let identifiers = format!("Geburtsdatum: {dob}    AHV-Nummer: {}", patient.ahv_number);
     all_ops.extend(text_ops(identifiers, 9.5, left, y, &font, &muted));
     y -= Mm(9.0);
@@ -842,6 +873,23 @@ mod tests {
     }
 
     #[test]
+    fn recognizes_plain_headings_alongside_markdown_headings() {
+        let lines = markdown_to_pdf_lines(
+            "## Überweisungsgrund und Fragestellung\n\nBitte um Mitbeurteilung.\n\n\
+             Aktuelle Medikation\n\nSertralin 100 mg morgens.",
+        );
+
+        assert!(lines.contains(&PdfLine::Heading {
+            text: "Überweisungsgrund und Fragestellung".to_string(),
+            level: 2,
+        }));
+        assert!(lines.contains(&PdfLine::Heading {
+            text: "Aktuelle Medikation".to_string(),
+            level: 2,
+        }));
+    }
+
+    #[test]
     fn wraps_text_to_the_available_width() {
         let wrapped = wrap_pdf_text(
             "Klinisch relevante Überweisung mit ausführlicher psychiatrischer Beurteilung",
@@ -867,6 +915,18 @@ mod tests {
         assert!(wrapped
             .iter()
             .all(|line| estimated_text_width_mm(line, 10.5) <= 32.0));
+    }
+
+    #[test]
+    fn truncates_long_continuation_header_names_to_the_available_width() {
+        let fitted = truncate_pdf_text(
+            "Erika Ausserordentlichlangerzusammengesetzterfamilienname-Muster",
+            8.5,
+            55.0,
+        );
+
+        assert!(fitted.ends_with("..."));
+        assert!(estimated_text_width_mm(&fitted, 8.5) <= 55.0);
     }
 
     #[test]

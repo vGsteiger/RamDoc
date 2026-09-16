@@ -33,7 +33,7 @@
   import { t } from '$lib/translations';
   import ThinkingEffortSelect from '$lib/components/ThinkingEffortSelect.svelte';
   import { thinkingEffort } from '$lib/stores/thinking';
-  import { stripThinkTags } from '$lib/llm/strip-think';
+  import { cleanGeneratedReport } from '$lib/llm/clean-generated-report';
 
   $: patientId = $page.params.id!;
 
@@ -123,7 +123,7 @@
       unlistenDone = await listen('report-done', () => {
         isGenerating = false;
         isSummarizing = false;
-        editableContent = stripThinkTags(generatedContent);
+        editableContent = cleanGeneratedReport(generatedContent);
         isEditing = true;
         // Unlisten after completion
         if (unlistenSummarizing) {
@@ -278,9 +278,7 @@
       }
     }
 
-    const activePlans = treatmentPlans.filter(
-      (plan) => plan.status !== 'completed' && plan.status !== 'cancelled'
-    );
+    const activePlans = treatmentPlans.filter((plan) => plan.status === 'active');
     if (activePlans.length > 0) {
       lines.push('\nAktuelle Behandlungspläne:');
       for (const plan of activePlans) {
@@ -326,13 +324,18 @@
   onMount(async () => {
     await checkLlmStatus();
     try {
-      const [patient, diagnoses, medications, sessions, treatmentPlans] = await Promise.all([
+      const [patient, diagnoses, medications, sessions] = await Promise.all([
         getPatient(patientId),
         listDiagnosesForPatient(patientId, 20),
         listMedicationsForPatient(patientId, 20),
         listSessionsForPatient(patientId, 5),
-        listTreatmentPlansForPatient(patientId, 10),
       ]);
+      let treatmentPlans: TreatmentPlan[] = [];
+      try {
+        treatmentPlans = await listTreatmentPlansForPatient(patientId, 10);
+      } catch (e) {
+        console.warn('Failed to load optional treatment-plan context:', e);
+      }
       const goalEntries = await Promise.all(
         treatmentPlans.map(async (plan) => {
           try {
