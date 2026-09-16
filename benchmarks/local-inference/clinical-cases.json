@@ -161,6 +161,23 @@
         "excludes": ["Insulin", "40 Einheiten"]
       },
       "ci_reference_answer": "Dokumentiert ist Escitalopram 10 mg täglich."
+    },
+    {
+      "id": "referral-letter-grounded-cold-de",
+      "scenario": "cold_prompt",
+      "categories": ["referral_letter", "report_generation", "medication", "dose", "german_swiss", "unsupported_claims"],
+      "ci": false,
+      "system_prompt": "Du verfasst ein präzises psychiatrisches Überweisungsschreiben in Schweizer Hochdeutsch. Verwende ausschliesslich die synthetischen Falldaten und erfinde keine Befunde.",
+      "context": "Synthetische Falldaten: Patientin Erika Beispiel, geboren am 03.02.1980. Gesicherte Diagnose F33.1 rezidivierende depressive Störung, gegenwärtig mittelgradige Episode. Aktuelle Medikation: Sertralin 100 mg morgens. Unter der bisherigen ambulanten Behandlung besteht weiterhin eine relevante Antriebs- und Konzentrationsminderung. Aktuelle Suizidalität und psychotische Symptome sind nicht dokumentiert. Überweisungsgrund: diagnostische Mitbeurteilung und Empfehlung zum weiteren therapeutischen Vorgehen durch die Spezialambulanz.",
+      "question": "Verfasse ein kurzes Überweisungsschreiben. Nenne den Überweisungsgrund und die konkrete Fragestellung früh, übernimm Diagnose und Medikation exakt und lasse nicht dokumentierte Befunde weg. Verwende die Überschriften Überweisungsgrund und Fragestellung, Relevante Anamnese, Diagnosen, Aktuelle Medikation und Erbetenes Vorgehen.",
+      "max_tokens": 512,
+      "pad_to_context": false,
+      "expected": {
+        "contains_all": ["Überweisungsgrund und Fragestellung", "diagnostische Mitbeurteilung", "F33.1", "Sertralin", "100 mg", "Erbetenes Vorgehen"],
+        "contains_any": [["Spezialambulanz", "therapeutischen Vorgehen"]],
+        "excludes": ["akute Suizidalität", "psychotische Symptome", "nicht angegeben", "Straße", "Grüße"]
+      },
+      "ci_reference_answer": "Überweisungsgrund und Fragestellung\n\nIch überweise Frau Erika Beispiel zur diagnostischen Mitbeurteilung und zur Empfehlung des weiteren therapeutischen Vorgehens an die Spezialambulanz.\n\nRelevante Anamnese\n\nUnter der bisherigen ambulanten Behandlung bestehen weiterhin eine relevante Antriebs- und Konzentrationsminderung.\n\nDiagnosen\n\nF33.1 Rezidivierende depressive Störung, gegenwärtig mittelgradige Episode.\n\nAktuelle Medikation\n\nSertralin 100 mg morgens.\n\nErbetenes Vorgehen\n\nIch bitte um diagnostische Mitbeurteilung und eine Empfehlung zum weiteren therapeutischen Vorgehen. Freundliche Grüsse"
     }
   ]
 }
