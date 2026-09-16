@@ -1299,12 +1299,14 @@ export async function queryPatientHistory(
 export async function previewPatientEvidence(
   patientId: string,
   question: string,
-  tokenBudget?: number
+  tokenBudget?: number,
+  thinkingEffort?: ThinkingEffort
 ): Promise<EvidencePreview> {
   return await invoke<EvidencePreview>('preview_patient_evidence', {
     patientId,
     question,
     tokenBudget,
+    thinkingEffort: thinkingEffort ?? null,
   });
 }
 

@@ -25,7 +25,15 @@ function createThinkingEffortStore() {
       }
       set(value);
     },
-    update,
+    update: (updater: (value: ThinkingEffort) => ThinkingEffort) => {
+      update((current) => {
+        const next = updater(current);
+        if (browser) {
+          localStorage.setItem(STORAGE_KEY, next);
+        }
+        return next;
+      });
+    },
   };
 }
 

@@ -31,6 +31,7 @@
   import ThinkingEffortSelect from '$lib/components/ThinkingEffortSelect.svelte';
   import { thinkingEffort } from '$lib/stores/thinking';
   import { get } from 'svelte/store';
+  import { stripThinkTags } from '$lib/llm/strip-think';
   import ErrorDisplay from '$lib/components/ErrorDisplay.svelte';
   import OutcomeScoreCard from '$lib/components/OutcomeScoreCard.svelte';
   import OutcomeScoreForm from '$lib/components/OutcomeScoreForm.svelte';
@@ -265,7 +266,7 @@ ${activeDiagnoses ? `Aktive Diagnosen:\n${activeDiagnoses}` : ''}
 
       unlistenDone = await listen('session-summary-done', () => {
         isGenerating = false;
-        editableSummary = generatedSummary;
+        editableSummary = stripThinkTags(generatedSummary);
         showSummaryEditor = true;
         if (unlistenChunk) {
           unlistenChunk();

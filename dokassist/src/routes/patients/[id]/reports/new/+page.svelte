@@ -28,6 +28,7 @@
   import { t } from '$lib/translations';
   import ThinkingEffortSelect from '$lib/components/ThinkingEffortSelect.svelte';
   import { thinkingEffort } from '$lib/stores/thinking';
+  import { stripThinkTags } from '$lib/llm/strip-think';
 
   $: patientId = $page.params.id!;
 
@@ -202,19 +203,6 @@
     isEditing = false;
     createMode = null;
     error = null;
-  }
-
-  function stripThinkTags(content: string): string {
-    const THINK_START = '<think>';
-    const THINK_END = '</think>';
-
-    if (content.startsWith(THINK_START)) {
-      const endIdx = content.indexOf(THINK_END);
-      if (endIdx !== -1) {
-        return content.slice(endIdx + THINK_END.length).trim();
-      }
-    }
-    return content;
   }
 
   function startDirectCreation() {

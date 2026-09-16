@@ -20,6 +20,7 @@
   import { thinkingEffort } from '$lib/stores/thinking';
   import { get } from 'svelte/store';
   import ThinkingEffortSelect from '$lib/components/ThinkingEffortSelect.svelte';
+  import { stripThinkTags } from '$lib/llm/strip-think';
 
   const patientId = $derived(page.params.id!);
 
@@ -122,7 +123,7 @@
 
       unlistenDone = await listen('letter-done', () => {
         isGenerating = false;
-        editableContent = generatedContent;
+        editableContent = stripThinkTags(generatedContent);
         // Unlisten after generation completes
         if (unlistenChunk) {
           unlistenChunk();

@@ -6,6 +6,7 @@
   import { get } from 'svelte/store';
   import { t } from '$lib/translations';
   import { thinkingEffort } from '$lib/stores/thinking';
+  import { stripThinkTags } from '$lib/llm/strip-think';
 
   export let content: string = '';
   export let readonly: boolean = false;
@@ -80,6 +81,7 @@
       });
 
       unlistenDone = await listen('text-improvement-done', () => {
+        generatedSuggestion = stripThinkTags(generatedSuggestion);
         isGeneratingSuggestion = false;
         // Unlisten after completion
         if (unlistenChunk) {
@@ -117,12 +119,11 @@
   function applySuggestion() {
     if (!generatedSuggestion) return;
 
+    const suggestion = stripThinkTags(generatedSuggestion);
     if (selectedText) {
-      // Replace selected text with suggestion
-      content = content.replace(selectedText, generatedSuggestion);
+      content = content.replace(selectedText, suggestion);
     } else {
-      // Replace entire content with suggestion
-      content = generatedSuggestion;
+      content = suggestion;
     }
 
     // Clear selection and suggestion
