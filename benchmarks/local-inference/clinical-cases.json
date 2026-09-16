@@ -173,9 +173,9 @@
       "max_tokens": 512,
       "pad_to_context": false,
       "expected": {
-        "contains_all": ["Überweisungsgrund und Fragestellung", "diagnostische Mitbeurteilung", "F33.1", "Sertralin", "100 mg", "Erbetenes Vorgehen"],
+        "contains_all": ["Überweisungsgrund und Fragestellung", "Relevante Anamnese", "Diagnosen", "Aktuelle Medikation", "Erbetenes Vorgehen", "diagnostische Mitbeurteilung", "F33.1", "Sertralin", "100 mg"],
         "contains_any": [["Spezialambulanz", "therapeutischen Vorgehen"]],
-        "excludes": ["akute Suizidalität", "psychotische Symptome", "nicht angegeben", "Straße", "Grüße"]
+        "excludes": ["akute Suizidalität", "psychotische Symptome", "nicht angegeben", "Straße", "Strasse", "Grüße"]
       },
       "ci_reference_answer": "Überweisungsgrund und Fragestellung\n\nIch überweise Frau Erika Beispiel zur diagnostischen Mitbeurteilung und zur Empfehlung des weiteren therapeutischen Vorgehens an die Spezialambulanz.\n\nRelevante Anamnese\n\nUnter der bisherigen ambulanten Behandlung bestehen weiterhin eine relevante Antriebs- und Konzentrationsminderung.\n\nDiagnosen\n\nF33.1 Rezidivierende depressive Störung, gegenwärtig mittelgradige Episode.\n\nAktuelle Medikation\n\nSertralin 100 mg morgens.\n\nErbetenes Vorgehen\n\nIch bitte um diagnostische Mitbeurteilung und eine Empfehlung zum weiteren therapeutischen Vorgehen. Freundliche Grüsse"
     }

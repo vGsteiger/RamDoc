@@ -155,6 +155,7 @@ const CLINICAL_SECTION_HEADINGS: &[&str] = &[
     "diagnose",
     "fragestellung",
     "medikation",
+    "aktuelle medikation",
     "psychischer befund",
     "aktueller befund",
     "relevante anamnese",
@@ -247,6 +248,19 @@ fn markdown_to_pdf_lines(markdown: &str) -> Vec<PdfLine> {
             _ => {}
         }
         let _ = in_strong; // used implicitly via current_text accumulation
+    }
+
+    // Promote standalone clinical headings that the Markdown parser left as Body,
+    // including mixed documents that already contain one `#` heading.
+    for line in &mut lines {
+        if let PdfLine::Body(text) = line {
+            if is_plain_heading(text) {
+                *line = PdfLine::Heading {
+                    text: text.clone(),
+                    level: 2,
+                };
+            }
+        }
     }
 
     if lines
@@ -503,15 +517,15 @@ fn generate_pdf_bytes(report: Report, patient: Patient) -> Result<Vec<u8>, AppEr
     add_rule(&mut all_ops, Mm(265.0));
 
     y = Mm(255.0);
-    all_ops.extend(text_ops(
-        format!("Patientin/Patient: {patient_name}"),
+    emit_wrapped(
+        &format!("Patientin/Patient: {patient_name}"),
         10.5,
-        left,
-        y,
         &font_bold,
         &dark,
-    ));
-    y -= body_line_height;
+        &mut all_ops,
+        &mut pages,
+        &mut y,
+    );
     let identifiers = format!("Geburtsdatum: {dob}    AHV-Nummer: {}", patient.ahv_number);
     all_ops.extend(text_ops(identifiers, 9.5, left, y, &font, &muted));
     y -= Mm(9.0);
@@ -836,9 +850,31 @@ mod tests {
             text: "Überweisungsgrund und Fragestellung".to_string(),
             level: 2,
         }));
+        assert!(lines.contains(&PdfLine::Heading {
+            text: "Aktuelle Medikation".to_string(),
+            level: 2,
+        }));
         assert!(lines.contains(&PdfLine::Body(
             "Bitte um diagnostische Mitbeurteilung.".to_string()
         )));
+    }
+
+    #[test]
+    fn promotes_plain_clinical_headings_alongside_markdown_headings() {
+        let lines = markdown_to_pdf_lines(
+            "# Überweisungsschreiben\n\nBitte um Mitbeurteilung.\n\n\
+             Aktuelle Medikation\n\nSertralin 100 mg morgens.",
+        );
+
+        assert!(lines.contains(&PdfLine::Heading {
+            text: "Überweisungsschreiben".to_string(),
+            level: 1,
+        }));
+        assert!(lines.contains(&PdfLine::Heading {
+            text: "Aktuelle Medikation".to_string(),
+            level: 2,
+        }));
+        assert!(lines.contains(&PdfLine::Body("Sertralin 100 mg morgens.".to_string())));
     }
 
     #[test]
@@ -867,6 +903,22 @@ mod tests {
         assert!(wrapped
             .iter()
             .all(|line| estimated_text_width_mm(line, 10.5) <= 32.0));
+    }
+
+    #[test]
+    fn generated_pdf_wraps_long_patient_names() {
+        let mut patient = sample_patient();
+        patient.first_name = "Anna-Katharina-Elisabeth-Maria-Theresia-Johanna".to_string();
+        patient.last_name = "von-und-zu-Musterhausen-Beispiel-Lichtenstein".to_string();
+        let bytes = generate_pdf_bytes(sample_report("Kurzbericht.".to_string()), patient).unwrap();
+        let extracted = pdf_extract::extract_text_from_mem(&bytes).unwrap();
+
+        assert!(extracted.contains("Anna-Katharina-Elisabeth-Maria-Theresia-Johanna"));
+        assert!(extracted.contains("von-und-zu-Musterhausen-Beispiel-Lichtenstein"));
+        assert!(estimated_text_width_mm(
+            "Patientin/Patient: Anna-Katharina-Elisabeth-Maria-Theresia-Johanna von-und-zu-Musterhausen-Beispiel-Lichtenstein",
+            10.5
+        ) > 162.0);
     }
 
     #[test]

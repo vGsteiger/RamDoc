@@ -278,9 +278,7 @@
       }
     }
 
-    const activePlans = treatmentPlans.filter(
-      (plan) => plan.status !== 'completed' && plan.status !== 'cancelled'
-    );
+    const activePlans = treatmentPlans.filter((plan) => plan.status === 'active');
     if (activePlans.length > 0) {
       lines.push('\nAktuelle Behandlungspläne:');
       for (const plan of activePlans) {
@@ -331,7 +329,10 @@
         listDiagnosesForPatient(patientId, 20),
         listMedicationsForPatient(patientId, 20),
         listSessionsForPatient(patientId, 5),
-        listTreatmentPlansForPatient(patientId, 10),
+        listTreatmentPlansForPatient(patientId, 10).catch((planError) => {
+          console.error('Failed to load treatment plans:', planError);
+          return [] as TreatmentPlan[];
+        }),
       ]);
       const goalEntries = await Promise.all(
         treatmentPlans.map(async (plan) => {
