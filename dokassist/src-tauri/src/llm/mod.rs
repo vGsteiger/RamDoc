@@ -17,6 +17,7 @@ mod prompts;
 pub mod quantization;
 mod report;
 pub mod sanitize;
+pub mod thinking;
 pub mod tools;
 pub mod utf8;
 
@@ -28,3 +29,4 @@ pub use report::{
     generate_report_streaming_with_prompt, generate_session_summary_streaming_with_prompt,
     improve_text_streaming_with_prompt,
 };
+pub use thinking::ThinkingEffort;

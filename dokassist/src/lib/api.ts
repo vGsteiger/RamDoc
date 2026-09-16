@@ -140,6 +140,7 @@ export interface LlmEngineStatus {
 }
 
 export type InferenceProfile = 'conservative' | 'f16-32k' | 'q8-32k' | 'q4-32k';
+export type ThinkingEffort = 'low' | 'medium' | 'high' | 'extra_high';
 export type FlashAttentionMode = 'enabled' | 'auto';
 export type InferenceFallbackCode =
   | 'native_context_cap'
@@ -1079,13 +1080,15 @@ export async function generateReport(
   patientContext: string,
   reportType: string,
   sessionNotes: string,
-  systemPrompt?: string
+  systemPrompt?: string,
+  thinkingEffort?: ThinkingEffort
 ): Promise<string> {
   return await invoke<string>('generate_report', {
     patientContext,
     reportType,
     sessionNotes,
     systemPrompt,
+    thinkingEffort: thinkingEffort ?? null,
   });
 }
 
@@ -1093,11 +1096,13 @@ export async function generateSessionSummary(
   patientContext: string,
   sessionNotes: string,
   systemPrompt?: string,
+  thinkingEffort?: ThinkingEffort
 ): Promise<string> {
   return await invoke<string>('generate_session_summary', {
     patientContext,
     sessionNotes,
     systemPrompt,
+    thinkingEffort: thinkingEffort ?? null,
   });
 }
 
@@ -1279,12 +1284,14 @@ export interface ResolvedEvidenceUnit {
 export async function queryPatientHistory(
   patientId: string,
   question: string,
-  systemPrompt?: string
+  systemPrompt?: string,
+  thinkingEffort?: ThinkingEffort
 ): Promise<PatientHistoryAnswer> {
   return await invoke<PatientHistoryAnswer>('query_patient_history', {
     patientId,
     question,
     systemPrompt,
+    thinkingEffort: thinkingEffort ?? null,
   });
 }
 
@@ -1489,7 +1496,8 @@ export async function generateLetter(
   patientContext: string,
   clinicalSummary: string,
   recipientName?: string,
-  systemPrompt?: string
+  systemPrompt?: string,
+  thinkingEffort?: ThinkingEffort
 ): Promise<string> {
   return await invoke<string>('generate_letter', {
     letterType,
@@ -1498,6 +1506,7 @@ export async function generateLetter(
     clinicalSummary,
     recipientName,
     systemPrompt,
+    thinkingEffort: thinkingEffort ?? null,
   });
 }
 
@@ -1615,11 +1624,13 @@ export interface AgentTurnResult {
 
 export async function runAgentTurn(
   sessionId: string,
-  userMessage: string
+  userMessage: string,
+  thinkingEffort?: ThinkingEffort
 ): Promise<AgentTurnResult> {
   return await invoke<AgentTurnResult>('run_agent_turn', {
     sessionId,
     userMessage,
+    thinkingEffort: thinkingEffort ?? null,
   });
 }
 

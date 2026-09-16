@@ -88,13 +88,13 @@
   <div class="flex justify-start mb-3">
     <div class="max-w-[80%] space-y-2">
       {#if thinkContent()}
-        <div class="bg-surface-hover border border-line rounded-card px-3 py-2">
-          <p class="text-caption text-fg-subtle uppercase tracking-wide mb-1">
+        <details class="bg-surface-hover border border-line rounded-card px-3 py-2">
+          <summary class="text-caption text-fg-subtle uppercase tracking-wide cursor-pointer">
             {$t('chat.thinkingLabel')}
-          </p>
+          </summary>
           <pre
-            class="whitespace-pre-wrap font-sans text-caption text-fg-muted italic">{thinkContent()}</pre>
-        </div>
+            class="whitespace-pre-wrap font-sans text-caption text-fg-muted italic mt-1">{thinkContent()}</pre>
+        </details>
       {/if}
       <div
         class="bg-surface-hover border border-line rounded-card px-4 py-2 text-body text-fg whitespace-pre-wrap"

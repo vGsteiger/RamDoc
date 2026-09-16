@@ -28,6 +28,9 @@
   } from '$lib/api';
   import { invoke } from '@tauri-apps/api/core';
   import ReportStream from '$lib/components/ReportStream.svelte';
+  import ThinkingEffortSelect from '$lib/components/ThinkingEffortSelect.svelte';
+  import { thinkingEffort } from '$lib/stores/thinking';
+  import { get } from 'svelte/store';
   import ErrorDisplay from '$lib/components/ErrorDisplay.svelte';
   import OutcomeScoreCard from '$lib/components/OutcomeScoreCard.svelte';
   import OutcomeScoreForm from '$lib/components/OutcomeScoreForm.svelte';
@@ -278,6 +281,7 @@ ${activeDiagnoses ? `Aktive Diagnosen:\n${activeDiagnoses}` : ''}
         patientContext,
         sessionNotes: editedNotes || session.notes || '',
         systemPrompt: null,
+        thinkingEffort: get(thinkingEffort),
       });
     } catch (e) {
       error = parseError(e);
@@ -453,18 +457,21 @@ ${activeDiagnoses ? `Aktive Diagnosen:\n${activeDiagnoses}` : ''}
 
         <!-- Clinical Summary -->
         <div class="border-t border-line pt-6 mb-6">
-          <div class="flex justify-between items-center mb-4">
+          <div class="flex flex-wrap justify-between items-center gap-3 mb-4">
             <h2 class="text-heading font-semibold text-fg">
               {$t('sessions.clinicalSummary')}
             </h2>
             {#if !isGenerating && llmStatus?.is_loaded}
-              <button
-                onclick={generateSummary}
-                class="h-8 px-3 bg-success text-on-success rounded-control hover:bg-success-hover transition-colors"
-                disabled={isGenerating || !editedNotes || editedNotes.trim().length === 0}
-              >
-                {$t('sessions.generateSummary')}
-              </button>
+              <div class="flex flex-wrap items-center gap-3">
+                <ThinkingEffortSelect />
+                <button
+                  onclick={generateSummary}
+                  class="h-8 px-3 bg-success text-on-success rounded-control hover:bg-success-hover transition-colors"
+                  disabled={isGenerating || !editedNotes || editedNotes.trim().length === 0}
+                >
+                  {$t('sessions.generateSummary')}
+                </button>
+              </div>
             {/if}
           </div>
 

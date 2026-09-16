@@ -396,6 +396,7 @@ describe('generateReport', () => {
       reportType: 'discharge_letter',
       sessionNotes: 'session notes',
       systemPrompt: undefined,
+      thinkingEffort: null,
     });
     expect(result).toBe('Generated report text');
   });
@@ -1125,6 +1126,7 @@ describe('runAgentTurn', () => {
     expect(mockInvoke).toHaveBeenCalledWith('run_agent_turn', {
       sessionId: 'cs1',
       userMessage: 'What medications does the patient take?',
+      thinkingEffort: null,
     });
     expect(result).toEqual(turnResult);
   });
@@ -1457,6 +1459,7 @@ describe('generateSessionSummary', () => {
       patientContext: 'Patient: John Doe, DOB: 1980-01-01',
       sessionNotes: 'Patient reports feeling anxious',
       systemPrompt: undefined,
+      thinkingEffort: null,
     });
     expect(result).toBe(summary);
   });
@@ -1473,6 +1476,7 @@ describe('generateSessionSummary', () => {
       patientContext: 'Patient: John Doe',
       sessionNotes: 'Session notes',
       systemPrompt: 'Use professional psychiatric terminology',
+      thinkingEffort: null,
     });
   });
 
@@ -1484,6 +1488,7 @@ describe('generateSessionSummary', () => {
       patientContext: 'Patient: John Doe',
       sessionNotes: '',
       systemPrompt: undefined,
+      thinkingEffort: null,
     });
     expect(result).toBe(summary);
   });
@@ -1906,6 +1911,7 @@ describe('generateLetter', () => {
       clinicalSummary: 'Clinical summary',
       recipientName: 'Dr. Müller',
       systemPrompt: undefined,
+      thinkingEffort: null,
     });
     expect(result).toBe('Dear Dr. Müller, I am writing to refer...');
   });
@@ -2447,6 +2453,7 @@ describe('queryPatientHistory', () => {
       patientId: 'p1',
       question: 'Wann wurde die Medikation geändert?',
       systemPrompt: undefined,
+      thinkingEffort: null,
     });
     expect(result.answer).toBe(response.answer);
     expect(result.manifest.entries[0].citation).toBe('E1');
@@ -2471,6 +2478,7 @@ describe('queryPatientHistory', () => {
       patientId: 'p1',
       question: 'Test Frage',
       systemPrompt: 'Custom system prompt',
+      thinkingEffort: null,
     });
   });
 

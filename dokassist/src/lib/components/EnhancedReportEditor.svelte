@@ -5,6 +5,7 @@
   import { getEngineStatus, parseError, type LlmEngineStatus, type AppError } from '$lib/api';
   import { get } from 'svelte/store';
   import { t } from '$lib/translations';
+  import { thinkingEffort } from '$lib/stores/thinking';
 
   export let content: string = '';
   export let readonly: boolean = false;
@@ -96,6 +97,7 @@
         text: textToImprove,
         instruction: suggestionInstruction,
         systemPrompt: null,
+        thinkingEffort: get(thinkingEffort),
       });
     } catch (e) {
       error = parseError(e);

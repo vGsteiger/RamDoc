@@ -3,6 +3,7 @@
 
 use super::context_cache::InferenceSession;
 use super::engine::{AgentMessage, LlmEngine};
+use super::thinking::{self, ThinkingEffort};
 use super::utf8;
 use crate::database::DbPool;
 use crate::error::AppError;
@@ -66,6 +67,7 @@ pub struct AgentTurnInput {
     pub patient_context: Option<String>,
     pub history: Vec<AgentMessage>,
     pub user_message: String,
+    pub thinking_effort: ThinkingEffort,
 }
 
 /// Build a scope-specific system prompt.
@@ -252,12 +254,13 @@ pub fn run_agent_loop(
         patient_context,
         mut history,
         user_message,
+        thinking_effort,
     } = input;
     let system_prompt = build_system_prompt(&scope, patient_context.as_deref());
 
     history.push(AgentMessage {
         role: "user".to_string(),
-        content: user_message,
+        content: user_message.clone(),
     });
 
     let mut tool_calls_made: Vec<ExecutedToolCall> = Vec::new();
@@ -351,21 +354,20 @@ pub fn run_agent_loop(
                 content: format!("<tool_result>{}</tool_result>", result_json),
             });
         } else {
-            // No tool call — this is the final answer. Stream it.
-            // The probe already has partial output; start fresh for full answer.
-            let final_prompt = engine.format_chat_history(&system_prompt, &history)?;
-            let mut final_answer = String::new();
-
-            engine.generate_streaming_session(
-                &inference_session,
-                &system_prompt,
-                &final_prompt,
-                ANSWER_MAX_TOKENS,
+            // No tool call — this is the final answer. Stream it with the
+            // user-selected think budget. The probe stays short so tool
+            // selection is not spent on a long <think> block.
+            let answer_system = thinking_effort.apply_to_system_prompt(&system_prompt);
+            let final_prompt = engine.format_chat_history(&answer_system, &history)?;
+            let final_answer = thinking::generate_with_think_budget_from_prompt(
+                engine,
+                &answer_system,
+                Some(&final_prompt),
+                &user_message,
+                thinking_effort,
                 ANSWER_TEMP,
-                |token| {
-                    final_answer.push_str(token);
+                &|token| {
                     let _ = app.emit("agent-chunk", token);
-                    true
                 },
             )?;
 
@@ -382,18 +384,17 @@ pub fn run_agent_loop(
     }
 
     // Exceeded MAX_ITERATIONS — force a final answer from accumulated history
-    let final_prompt = engine.format_chat_history(&system_prompt, &history)?;
-    let mut final_answer = String::new();
-    engine.generate_streaming_session(
-        &inference_session,
-        &system_prompt,
-        &final_prompt,
-        ANSWER_MAX_TOKENS,
+    let answer_system = thinking_effort.apply_to_system_prompt(&system_prompt);
+    let final_prompt = engine.format_chat_history(&answer_system, &history)?;
+    let final_answer = thinking::generate_with_think_budget_from_prompt(
+        engine,
+        &answer_system,
+        Some(&final_prompt),
+        &user_message,
+        thinking_effort,
         ANSWER_TEMP,
-        |token| {
-            final_answer.push_str(token);
+        &|token| {
             let _ = app.emit("agent-chunk", token);
-            true
         },
     )?;
     let _ = app.emit(

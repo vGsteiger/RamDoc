@@ -2,6 +2,7 @@ use crate::error::AppError;
 use crate::llm::agent::{run_agent_loop, AgentScope, AgentTurnInput};
 use crate::llm::context_cache::InferenceSession;
 use crate::llm::engine::AgentMessage;
+use crate::llm::ThinkingEffort;
 use crate::models::chat::{self, ChatMessageRow, ChatSession, CreateChatMessage};
 use crate::models::patient;
 use crate::state::{llm_lock_poisoned, AppState, AuthState};
@@ -35,6 +36,7 @@ pub async fn run_agent_turn(
     state: State<'_, AppState>,
     session_id: String,
     user_message: String,
+    thinking_effort: Option<ThinkingEffort>,
 ) -> Result<AgentTurnResult, AppError> {
     require_unlocked(&state)?;
 
@@ -131,6 +133,7 @@ pub async fn run_agent_turn(
                 patient_context,
                 history,
                 user_message,
+                thinking_effort: thinking_effort.unwrap_or_default(),
             },
         )
     })

@@ -69,9 +69,7 @@ describe('ChatThread', () => {
     // First call: get_chat_messages, Second call: get_engine_status
     mockInvoke.mockResolvedValueOnce([]).mockResolvedValueOnce(ENGINE_NOT_LOADED);
     render(ChatThread, { props: { sessionId: 'sess1', scope: 'global' } });
-    await waitFor(() =>
-      expect(screen.getByText(/No model loaded/i)).toBeInTheDocument()
-    );
+    await waitFor(() => expect(screen.getByText(/No model loaded/i)).toBeInTheDocument());
   });
 
   it('textarea is disabled when model is not loaded', async () => {
@@ -87,7 +85,7 @@ describe('ChatThread', () => {
     mockInvoke.mockResolvedValueOnce([]).mockResolvedValueOnce(ENGINE_NOT_LOADED);
     render(ChatThread, { props: { sessionId: 'sess1', scope: 'global' } });
     await waitFor(() => {
-      const btn = screen.getByRole('button', { name: /Senden/ });
+      const btn = screen.getByRole('button', { name: /Send/i });
       expect(btn).toBeDisabled();
     });
   });
@@ -124,12 +122,13 @@ describe('ChatThread', () => {
     // Set value directly on the element and fire input so Svelte's bind:value picks it up
     textarea.value = 'Test message';
     await fireEvent.input(textarea);
-    await fireEvent.click(screen.getByRole('button', { name: /Senden/ }));
+    await fireEvent.click(screen.getByRole('button', { name: /Send/i }));
 
     await waitFor(() =>
       expect(mockInvoke).toHaveBeenCalledWith('run_agent_turn', {
         sessionId: 'sess1',
         userMessage: 'Test message',
+        thinkingEffort: 'medium',
       })
     );
   });
@@ -145,11 +144,9 @@ describe('ChatThread', () => {
     const textarea = screen.getByRole<HTMLTextAreaElement>('textbox');
     textarea.value = 'Optimistic message';
     await fireEvent.input(textarea);
-    await fireEvent.click(screen.getByRole('button', { name: /Senden/ }));
+    await fireEvent.click(screen.getByRole('button', { name: /Send/i }));
 
     // The optimistic message should appear in the DOM right away
-    await waitFor(() =>
-      expect(screen.getByText('Optimistic message')).toBeInTheDocument()
-    );
+    await waitFor(() => expect(screen.getByText('Optimistic message')).toBeInTheDocument());
   });
 });

@@ -872,6 +872,13 @@
       "therapy_extension": "Request for extension of approved therapy duration"
     }
   },
+  "thinking": {
+    "label": "Thinking",
+    "low": "Low",
+    "medium": "Medium",
+    "high": "High",
+    "extra_high": "Extra high"
+  },
   "common": {
     "save": "Save",
     "saving": "Saving...",

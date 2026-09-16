@@ -339,6 +339,7 @@ fn tool_write_report(
         None,
         None,
         crate::llm::SYSTEM_PROMPT_DE,
+        crate::llm::ThinkingEffort::Medium,
     )?;
 
     crate::llm::sanitize::validate_report_output(&content)?;

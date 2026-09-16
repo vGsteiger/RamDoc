@@ -18,6 +18,7 @@
     type AppError,
     type LlmEngineStatus,
   } from '$lib/api';
+  import { thinkingEffort } from '$lib/stores/thinking';
   import ErrorDisplay from '$lib/components/ErrorDisplay.svelte';
   import { t } from '$lib/translations';
 
@@ -85,7 +86,7 @@
       const userIntent =
         aiPrompt.trim() || 'Schreibe eine professionelle E-Mail für diesen Patienten.';
       const prompt = `Schreibe den Text einer E-Mail an den Patienten. Verwende KEIN Tool – gib nur den fertigen E-Mail-Text aus (ohne Betreff, nur den Nachrichtentext). Anweisung: ${userIntent}`;
-      await runAgentTurn(session.id, prompt);
+      await runAgentTurn(session.id, prompt, get(thinkingEffort));
     } catch (e) {
       isGenerating = false;
       aiError = $errorText(e);

@@ -1,7 +1,7 @@
 use crate::error::AppError;
 use crate::llm::{
     self, download, embed::EmbedEngine, evidence, quantization, EngineStatus, LetterType,
-    LlmEngine, ModelChoice, ReportType, SYSTEM_PROMPT_DE, SYSTEM_PROMPT_FR,
+    LlmEngine, ModelChoice, ReportType, ThinkingEffort, SYSTEM_PROMPT_DE, SYSTEM_PROMPT_FR,
 };
 use crate::state::{llm_lock_poisoned, AppState, AuthState};
 use serde::Serialize;
@@ -220,6 +220,7 @@ pub async fn generate_report(
     additional_context: Option<String>,
     instructions: Option<String>,
     system_prompt: Option<String>,
+    thinking_effort: Option<ThinkingEffort>,
 ) -> Result<String, AppError> {
     // Check authentication before processing patient data
     check_auth(&state)?;
@@ -260,6 +261,7 @@ pub async fn generate_report(
             additional_context.as_deref(),
             instructions.as_deref(),
             &prompt,
+            thinking_effort.unwrap_or_default(),
         )
     })
     .await
@@ -322,6 +324,7 @@ pub async fn improve_text(
     text: String,
     instruction: String,
     system_prompt: Option<String>,
+    thinking_effort: Option<ThinkingEffort>,
 ) -> Result<String, AppError> {
     // Check authentication before processing patient data
     check_auth(&state)?;
@@ -342,7 +345,14 @@ pub async fn improve_text(
     // Run the potentially long-running text improvement on a blocking thread.
     let app_clone = app.clone();
     let improved = tokio::task::spawn_blocking(move || {
-        llm::improve_text_streaming_with_prompt(&app_clone, &engine, &text, &instruction, &prompt)
+        llm::improve_text_streaming_with_prompt(
+            &app_clone,
+            &engine,
+            &text,
+            &instruction,
+            &prompt,
+            thinking_effort.unwrap_or_default(),
+        )
     })
     .await
     .map_err(|e| AppError::Llm(format!("spawn_blocking error: {e}")))??;
@@ -361,6 +371,7 @@ pub async fn generate_session_summary(
     patient_context: String,
     session_notes: String,
     system_prompt: Option<String>,
+    thinking_effort: Option<ThinkingEffort>,
 ) -> Result<String, AppError> {
     check_auth(&state)?;
 
@@ -382,6 +393,7 @@ pub async fn generate_session_summary(
             &patient_context,
             &session_notes,
             &prompt,
+            thinking_effort.unwrap_or_default(),
         )
     })
     .await
@@ -405,6 +417,7 @@ pub async fn generate_letter(
     clinical_summary: String,
     recipient_name: Option<String>,
     system_prompt: Option<String>,
+    thinking_effort: Option<ThinkingEffort>,
 ) -> Result<String, AppError> {
     check_auth(&state)?;
 
@@ -454,6 +467,7 @@ pub async fn generate_letter(
             &clinical_summary,
             recipient_name_clone.as_deref(),
             &prompt,
+            thinking_effort.unwrap_or_default(),
         )
     })
     .await
@@ -535,6 +549,7 @@ pub async fn query_patient_history(
     patient_id: String,
     question: String,
     system_prompt: Option<String>,
+    thinking_effort: Option<ThinkingEffort>,
 ) -> Result<PatientHistoryAnswer, AppError> {
     // Check authentication before processing patient data
     check_auth(&state)?;
@@ -550,6 +565,7 @@ pub async fn query_patient_history(
     };
 
     let query_vec = embed_question_if_available(&state, &question).await;
+    let thinking = thinking_effort.unwrap_or_default();
 
     // Assemble a budget-bounded evidence block sized against this model's
     // context, measured with the model's own tokenizer.
@@ -557,7 +573,7 @@ pub async fn query_patient_history(
         let pool = state.get_db()?;
         let conn = pool.conn()?;
         let request = evidence::EvidenceRequest::new(&patient_id, &question).with_token_budget(
-            evidence::budget_for_context(engine.context_size(), EVIDENCE_COMPLETION_TOKENS),
+            evidence::budget_for_context(engine.context_size(), thinking.max_tokens()),
         );
         let request = match &query_vec {
             Some(vector) => request.with_query_vector(vector),
@@ -583,6 +599,7 @@ pub async fn query_patient_history(
             &evidence_block,
             &question_clone,
             &prompt,
+            thinking,
         )
     })
     .await

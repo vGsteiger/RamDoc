@@ -17,6 +17,9 @@
     type Medication,
   } from '$lib/api';
   import { language as appLanguage } from '$lib/stores/language';
+  import { thinkingEffort } from '$lib/stores/thinking';
+  import { get } from 'svelte/store';
+  import ThinkingEffortSelect from '$lib/components/ThinkingEffortSelect.svelte';
 
   const patientId = $derived(page.params.id!);
 
@@ -136,7 +139,9 @@
         letterLanguage,
         patientContext,
         clinicalSummary,
-        recipientName || undefined
+        recipientName || undefined,
+        undefined,
+        get(thinkingEffort)
       );
     } catch (err) {
       error = String(err);
@@ -306,7 +311,8 @@
       </div>
 
       <!-- Generate Button -->
-      <div class="flex gap-4">
+      <div class="flex flex-wrap items-center gap-4">
+        <ThinkingEffortSelect disabled={isGenerating} />
         <button
           onclick={handleGenerate}
           disabled={isGenerating}

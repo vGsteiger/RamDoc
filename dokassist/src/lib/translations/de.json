@@ -872,6 +872,13 @@
       "therapy_extension": "Gesuch um Verlängerung der bewilligten Therapiedauer"
     }
   },
+  "thinking": {
+    "label": "Nachdenken",
+    "low": "Niedrig",
+    "medium": "Mittel",
+    "high": "Hoch",
+    "extra_high": "Sehr hoch"
+  },
   "common": {
     "save": "Speichern",
     "saving": "Speichert...",

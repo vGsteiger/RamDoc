@@ -26,6 +26,8 @@
   import ErrorDisplay from '$lib/components/ErrorDisplay.svelte';
   import { get } from 'svelte/store';
   import { t } from '$lib/translations';
+  import ThinkingEffortSelect from '$lib/components/ThinkingEffortSelect.svelte';
+  import { thinkingEffort } from '$lib/stores/thinking';
 
   $: patientId = $page.params.id!;
 
@@ -128,6 +130,7 @@
         additionalContext: uploadedFileContent || null,
         instructions: instructions || null,
         systemPrompt: null,
+        thinkingEffort: get(thinkingEffort),
       });
     } catch (e) {
       error = parseError(e);
@@ -515,7 +518,8 @@
             </div>
           {/if}
 
-          <div class="flex justify-end space-x-4">
+          <div class="flex flex-wrap items-center justify-end gap-3">
+            <ThinkingEffortSelect disabled={isGenerating} />
             <button
               on:click={reset}
               class="h-8 px-3 bg-surface-selected text-fg-muted rounded-control hover:bg-surface-selected transition-colors"

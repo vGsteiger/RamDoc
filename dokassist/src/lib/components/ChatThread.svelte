@@ -3,6 +3,9 @@
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import { getChatMessages, runAgentTurn, getEngineStatus, type ChatMessageRow } from '$lib/api';
   import ChatMessage from './ChatMessage.svelte';
+  import ThinkingEffortSelect from './ThinkingEffortSelect.svelte';
+  import { thinkingEffort } from '$lib/stores/thinking';
+  import { get } from 'svelte/store';
   import { goto } from '$app/navigation';
   import { AlertTriangle } from 'lucide-svelte';
   import { t } from '$lib/translations';
@@ -74,7 +77,7 @@
     scrollToBottom();
 
     try {
-      await runAgentTurn(sessionId, text);
+      await runAgentTurn(sessionId, text, get(thinkingEffort));
       // agent-done triggers re-fetch via event listener
     } catch (e: unknown) {
       isStreaming = false;
@@ -197,7 +200,7 @@
   </div>
 
   <!-- Input area -->
-  <div class="border-t border-line p-4">
+  <div class="border-t border-line p-4 space-y-2">
     <div class="flex gap-2">
       <textarea
         bind:value={inputText}
@@ -215,8 +218,9 @@
  hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed
  self-end"
       >
-        {isStreaming ? '…' : 'Senden'}
+        {isStreaming ? '…' : $t('chat.send')}
       </button>
     </div>
+    <ThinkingEffortSelect disabled={!isModelLoaded || isStreaming} />
   </div>
 </div>

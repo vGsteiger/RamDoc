@@ -4,6 +4,8 @@
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import { getOrCreatePatientChatSession, runAgentTurn, type SubstanceDetail } from '$lib/api';
   import { t } from '$lib/translations';
+  import { thinkingEffort } from '$lib/stores/thinking';
+  import { get } from 'svelte/store';
   import { Alert, Button } from '$lib/components/ui';
   import MedicationComparisonPanel from './MedicationComparisonPanel.svelte';
 
@@ -70,7 +72,7 @@ Nutze das compare_medications Tool, um detaillierte Informationen zu beiden Medi
 5. Wichtige Punkte für das Monitoring nach dem Wechsel`;
 
       // Send the message to the agent
-      await runAgentTurn(sessionId, prompt);
+      await runAgentTurn(sessionId, prompt, get(thinkingEffort));
     } catch (err) {
       error = $errorText(err);
       isGenerating = false;

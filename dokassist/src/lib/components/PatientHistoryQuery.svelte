@@ -15,6 +15,9 @@
     patientHistoryCitationHref,
   } from '$lib/patient-history-citations';
   import { Loader2, Send, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-svelte';
+  import ThinkingEffortSelect from './ThinkingEffortSelect.svelte';
+  import { thinkingEffort } from '$lib/stores/thinking';
+  import { get } from 'svelte/store';
 
   interface Props {
     patientId: string;
@@ -100,7 +103,7 @@
       });
 
       // Invoke the command; the result carries the evidence behind the answer.
-      const result = await queryPatientHistory(patientId, question);
+      const result = await queryPatientHistory(patientId, question, undefined, get(thinkingEffort));
       response = result.answer;
       manifest = result.manifest;
       audit = result.audit;
@@ -186,6 +189,7 @@
           placeholder={$t('patientHistory.placeholder')}
           class="flex-1 px-4 py-2 border border-line rounded-control focus:ring-2 focus:ring-accent/30 focus:border-transparent bg-surface-raised text-fg disabled:opacity-50 disabled:cursor-not-allowed resize-none"
           rows="2"></textarea>
+        <ThinkingEffortSelect disabled={isQuerying} />
         <button
           onclick={handleQuery}
           disabled={isQuerying || !question.trim()}
