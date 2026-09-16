@@ -54,6 +54,6 @@
     "@tauri-apps/plugin-fs": "^2.5.1",
     "@tauri-apps/plugin-updater": "^2.10.1",
     "lucide-svelte": "^1.0.1",
-    "marked": "^18.0.9"
+    "marked": "^18.0.13"
   }
 }
