@@ -90,6 +90,11 @@ fn ensure_schema(conn: &Connection) -> Result<(), AppError> {
     Ok(())
 }
 
+#[cfg(test)]
+pub(crate) fn open_reference_db_for_tests(conn: &Connection) -> Result<(), AppError> {
+    ensure_schema(conn)
+}
+
 /// FTS5 prefix search — returns up to `limit` matching substances.
 pub fn search_substances(
     conn: &Connection,
@@ -189,6 +194,18 @@ pub fn get_substance_detail(conn: &Connection, id: &str) -> Result<SubstanceDeta
     )
 }
 
+/// Search the reference and return complete, model-ready records.
+pub fn search_substance_details(
+    conn: &Connection,
+    query: &str,
+    limit: usize,
+) -> Result<Vec<SubstanceDetail>, AppError> {
+    search_substances(conn, query, limit)?
+        .into_iter()
+        .map(|summary| get_substance_detail(conn, &summary.id))
+        .collect()
+}
+
 /// Return the `source_version` string stored in the first row of `substances`,
 /// or `None` if the DB is empty.
 pub fn get_db_version(conn: &Connection) -> Option<String> {
@@ -202,4 +219,39 @@ pub fn get_db_version(conn: &Connection) -> Option<String> {
 fn parse_trade_names(json: Option<&str>) -> Vec<String> {
     json.and_then(|s| serde_json::from_str::<Vec<String>>(s).ok())
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn detail_search_matches_trade_name_and_returns_grounding_fields() {
+        let conn = Connection::open_in_memory().unwrap();
+        ensure_schema(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO substances (
+                id, name_de, atc_code, trade_names, indication,
+                side_effects, contraindications, source_version
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                "substance-1",
+                "Beispielstoff",
+                "N06AB00",
+                r#"["Beispielmed"]"#,
+                "Beispielindikation",
+                "Beispielnebenwirkung",
+                "Beispielkontraindikation",
+                "test-version"
+            ],
+        )
+        .unwrap();
+
+        let results = search_substance_details(&conn, "Beispielmed", 5).unwrap();
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].name_de, "Beispielstoff");
+        assert_eq!(results[0].indication.as_deref(), Some("Beispielindikation"));
+        assert_eq!(results[0].source_version.as_deref(), Some("test-version"));
+    }
 }
