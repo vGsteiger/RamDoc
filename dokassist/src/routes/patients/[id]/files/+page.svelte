@@ -7,7 +7,7 @@
   import FileViewer from '$lib/components/FileViewer.svelte';
   import { FolderOpen } from 'lucide-svelte';
   import { t } from '$lib/translations';
-  import { Alert, EmptyState, PageHeader, Spinner } from '$lib/components/ui';
+  import { Alert, EmptyState, ListSkeleton, PageHeader } from '$lib/components/ui';
 
   let patientId = $derived($page.params.id!);
   let files = $state<FileRecord[]>([]);
@@ -101,9 +101,7 @@
   {/if}
 
   {#if isLoading}
-    <div class="flex justify-center py-12">
-      <Spinner label={$t('files.loading')} />
-    </div>
+    <ListSkeleton variant="file" count={4} />
   {:else if files.length === 0}
     <EmptyState
       icon={FolderOpen}

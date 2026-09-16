@@ -321,6 +321,28 @@
   }
 }
 
+.skeleton {
+  display: block;
+  background-color: var(--surface-selected);
+  background-image: linear-gradient(
+    105deg,
+    var(--surface-selected) 0%,
+    var(--surface-hover) 46%,
+    var(--surface-selected) 90%
+  );
+  background-size: 220% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -332,5 +354,10 @@
   .thinking-dot {
     animation: none;
     opacity: 0.7;
+  }
+
+  .skeleton {
+    animation: none;
+    background-image: none;
   }
 }
