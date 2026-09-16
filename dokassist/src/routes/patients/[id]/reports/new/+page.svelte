@@ -324,18 +324,16 @@
   onMount(async () => {
     await checkLlmStatus();
     try {
-      const [patient, diagnoses, medications, sessions] = await Promise.all([
+      const [patient, diagnoses, medications, sessions, treatmentPlans] = await Promise.all([
         getPatient(patientId),
         listDiagnosesForPatient(patientId, 20),
         listMedicationsForPatient(patientId, 20),
         listSessionsForPatient(patientId, 5),
+        listTreatmentPlansForPatient(patientId, 10).catch((planError) => {
+          console.error('Failed to load treatment plans:', planError);
+          return [] as TreatmentPlan[];
+        }),
       ]);
-      let treatmentPlans: TreatmentPlan[] = [];
-      try {
-        treatmentPlans = await listTreatmentPlansForPatient(patientId, 10);
-      } catch (e) {
-        console.warn('Failed to load optional treatment-plan context:', e);
-      }
       const goalEntries = await Promise.all(
         treatmentPlans.map(async (plan) => {
           try {

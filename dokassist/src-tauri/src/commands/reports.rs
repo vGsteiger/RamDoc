@@ -250,6 +250,8 @@ fn markdown_to_pdf_lines(markdown: &str) -> Vec<PdfLine> {
         let _ = in_strong; // used implicitly via current_text accumulation
     }
 
+    // Promote standalone clinical headings that the Markdown parser left as Body,
+    // including mixed documents that already contain one `#` heading.
     for line in &mut lines {
         if let PdfLine::Body(text) = line {
             if is_plain_heading(text) {
@@ -867,26 +869,31 @@ mod tests {
             text: "Überweisungsgrund und Fragestellung".to_string(),
             level: 2,
         }));
+        assert!(lines.contains(&PdfLine::Heading {
+            text: "Aktuelle Medikation".to_string(),
+            level: 2,
+        }));
         assert!(lines.contains(&PdfLine::Body(
             "Bitte um diagnostische Mitbeurteilung.".to_string()
         )));
     }
 
     #[test]
-    fn recognizes_plain_headings_alongside_markdown_headings() {
+    fn promotes_plain_clinical_headings_alongside_markdown_headings() {
         let lines = markdown_to_pdf_lines(
-            "## Überweisungsgrund und Fragestellung\n\nBitte um Mitbeurteilung.\n\n\
+            "# Überweisungsschreiben\n\nBitte um Mitbeurteilung.\n\n\
              Aktuelle Medikation\n\nSertralin 100 mg morgens.",
         );
 
         assert!(lines.contains(&PdfLine::Heading {
-            text: "Überweisungsgrund und Fragestellung".to_string(),
-            level: 2,
+            text: "Überweisungsschreiben".to_string(),
+            level: 1,
         }));
         assert!(lines.contains(&PdfLine::Heading {
             text: "Aktuelle Medikation".to_string(),
             level: 2,
         }));
+        assert!(lines.contains(&PdfLine::Body("Sertralin 100 mg morgens.".to_string())));
     }
 
     #[test]
@@ -927,6 +934,22 @@ mod tests {
 
         assert!(fitted.ends_with("..."));
         assert!(estimated_text_width_mm(&fitted, 8.5) <= 55.0);
+    }
+
+    #[test]
+    fn generated_pdf_wraps_long_patient_names() {
+        let mut patient = sample_patient();
+        patient.first_name = "Anna-Katharina-Elisabeth-Maria-Theresia-Johanna".to_string();
+        patient.last_name = "von-und-zu-Musterhausen-Beispiel-Lichtenstein".to_string();
+        let bytes = generate_pdf_bytes(sample_report("Kurzbericht.".to_string()), patient).unwrap();
+        let extracted = pdf_extract::extract_text_from_mem(&bytes).unwrap();
+
+        assert!(extracted.contains("Anna-Katharina-Elisabeth-Maria-Theresia-Johanna"));
+        assert!(extracted.contains("von-und-zu-Musterhausen-Beispiel-Lichtenstein"));
+        assert!(estimated_text_width_mm(
+            "Patientin/Patient: Anna-Katharina-Elisabeth-Maria-Theresia-Johanna von-und-zu-Musterhausen-Beispiel-Lichtenstein",
+            10.5
+        ) > 162.0);
     }
 
     #[test]
