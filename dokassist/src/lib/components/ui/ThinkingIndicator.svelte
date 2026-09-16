@@ -8,14 +8,16 @@
   } from '$lib/chat-activity';
 
   let {
-    stage,
+    stage = 'thinking',
     startedAt,
     toolName = null,
+    label: labelOverride = undefined,
     class: className = '',
   }: {
-    stage: ChatActivityStage;
+    stage?: ChatActivityStage;
     startedAt: number;
     toolName?: string | null;
+    label?: string;
     class?: string;
   } = $props();
 
@@ -31,7 +33,7 @@
   });
 
   let elapsedSeconds = $derived(Math.max(0, Math.floor((now - startedAt) / 1000)));
-  let label = $derived(chatActivityLabel(stage, elapsedSeconds, $t, toolName));
+  let label = $derived(labelOverride ?? chatActivityLabel(stage, elapsedSeconds, $t, toolName));
   let showElapsed = $derived(elapsedSeconds >= ELAPSED_AFTER_SECONDS);
 </script>
 

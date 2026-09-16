@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import ChatThread from '../../lib/components/ChatThread.svelte';
 import type { ChatMessageRow } from '$lib/api';
+import { resetEngineState } from '$lib/stores/engine';
 
 vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn(),
@@ -58,6 +59,7 @@ const ASSISTANT_MSG: ChatMessageRow = {
 
 beforeEach(() => {
   mockInvoke.mockReset();
+  resetEngineState();
   // listen returns an unlisten function — return a resolved promise so onMount completes
   mockListen.mockResolvedValue(vi.fn());
   // jsdom does not implement scrollIntoView
@@ -164,5 +166,22 @@ describe('ChatThread', () => {
     await fireEvent.click(screen.getByRole('button', { name: /Send/i }));
 
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Thinking'));
+  });
+
+  it('shows a live loading banner while the model is being loaded into memory', async () => {
+    const { setEngineState } = await import('$lib/stores/engine');
+    mockInvoke.mockResolvedValueOnce([]).mockResolvedValueOnce(ENGINE_NOT_LOADED);
+    setEngineState({
+      status: ENGINE_NOT_LOADED,
+      isLoading: true,
+      loadingFilename: 'phi4.gguf',
+      loadingStartedAt: Date.now(),
+      error: null,
+    });
+    render(ChatThread, { props: { sessionId: 'sess1', scope: 'global' } });
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent(/Loading phi4 into memory/i)
+    );
+    expect(screen.queryByText(/No model loaded/i)).not.toBeInTheDocument();
   });
 });

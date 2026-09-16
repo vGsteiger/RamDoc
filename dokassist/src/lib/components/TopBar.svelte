@@ -1,28 +1,22 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import {
-    getEngineStatus,
-    loadModel,
-    globalSearch,
-    parseError,
-    type LlmEngineStatus,
-    type SearchResult,
-  } from '$lib/api';
+  import { globalSearch, type SearchResult } from '$lib/api';
   import { t } from '$lib/translations';
   import { Search } from 'lucide-svelte';
+  import { ThinkingIndicator } from '$lib/components/ui';
+  import { engine, loadEngineModel, refreshEngineStatus } from '$lib/stores/engine';
 
   let searchInput = $state<HTMLInputElement | null>(null);
-  let engineStatus = $state<LlmEngineStatus | null>(null);
-  let isLoadingModel = $state(false);
   let searchQuery = $state('');
   let searchResults = $state<SearchResult[]>([]);
   let showDropdown = $state(false);
   let isSearching = $state(false);
   let searchTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  let isLoaded = $derived(engineStatus?.is_loaded ?? false);
-  let isDownloaded = $derived(engineStatus?.is_downloaded ?? false);
+  let isLoaded = $derived($engine.status?.is_loaded ?? false);
+  let isDownloaded = $derived($engine.status?.is_downloaded ?? false);
+  let isLoadingModel = $derived($engine.isLoading);
 
   onMount(() => {
     const handleKeydown = (e: KeyboardEvent) => {
@@ -34,8 +28,10 @@
     };
 
     window.addEventListener('keydown', handleKeydown);
-    updateLlmStatus();
-    const interval = setInterval(updateLlmStatus, 5000);
+    refreshEngineStatus();
+    const interval = setInterval(() => {
+      void refreshEngineStatus();
+    }, 5000);
 
     return () => {
       window.removeEventListener('keydown', handleKeydown);
@@ -43,25 +39,13 @@
     };
   });
 
-  async function updateLlmStatus() {
-    try {
-      engineStatus = await getEngineStatus();
-    } catch (error) {
-      console.error('Failed to get LLM status:', error);
-    }
-  }
-
   async function handleDotClick() {
     if (isLoaded || isLoadingModel) return;
-    if (isDownloaded && engineStatus?.downloaded_filename) {
-      isLoadingModel = true;
+    if (isDownloaded && $engine.status?.downloaded_filename) {
       try {
-        await loadModel(engineStatus.downloaded_filename);
-        engineStatus = await getEngineStatus();
+        await loadEngineModel($engine.status.downloaded_filename);
       } catch (e) {
-        console.error('Failed to load model:', parseError(e).message);
-      } finally {
-        isLoadingModel = false;
+        console.error('Failed to load model:', e);
       }
     } else {
       goto('/settings');
@@ -201,30 +185,32 @@
 
   <div class="ml-auto flex items-center gap-2">
     <span class="text-caption text-fg-subtle">LLM</span>
-    <button
-      onclick={handleDotClick}
-      disabled={isLoaded || isLoadingModel}
-      class="h-2 w-2 rounded-full transition-colors duration-150 ease-standard {isLoadingModel
-        ? 'animate-pulse cursor-wait bg-warning'
-        : isLoaded
+    {#if isLoadingModel && $engine.loadingStartedAt}
+      <div
+        class="inline-flex h-7 items-center rounded-control border border-warning-line bg-warning-subtle px-2"
+      >
+        <ThinkingIndicator startedAt={$engine.loadingStartedAt} label={$t('topbar.loadingModel')} />
+      </div>
+    {:else}
+      <button
+        onclick={handleDotClick}
+        disabled={isLoaded}
+        class="h-2 w-2 rounded-full transition-colors duration-150 ease-standard {isLoaded
           ? 'cursor-default bg-success'
           : isDownloaded
             ? 'cursor-pointer bg-warning'
             : 'cursor-pointer bg-danger'}"
-      aria-label={isLoadingModel
-        ? $t('topbar.loadingModel')
-        : isLoaded
+        aria-label={isLoaded
           ? $t('topbar.modelLoaded')
           : isDownloaded
             ? $t('topbar.modelDownloaded')
             : $t('topbar.noModelDownloaded')}
-      title={isLoadingModel
-        ? $t('topbar.loadingModel')
-        : isLoaded
+        title={isLoaded
           ? $t('topbar.modelLoaded')
           : isDownloaded
             ? $t('topbar.modelDownloaded')
             : $t('topbar.noModelDownloaded')}
-    ></button>
+      ></button>
+    {/if}
   </div>
 </header>
