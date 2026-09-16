@@ -1,0 +1,90 @@
+{
+  "acceptance": {
+    "category_regression_limits": {
+      "chronology": 0.01,
+      "date": 0.01,
+      "dose": 0.0,
+      "general_instruction": 0.02,
+      "german_swiss": 0.01,
+      "long_context": 0.02,
+      "medication": 0.0,
+      "negation": 0.0,
+      "report_generation": 0.01,
+      "tool_call": 0.0,
+      "uncertainty": 0.01,
+      "unsupported_claim": 0.0
+    },
+    "confidence_level": 0.95,
+    "max_artifact_bytes": 6500000000,
+    "max_peak_ram_bytes": 11453246123,
+    "min_cases_per_category": 30,
+    "minimum_improvement_ratio": 0.01,
+    "required_baseline_artifacts": [
+      "q3-standard",
+      "q4-standard",
+      "q5-standard",
+      "q4-clinical-imatrix"
+    ],
+    "resource_regression_limits": {
+      "artifact_size_bytes": 0.02,
+      "decode_tokens_per_second": 0.05,
+      "peak_ram_bytes": 0.02,
+      "prompt_tokens_per_second": 0.05,
+      "ttft_ms": 0.05
+    }
+  },
+  "base_model": {
+    "filename": "Qwen3-8B-F16.gguf",
+    "license": "Apache-2.0",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "source": "Non-promotable placeholder: replace with the pinned F16 source artifact and digest before a promotion study"
+  },
+  "data": {
+    "calibration": {
+      "path": "data/calibration.synthetic.jsonl",
+      "record_count": 8,
+      "sha256": "0d465d62fb7cb57ee07da39d801e0f3ec18c2f7c12e542e8700fe2f4754ad115",
+      "sources": [
+        {
+          "consent_basis": "not applicable; generated synthetic text",
+          "id": "ramdoc-synthetic-v1",
+          "license": "CC0-1.0",
+          "origin": "RamDoc issue #405 deterministic synthetic fixtures",
+          "preprocessing": "UTF-8 JSONL; authored synthetic German text; no source records or identifiers",
+          "synthetic": true
+        }
+      ]
+    },
+    "evaluation": {
+      "path": "data/evaluation.synthetic.jsonl",
+      "record_count": 12,
+      "sha256": "1c96e37c1230abd87dc13a7ea276901f791053e0aab743ea29d58f4a8a9e12dc",
+      "sources": [
+        {
+          "consent_basis": "not applicable; generated synthetic text",
+          "id": "ramdoc-synthetic-v1",
+          "license": "CC0-1.0",
+          "origin": "RamDoc issue #405 deterministic synthetic fixtures",
+          "preprocessing": "UTF-8 JSONL; authored synthetic German text; no source records or identifiers",
+          "synthetic": true
+        }
+      ]
+    }
+  },
+  "governance": {
+    "contains_real_clinical_text": false,
+    "review_status": "synthetic_only"
+  },
+  "kind": "ramdoc-clinical-quantization-study",
+  "schema_version": 1,
+  "study_id": "ramdoc-qwen3-8b-synthetic-smoke-v1",
+  "study_stage": "development",
+  "toolchain": {
+    "commands": {
+      "evaluate": "Run every held-out case at temperature 0 for each standard and candidate artifact, then write the version-1 ramdoc-held-out-evaluation JSON contract",
+      "imatrix": "build/bin/llama-imatrix -m Qwen3-8B-F16.gguf -f calibration.txt -o clinical-imatrix.gguf -ngl 99",
+      "quantize": "build/bin/llama-quantize --imatrix clinical-imatrix.gguf --tensor-type-file mixed-bit.recipe Qwen3-8B-F16.gguf Qwen3-8B-RamDoc-Mix.gguf Q4_K_M"
+    },
+    "llama_cpp_commit": "9f0d017efb4a388bd5c60a27a575c90f20868e51"
+  }
+}

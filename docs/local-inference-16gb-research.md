@@ -40,3 +40,11 @@ fresh cold processes and compare it with `memory_governor.estimate.total_bytes`.
 Until measurements show otherwise, the planner is intentionally conservative:
 an observed peak greater than its estimate is a release blocker. Sustained swap
 or macOS memory-pressure warnings are failure signals, not capacity to use.
+
+Weight quantization is governed separately from runtime context/KV-cache
+planning. The executable clinical calibration, mixed-bit allocation, held-out
+non-inferiority gate, and app promotion hand-off are documented in
+[`clinical-quantization.md`](clinical-quantization.md). A mixed-bit artifact does
+not become an app-visible validated model merely because it fits: it must carry
+a content-addressed promotion record reporting that every required held-out
+category stayed within its declared regression limit.

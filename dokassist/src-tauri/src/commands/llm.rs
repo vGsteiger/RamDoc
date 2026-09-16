@@ -1,7 +1,7 @@
 use crate::error::AppError;
 use crate::llm::{
-    self, download, embed::EmbedEngine, evidence, EngineStatus, LetterType, LlmEngine, ModelChoice,
-    ReportType, SYSTEM_PROMPT_DE, SYSTEM_PROMPT_FR,
+    self, download, embed::EmbedEngine, evidence, quantization, EngineStatus, LetterType,
+    LlmEngine, ModelChoice, ReportType, SYSTEM_PROMPT_DE, SYSTEM_PROMPT_FR,
 };
 use crate::state::{llm_lock_poisoned, AppState, AuthState};
 use serde::Serialize;
@@ -128,6 +128,10 @@ pub async fn load_model(
     validate_model_filename(&model_filename)?;
 
     let model_path = state.data_dir.join("models").join(&model_filename);
+    let verification_path = model_path.clone();
+    tokio::task::spawn_blocking(move || quantization::verify_promoted_model(&verification_path))
+        .await
+        .map_err(|error| AppError::Llm(format!("promotion verification task failed: {error}")))??;
     let model_name = model_filename.clone();
     // "governed" is the safe default. Named profiles remain available as
     // explicit research overrides and are checked against the same budget.

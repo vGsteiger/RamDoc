@@ -225,6 +225,36 @@ export interface ModelInfo {
   is_default: boolean;
   is_loaded: boolean;
   exists_on_disk: boolean;
+  quantization_promotion: QuantizationPromotionSummary | null;
+}
+
+export interface QuantizationPromotionSummary {
+  study_id: string;
+  created_at: string;
+  quantization: string;
+  recipe_sha256: string;
+  study_manifest_sha256: string;
+  held_out_results_sha256: string;
+  llama_cpp_commit: string;
+  categories: string[];
+  baseline_artifacts: string[];
+  dominates: string[];
+  worst_category_regression: number;
+}
+
+export interface PromotedModelPreview {
+  display_name: string;
+  study_id: string;
+  filename: string;
+  size_bytes: number;
+  quantization: string;
+  artifact_found: boolean;
+  artifact_size_matches: boolean;
+  artifact_bytes: number | null;
+  artifact_path: string | null;
+  dominates: string[];
+  baseline_artifacts: string[];
+  worst_category_regression: number;
 }
 
 export interface TaskModel {
@@ -244,6 +274,26 @@ export async function getModelInfo(modelId: string): Promise<ModelInfo> {
 
 export async function downloadAndRegisterModel(model: ModelChoice): Promise<Model> {
   return await invoke<Model>('download_and_register_model', { model });
+}
+
+export async function inspectPromotedModel(
+  promotionPath: string,
+  artifactPath?: string | null
+): Promise<PromotedModelPreview> {
+  return await invoke<PromotedModelPreview>('inspect_promoted_model', {
+    promotionPath,
+    artifactPath: artifactPath ?? null,
+  });
+}
+
+export async function importPromotedModel(
+  promotionPath: string,
+  artifactPath?: string | null
+): Promise<Model> {
+  return await invoke<Model>('import_promoted_model', {
+    promotionPath,
+    artifactPath: artifactPath ?? null,
+  });
 }
 
 export async function deleteModel(modelId: string): Promise<void> {

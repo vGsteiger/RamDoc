@@ -14,6 +14,7 @@ pub mod memory_governor;
 #[cfg(test)]
 mod profile_benchmark;
 mod prompts;
+pub mod quantization;
 mod report;
 pub mod sanitize;
 pub mod tools;

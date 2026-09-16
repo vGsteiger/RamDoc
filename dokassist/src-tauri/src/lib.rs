@@ -183,6 +183,8 @@ pub fn run() {
             commands::models::list_models,
             commands::models::get_model_info,
             commands::models::download_and_register_model,
+            commands::models::inspect_promoted_model,
+            commands::models::import_promoted_model,
             commands::models::delete_model,
             commands::models::set_default_model,
             commands::models::get_default_model,

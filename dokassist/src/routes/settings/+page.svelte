@@ -52,6 +52,7 @@
   import { themePreference } from '$lib/stores/theme';
   import { language } from '$lib/stores/language';
   import { t } from '$lib/translations';
+  import PromotedModelImportDialog from '$lib/components/PromotedModelImportDialog.svelte';
 
   function renderMarkdown(text: string): string {
     function escape(s: string) {
@@ -92,6 +93,7 @@
   let selectedTaskModel = $state<Record<string, string>>({});
   let modelManagementError = $state('');
   let loadingModels = $state(false);
+  let importDialogOpen = $state(false);
   let inferenceProfile = $state<InferenceProfile>('conservative');
 
   // Embedding model state
@@ -1008,9 +1010,17 @@
 
     <!-- Installed Models List -->
     <div class="mb-6">
-      <h3 class="text-md font-semibold text-fg mb-3">
-        {$t('settings.installedModels')}
-      </h3>
+      <div class="flex flex-wrap items-start justify-between gap-3 mb-3">
+        <h3 class="text-md font-semibold text-fg">
+          {$t('settings.installedModels')}
+        </h3>
+        <button
+          onclick={() => (importDialogOpen = true)}
+          class="h-8 px-3 text-caption rounded-control bg-surface-selected hover:bg-surface-selected text-fg transition-colors"
+        >
+          {$t('settings.importPromotedModel')}
+        </button>
+      </div>
 
       {#if loadingModels}
         <p class="text-body text-fg-muted">{$t('settings.loadingModels')}</p>
@@ -1020,7 +1030,7 @@
         </p>
       {:else}
         <div class="space-y-3">
-          {#each installedModels as model}
+          {#each installedModels as model (model.id)}
             <div class="bg-surface-hover border border-line rounded-card p-4">
               <div class="flex items-start justify-between mb-2">
                 <div class="flex-1">
@@ -1040,6 +1050,13 @@
                         {$t('settings.loadedBadge')}
                       </span>
                     {/if}
+                    {#if model.quantization_promotion}
+                      <span
+                        class="px-2 py-0.5 text-caption rounded-card bg-info-subtle text-info-fg border border-info-line"
+                      >
+                        {$t('settings.clinicalGateBadge')}
+                      </span>
+                    {/if}
                     {#if !model.exists_on_disk}
                       <span class="px-2 py-0.5 text-caption rounded-card bg-danger text-on-danger">
                         {$t('settings.modelMissingOnDisk')}
@@ -1056,6 +1073,39 @@
                         new Date(model.last_used).toLocaleDateString()
                       )}
                     </p>
+                  {/if}
+                  {#if model.quantization_promotion}
+                    {@const promotion = model.quantization_promotion}
+                    <details class="mt-2 rounded-card border border-line p-2.5">
+                      <summary class="text-caption text-fg cursor-pointer">
+                        {$t('settings.clinicalGateDetails')}
+                      </summary>
+                      <div class="mt-2 space-y-1">
+                        <p class="text-caption text-fg">
+                          {$t('settings.clinicalGateSummary')
+                            .replace('{quantization}', promotion.quantization)
+                            .replace('{baselines}', promotion.baseline_artifacts.join(', '))}
+                        </p>
+                        <p class="text-caption text-fg-muted">
+                          {$t('settings.clinicalGateStudy').replace('{study}', promotion.study_id)}
+                        </p>
+                        <p class="text-caption text-fg-muted">
+                          {$t('settings.clinicalGateEvidence').replace(
+                            '{regression}',
+                            (promotion.worst_category_regression * 100).toFixed(2)
+                          )}
+                        </p>
+                        <p class="text-caption text-fg-subtle">
+                          {$t('settings.clinicalGateHeldOut').replace(
+                            '{hash}',
+                            promotion.held_out_results_sha256.slice(0, 12)
+                          )}
+                        </p>
+                        <p class="text-caption text-fg-muted mt-1">
+                          {$t('settings.promotionDisclaimer')}
+                        </p>
+                      </div>
+                    </details>
                   {/if}
                 </div>
               </div>
@@ -1313,6 +1363,8 @@
       </div>
     {/if}
   </section>
+
+  <PromotedModelImportDialog bind:open={importDialogOpen} onImported={loadInstalledModels} />
 
   <section class="mt-10">
     <h2 class="text-heading font-semibold text-fg mb-4">

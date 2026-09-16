@@ -1,9 +1,9 @@
 use crate::error::AppError;
-use crate::llm::{download, ModelChoice};
+use crate::llm::{download, quantization, ModelChoice};
 use crate::models::model::{self, Model, TaskModel, TaskType};
 use crate::state::{llm_lock_poisoned, AppState};
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
 
 /// Response for list_models command with additional context
@@ -19,6 +19,25 @@ pub struct ModelInfo {
     pub is_default: bool,
     pub is_loaded: bool,
     pub exists_on_disk: bool,
+    pub quantization_promotion: Option<quantization::QuantizationPromotionSummary>,
+}
+
+fn promotion_summary(
+    model_path: &std::path::Path,
+) -> Option<quantization::QuantizationPromotionSummary> {
+    match quantization::promotion_summary_for_model(model_path) {
+        Ok(summary) => summary,
+        Err(error) => {
+            // A malformed or tampered sidecar must never earn the UI badge, but
+            // it should not make every other registered model disappear.
+            log::warn!(
+                "Ignoring invalid quantization promotion sidecar for '{}': {}",
+                model_path.display(),
+                error
+            );
+            None
+        }
+    }
 }
 
 /// List all registered models
@@ -44,6 +63,7 @@ pub async fn list_models(state: State<'_, AppState>) -> Result<Vec<ModelInfo>, A
             ModelInfo {
                 is_loaded: loaded_filename.as_ref() == Some(&m.filename),
                 exists_on_disk: model_path.exists(),
+                quantization_promotion: promotion_summary(&model_path),
                 id: m.id,
                 name: m.name,
                 filename: m.filename,
@@ -81,6 +101,7 @@ pub async fn get_model_info(
     Ok(ModelInfo {
         is_loaded: loaded_filename.as_ref() == Some(&m.filename),
         exists_on_disk: model_path.exists(),
+        quantization_promotion: promotion_summary(&model_path),
         id: m.id,
         name: m.name,
         filename: m.filename,
@@ -90,6 +111,96 @@ pub async fn get_model_info(
         last_used: m.last_used,
         is_default: m.is_default,
     })
+}
+
+/// Preview a promotion record without hashing the GGUF.
+#[tauri::command]
+pub fn inspect_promoted_model(
+    promotion_path: String,
+    artifact_path: Option<String>,
+) -> Result<quantization::PromotionPreview, AppError> {
+    if promotion_path.trim().is_empty() {
+        return Err(AppError::Validation(
+            "Quantization promotion path cannot be empty".to_string(),
+        ));
+    }
+    let artifact = artifact_path
+        .as_deref()
+        .map(str::trim)
+        .filter(|path| !path.is_empty())
+        .map(std::path::PathBuf::from);
+    quantization::inspect_promotion(std::path::Path::new(&promotion_path), artifact.as_deref())
+}
+
+/// Import a GGUF that passed the offline clinical quantization promotion gate.
+///
+/// The GGUF may sit next to the promotion JSON, or the caller can pass an
+/// explicit `artifact_path`. The blocking verifier copies into the app-owned
+/// model directory while hashing, rejects any mismatch, and persists the
+/// evidence sidecar before the model enters the registry.
+#[tauri::command]
+pub async fn import_promoted_model(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    promotion_path: String,
+    artifact_path: Option<String>,
+) -> Result<Model, AppError> {
+    if promotion_path.trim().is_empty() {
+        return Err(AppError::Validation(
+            "Quantization promotion path cannot be empty".to_string(),
+        ));
+    }
+    let source = std::path::PathBuf::from(promotion_path);
+    let artifact = artifact_path
+        .as_deref()
+        .map(str::trim)
+        .filter(|path| !path.is_empty())
+        .map(std::path::PathBuf::from);
+    let destination_dir = state.data_dir.join("models");
+    let installed = tokio::task::spawn_blocking(move || {
+        quantization::install_promotion(
+            &source,
+            &destination_dir,
+            artifact.as_deref(),
+            |progress| {
+                let _ = app.emit("promoted-model-import-progress", progress);
+            },
+        )
+    })
+    .await
+    .map_err(|error| AppError::Llm(format!("promotion import task failed: {error}")))??;
+
+    let filename = installed.record.artifact.filename.clone();
+    let sha256 = installed.record.artifact.sha256.clone();
+    let size_bytes = i64::try_from(installed.record.artifact.size_bytes)
+        .map_err(|_| AppError::Validation("Promoted model is too large".to_string()))?;
+    let display_name = installed.record.display_name.clone();
+
+    let db = state.get_db()?;
+    let conn = db.conn()?;
+    match model::get_model_by_filename(&conn, &filename) {
+        Ok(existing) => {
+            if existing.sha256 != sha256 || existing.size_bytes != size_bytes {
+                return Err(AppError::Validation(format!(
+                    "Registered model '{}' has different content; refusing to replace it",
+                    filename
+                )));
+            }
+            Ok(existing)
+        }
+        Err(AppError::NotFound(_)) => {
+            let model_id = Uuid::new_v4().to_string();
+            model::create_model(
+                &conn,
+                &model_id,
+                &display_name,
+                &filename,
+                &sha256,
+                size_bytes,
+            )
+        }
+        Err(error) => Err(error),
+    }
 }
 
 /// Download and register a model
@@ -149,7 +260,7 @@ pub async fn delete_model(state: State<'_, AppState>, model_id: String) -> Resul
     let db = state.get_db()?;
 
     // Use a block so conn (MutexGuard, not Send) is dropped before any await points
-    let model_path = {
+    let (model_path, promotion_path) = {
         let conn = db.conn()?;
         let model = model::get_model(&conn, &model_id)?;
 
@@ -168,13 +279,18 @@ pub async fn delete_model(state: State<'_, AppState>, model_id: String) -> Resul
             ));
         }
 
-        state.data_dir.join("models").join(&model.filename)
+        let model_path = state.data_dir.join("models").join(&model.filename);
+        let promotion_path = quantization::promotion_path_for_model(&model_path);
+        (model_path, promotion_path)
         // conn dropped here
     };
 
     // Delete the file (async — conn must not be held)
     if model_path.exists() {
         tokio::fs::remove_file(&model_path).await?;
+    }
+    if promotion_path.exists() {
+        tokio::fs::remove_file(&promotion_path).await?;
     }
 
     // Re-acquire connection for database delete
