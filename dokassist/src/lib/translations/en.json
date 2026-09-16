@@ -13,6 +13,7 @@
   },
   "settings": {
     "title": "Settings",
+    "subtitle": "Manage appearance, AI models, local reference data, imports, and recovery from one place.",
     "applicationUpdates": "Application Updates",
     "currentVersion": "Current Version",
     "checkForUpdates": "Check for Updates",

@@ -13,6 +13,7 @@
   },
   "settings": {
     "title": "Einstellungen",
+    "subtitle": "Verwalten Sie Darstellung, KI-Modelle, lokale Referenzdaten, Importe und Wiederherstellung an einem Ort.",
     "applicationUpdates": "Anwendungsupdates",
     "currentVersion": "Aktuelle Version",
     "checkForUpdates": "Nach Updates suchen",

@@ -672,8 +672,14 @@
   ]);
 </script>
 
-<div class="p-8 max-w-xl">
-  <h1 class="text-display font-semibold text-fg mb-6">{$t('settings.title')}</h1>
+<div
+  class="settings-page mx-auto min-h-full w-full max-w-[1600px] bg-surface px-5 py-6 sm:px-8 lg:px-10 lg:py-9"
+>
+  <header class="border-b border-line-subtle pb-6">
+    <p class="mb-2 text-caption font-semibold uppercase tracking-[0.14em] text-accent-fg">RamDoc</p>
+    <h1 class="text-display font-semibold text-fg">{$t('settings.title')}</h1>
+    <p class="mt-2 max-w-3xl text-body text-fg-muted">{$t('settings.subtitle')}</p>
+  </header>
 
   <section class="mb-10">
     <h2 class="text-heading font-semibold text-fg mb-4">
@@ -2010,3 +2016,76 @@
     </div>
   </section>
 </div>
+
+<style>
+  .settings-page {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 1.5rem;
+    align-items: start;
+  }
+
+  .settings-page > :global(header),
+  .settings-page > :global(section) {
+    grid-column: span 12;
+    min-width: 0;
+  }
+
+  .settings-page > :global(section) {
+    margin: 0;
+    padding: 1.25rem;
+    border: 1px solid var(--line-subtle);
+    border-radius: var(--radius-card);
+    background: var(--surface-raised);
+  }
+
+  @media (min-width: 768px) {
+    .settings-page > :global(section) {
+      padding: 1.5rem;
+    }
+
+    .settings-page > :global(section:nth-of-type(2)) {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1rem;
+    }
+
+    .settings-page > :global(section:nth-of-type(2) > h2) {
+      grid-column: 1 / -1;
+      margin-bottom: 0;
+    }
+
+    .settings-page > :global(section:nth-of-type(2) > div) {
+      margin: 0;
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .settings-page > :global(section:nth-of-type(1)) {
+      grid-column: span 4;
+    }
+
+    .settings-page > :global(section:nth-of-type(2)) {
+      grid-column: span 8;
+    }
+
+    .settings-page > :global(section:nth-of-type(3)) {
+      grid-column: span 12;
+    }
+
+    .settings-page > :global(section:nth-of-type(4)),
+    .settings-page > :global(section:nth-of-type(5)),
+    .settings-page > :global(section:nth-of-type(6)),
+    .settings-page > :global(section:nth-of-type(7)) {
+      grid-column: span 6;
+    }
+
+    .settings-page > :global(section:nth-of-type(8)) {
+      grid-column: span 4;
+    }
+
+    .settings-page > :global(section:nth-of-type(9)) {
+      grid-column: span 8;
+    }
+  }
+</style>
