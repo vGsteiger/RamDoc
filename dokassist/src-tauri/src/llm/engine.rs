@@ -146,11 +146,74 @@ impl LlmEngine {
         model_name: String,
         profile_name: &str,
     ) -> Result<Self, AppError> {
-        let model_hash = sha256_file(&model_path)?;
         let ram = Self::total_ram();
+        let requested_profile = match profile_name {
+            "governed" | "auto" => None,
+            name => Some(InferenceProfile::named(name, runtime_context_for_ram(ram))?),
+        };
+        Self::load_with_requested_profile(model_path, model_name, requested_profile, ram, None)
+    }
+
+    /// Load an arbitrary validated profile for the opt-in benchmark binary.
+    /// The ordinary app can only select named profiles.
+    #[cfg(any(test, feature = "benchmark-harness"))]
+    pub(crate) fn load_benchmark_profile(
+        model_path: PathBuf,
+        model_name: String,
+        profile: InferenceProfile,
+        verified_model_hash: Option<String>,
+    ) -> Result<Self, AppError> {
+        profile.validate()?;
+        let ram = Self::total_ram();
+        Self::load_with_requested_profile(
+            model_path,
+            model_name,
+            Some(profile),
+            ram,
+            verified_model_hash,
+        )
+    }
+
+    fn load_with_requested_profile(
+        model_path: PathBuf,
+        model_name: String,
+        requested_profile: Option<InferenceProfile>,
+        ram: u64,
+        verified_model_hash: Option<String>,
+    ) -> Result<Self, AppError> {
+        let model_hash = match verified_model_hash {
+            Some(hash) if hash.len() == 64 && hash.bytes().all(|byte| byte.is_ascii_hexdigit()) => {
+                hash.to_ascii_lowercase()
+            }
+            Some(_) => {
+                return Err(AppError::Validation(
+                    "Benchmark model SHA-256 must contain exactly 64 hexadecimal characters"
+                        .to_string(),
+                ))
+            }
+            None => sha256_file(&model_path)?,
+        };
         // Parse the GGUF header before loading tensors so unsafe models are
         // rejected before unified-memory pressure can destabilise macOS.
         let governor = MemoryGovernor::inspect(&model_path, ram)?;
+        let (profile, governor_diagnostics) = governor.plan(requested_profile.as_ref());
+        if !governor_diagnostics.safe {
+            return Err(AppError::Llm(format!(
+                "Refusing to load model: {}. Select a smaller model or use a research override after freeing memory.",
+                governor_diagnostics.reason
+            )));
+        }
+        let fallback = requested_profile.as_ref().and_then(|requested| {
+            (profile.n_ctx != requested.n_ctx).then(|| {
+                format!(
+                    "Requested {}-token context capped to model native context of {} tokens",
+                    requested.n_ctx, profile.n_ctx
+                )
+            })
+        });
+        let fallback_code = fallback.as_ref().map(|_| "native_context_cap".to_string());
+        let context_size = profile.n_ctx;
+
         let backend = LlamaBackend::init()
             .map_err(|e| AppError::Llm(format!("Failed to init llama backend: {e}")))?;
 
@@ -189,27 +252,6 @@ impl LlmEngine {
                 model_name
             ))
         })?;
-        let requested_profile = match profile_name {
-            "governed" | "auto" => None,
-            name => Some(InferenceProfile::named(name, runtime_context_for_ram(ram))?),
-        };
-        let (profile, governor_diagnostics) = governor.plan(requested_profile.as_ref());
-        if !governor_diagnostics.safe {
-            return Err(AppError::Llm(format!(
-                "Refusing to load model: {}. Select a smaller model or use a research override after freeing memory.",
-                governor_diagnostics.reason
-            )));
-        }
-        let fallback = requested_profile.as_ref().and_then(|requested| {
-            (profile.n_ctx != requested.n_ctx).then(|| {
-                format!(
-                    "Requested {}-token context capped to model native context of {} tokens",
-                    requested.n_ctx, profile.n_ctx
-                )
-            })
-        });
-        let fallback_code = fallback.as_ref().map(|_| "native_context_cap".to_string());
-        let context_size = profile.n_ctx;
         let chat_template_hash = sha256_bytes(chat_template.as_c_str().to_bytes());
 
         Ok(Self {

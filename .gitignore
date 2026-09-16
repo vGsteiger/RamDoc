@@ -9,6 +9,7 @@ dist/
 .svelte-kit/
 target/
 debug/
+benchmark-results/
 __pycache__/
 *.py[cod]
 

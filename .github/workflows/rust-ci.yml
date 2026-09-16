@@ -53,6 +53,10 @@ jobs:
       working-directory: ./dokassist/src-tauri
       run: cargo test --lib
 
+    - name: Validate deterministic local-inference benchmark
+      working-directory: .
+      run: ./scripts/benchmark-local-inference.py ci
+
     - name: Run examples
       working-directory: ./dokassist/src-tauri
       run: cargo run --example test_audit

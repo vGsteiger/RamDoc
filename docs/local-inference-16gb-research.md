@@ -1,5 +1,11 @@
 # Local inference memory governor
 
+Phase 0's reproducible measurement harness is documented in
+[`local-inference-benchmark.md`](local-inference-benchmark.md). It captures the
+current Qwen3-8B control, exercises the clinical and agent scenario matrix, and
+compares whole-process memory and performance across builds. The governor and
+profile sweeps below consume the same declared 16 GiB constraints.
+
 The memory governor plans local GGUF inference before llama.cpp loads model
 tensors. It reserves one third of physical memory, clamped to 4.5–6 GiB, for
 macOS and the rest of RamDoc; a 16 GiB Mac therefore has an approximately

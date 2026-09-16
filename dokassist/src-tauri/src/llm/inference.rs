@@ -119,6 +119,36 @@ impl InferenceProfile {
         Ok(())
     }
 
+    /// Construct a validated profile for the explicit local benchmark harness.
+    ///
+    /// This is deliberately unavailable to production callers: arbitrary
+    /// profiles are research inputs and still pass through the memory governor
+    /// before any model tensors are loaded.
+    #[cfg(any(test, feature = "benchmark-harness"))]
+    pub(crate) fn for_benchmark(
+        context_size: usize,
+        kv_cache: KvCacheQuantization,
+        n_batch: u32,
+        n_ubatch: u32,
+        completion_headroom: usize,
+    ) -> Result<Self, AppError> {
+        let profile = Self {
+            name: format!(
+                "benchmark-{}-{}",
+                context_size,
+                kv_cache.label().to_ascii_lowercase()
+            ),
+            n_ctx: context_size,
+            kv_cache,
+            n_batch,
+            n_ubatch,
+            completion_headroom,
+            flash_attention: FlashAttentionMode::Enabled,
+        };
+        profile.validate()?;
+        Ok(profile)
+    }
+
     pub(crate) fn resolved_for_model(&self, native_context: usize) -> Result<Self, AppError> {
         let mut resolved = self.clone();
         if native_context != 0 {

@@ -1,0 +1,118 @@
+{
+  "schema_version": 1,
+  "suite_id": "ramdoc-local-inference-16gb-v1",
+  "data_classification": "synthetic_deidentified",
+  "random_seed": 0,
+  "temperature": 0.0,
+  "repetitions": 2,
+  "sample_interval_ms": 25,
+  "steady_state_delay_ms": 250,
+  "long_prompt_fill_ratio": 0.75,
+  "scenarios": [
+    "cold_prompt",
+    "shared_prefix",
+    "continued_session",
+    "agent_tool_call"
+  ],
+  "required_categories": [
+    "medication",
+    "dose",
+    "date",
+    "negation",
+    "chronology",
+    "middle_context_retrieval",
+    "multi_hop_evidence",
+    "tool_call_validity",
+    "german_swiss",
+    "unsupported_claims",
+    "prompt_injection"
+  ],
+  "context_profiles": [
+    {
+      "label": "2k",
+      "context_tokens": 2048,
+      "kv_cache": "F16",
+      "n_batch": 2048,
+      "n_ubatch": 512,
+      "completion_headroom": 256
+    },
+    {
+      "label": "8k",
+      "context_tokens": 8192,
+      "kv_cache": "F16",
+      "n_batch": 2048,
+      "n_ubatch": 512,
+      "completion_headroom": 1024
+    },
+    {
+      "label": "16k",
+      "context_tokens": 16384,
+      "kv_cache": "F16",
+      "n_batch": 2048,
+      "n_ubatch": 512,
+      "completion_headroom": 4096
+    },
+    {
+      "label": "32k",
+      "context_tokens": 32768,
+      "kv_cache": "Q8_0",
+      "n_batch": 2048,
+      "n_ubatch": 512,
+      "completion_headroom": 4096
+    },
+    {
+      "label": "64k",
+      "context_tokens": 65536,
+      "kv_cache": "Q4_0",
+      "n_batch": 2048,
+      "n_ubatch": 512,
+      "completion_headroom": 4096
+    },
+    {
+      "label": "128k",
+      "context_tokens": 131072,
+      "kv_cache": "Q4_0",
+      "n_batch": 2048,
+      "n_ubatch": 512,
+      "completion_headroom": 4096
+    }
+  ],
+  "baseline": {
+    "model": {
+      "name": "Qwen 3 8B Q4_K_M",
+      "filename": "Qwen3-8B-Q4_K_M.gguf",
+      "artifact_sha256": "120307ba529eb2439d6c430d94104dabd578497bc7bfe7e322b5d9933b449bd4",
+      "artifact_size_bytes": 5027784512,
+      "quantization": "Q4_K_M",
+      "native_context_tokens": 32768,
+      "license": "Apache-2.0"
+    },
+    "configuration": {
+      "profile": "governed",
+      "effective_profile_on_16gib": "governed-f16",
+      "context_tokens": 16384,
+      "kv_cache_k": "F16",
+      "kv_cache_v": "F16",
+      "n_batch": 2048,
+      "n_ubatch": 512,
+      "completion_headroom": 4096,
+      "flash_attention": "enabled"
+    },
+    "llama_cpp": {
+      "rust_crate": "llama-cpp-2",
+      "rust_crate_version": "0.1.154",
+      "sys_crate": "llama-cpp-sys-2",
+      "sys_crate_version": "0.1.154",
+      "sys_crate_checksum": "13a9ea2ce0cdc20bcb1870534022e340b391663f8fe09133951e2fe37fbc29cf"
+    }
+  },
+  "regression_thresholds": {
+    "max_quality_score_drop": 0.0,
+    "max_ttft_increase_ratio": 0.15,
+    "max_prefill_increase_ratio": 0.15,
+    "max_total_latency_increase_ratio": 0.15,
+    "max_decode_throughput_decrease_ratio": 0.1,
+    "max_peak_rss_increase_bytes": 268435456,
+    "max_swap_growth_bytes": 0
+  }
+}

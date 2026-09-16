@@ -1,12 +1,17 @@
 [package]
 name = "dokassist"
-version = "0.15.0"
+version = "0.16.2"
 edition = "2021"
 rust-version = "1.95"
 
 [lib]
 name = "dokassist_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "local-inference-benchmark"
+path = "src/bin/local_inference_benchmark.rs"
+required-features = ["benchmark-harness"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -79,6 +84,10 @@ csv = "1"
 # Omit when cross-compiling to x86_64-apple-darwin: the Metal shader library is
 # embedded as a host-arch object file, which breaks the x86_64 link step.
 metal = ["llama-cpp-2/metal"]
+# Build the explicit, local-only benchmark executable. Keeping this opt-in
+# prevents the clinical fixtures and orchestration code from entering release
+# application binaries while still compiling it under `--all-features` CI.
+benchmark-harness = []
 
 [dev-dependencies]
 tauri = { version = "2", features = ["test"] }

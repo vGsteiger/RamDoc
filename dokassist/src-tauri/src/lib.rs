@@ -18,6 +18,10 @@ mod spotlight; // PKG-3: macOS Spotlight exclusion
 mod state;
 mod touch_id;
 
+#[cfg(feature = "benchmark-harness")]
+#[doc(hidden)]
+pub use llm::benchmark_harness::cli_main as local_inference_benchmark_main;
+
 #[cfg(test)]
 mod integration_tests;
 
