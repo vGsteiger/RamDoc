@@ -7,6 +7,7 @@ import IconButton from '$lib/components/ui/IconButton.svelte';
 import Input from '$lib/components/ui/Input.svelte';
 import Spinner from '$lib/components/ui/Spinner.svelte';
 import ThinkingIndicator from '$lib/components/ui/ThinkingIndicator.svelte';
+import ListSkeleton from '$lib/components/ui/ListSkeleton.svelte';
 
 /**
  * These guard the contract the rest of the app relies on: primitives must emit
@@ -196,6 +197,18 @@ describe('Spinner', () => {
   });
 });
 
+describe('ListSkeleton', () => {
+  it('exposes a status role named with the loading label', () => {
+    render(ListSkeleton, { count: 3 });
+    expect(screen.getByRole('status')).toHaveAccessibleName('Loading...');
+  });
+
+  it('renders the requested number of placeholder rows', () => {
+    const { container } = render(ListSkeleton, { count: 3, variant: 'row' });
+    expect(container.querySelectorAll('.skeleton').length).toBeGreaterThanOrEqual(3);
+  });
+});
+
 describe('ThinkingIndicator', () => {
   it('exposes a live status with the current stage label', () => {
     render(ThinkingIndicator, { stage: 'thinking', startedAt: Date.now() });
@@ -219,5 +232,14 @@ describe('ThinkingIndicator', () => {
       label: 'Loading phi4 into memory',
     });
     expect(screen.getByRole('status')).toHaveTextContent('Loading phi4 into memory');
+  });
+
+  it('keeps the elapsed clock visible but out of the live region', () => {
+    render(ThinkingIndicator, { stage: 'thinking', startedAt: Date.now() - 3000 });
+    const status = screen.getByRole('status');
+    expect(status).toHaveAttribute('aria-live', 'polite');
+    expect(status).toHaveTextContent('Thinking');
+    expect(status.textContent).not.toMatch(/\d:\d{2}/);
+    expect(screen.getByText('0:03')).toBeInTheDocument();
   });
 });

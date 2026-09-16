@@ -754,7 +754,10 @@
       "reasoning": "Reasoning",
       "writing": "Writing",
       "lookedUp": "Looked up {tool}",
-      "looking_up": "Looking things up"
+      "lookingUp": "Looking up {tool}",
+      "looking_up": "Looking things up",
+      "prepared": "Prepared {tool}",
+      "preparing": "Preparing {tool}"
     },
     "toolNames": {
       "get_patient": "the patient record",

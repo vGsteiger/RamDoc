@@ -754,7 +754,10 @@
       "reasoning": "Überlegt",
       "writing": "Schreibt",
       "lookedUp": "Nachgeschlagen: {tool}",
-      "looking_up": "Schlägt nach"
+      "lookingUp": "Sucht {tool}",
+      "looking_up": "Schlägt nach",
+      "prepared": "Vorbereitet: {tool}",
+      "preparing": "Bereitet {tool} vor"
     },
     "toolNames": {
       "get_patient": "Patientendossier",

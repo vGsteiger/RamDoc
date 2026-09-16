@@ -9,8 +9,9 @@
   import { ThinkingIndicator } from '$lib/components/ui';
   import { get } from 'svelte/store';
   import { goto } from '$app/navigation';
-  import { AlertTriangle } from 'lucide-svelte';
+  import { AlertTriangle, Wrench } from 'lucide-svelte';
   import { t } from '$lib/translations';
+  import { chatToolActivityLabel } from '$lib/chat-activity';
 
   interface Props {
     sessionId: string;
@@ -25,6 +26,7 @@
   let isStreaming = $state(false);
   let activityStartedAt = $state<number | null>(null);
   let activeToolName = $state<string | null>(null);
+  let pendingTool = $state<{ name: string; startedAt: number } | null>(null);
   let inputText = $state('');
   let isModelLoaded = $derived($engine.status ? $engine.status.is_loaded : true);
   let isLoadingModel = $derived($engine.isLoading);
@@ -34,8 +36,15 @@
 
   let unlistenChunk: UnlistenFn | null = null;
   let unlistenDone: UnlistenFn | null = null;
+  let unlistenToolStarted: UnlistenFn | null = null;
   let unlistenToolCalled: UnlistenFn | null = null;
   let unlistenError: UnlistenFn | null = null;
+  /** True until `run_agent_turn` settles, including the post-loop persist emit. */
+  let turnInFlight = $state(false);
+
+  function isThisSession(payload: { session_id?: string } | null | undefined): boolean {
+    return payload?.session_id === sessionId;
+  }
 
   async function loadMessages() {
     try {
@@ -51,14 +60,16 @@
 
   async function handleSubmit() {
     const text = inputText.trim();
-    if (!text || isStreaming || !isModelLoaded) return;
+    if (!text || isStreaming || turnInFlight || !isModelLoaded) return;
 
     inputText = '';
     isStreaming = true;
+    turnInFlight = true;
     streamingContent = '';
     errorMessage = '';
     activityStartedAt = Date.now();
     activeToolName = null;
+    pendingTool = null;
 
     // Optimistic user message
     const optimisticMsg: ChatMessageRow = {
@@ -81,6 +92,7 @@
       isStreaming = false;
       activityStartedAt = null;
       activeToolName = null;
+      pendingTool = null;
       const msg =
         e instanceof Error
           ? e.message
@@ -90,6 +102,8 @@
       errorMessage = `Fehler: ${msg}`;
       // Remove optimistic message on error
       messages = messages.filter((m) => m.id !== optimisticMsg.id);
+    } finally {
+      turnInFlight = false;
     }
   }
 
@@ -107,33 +121,54 @@
 
     unlistenChunk = await listen<string>('agent-chunk', (event) => {
       activeToolName = null;
+      pendingTool = null;
       streamingContent += event.payload;
       scrollToBottom();
     });
 
-    unlistenDone = await listen<{ final_answer: string }>('agent-done', async () => {
-      isStreaming = false;
-      streamingContent = '';
-      activityStartedAt = null;
-      activeToolName = null;
-      await loadMessages();
-      scrollToBottom();
-    });
-
-    unlistenToolCalled = await listen<{ name: string; args_json: string; result_json: string }>(
-      'agent-tool-called',
+    unlistenDone = await listen<{ final_answer: string; session_id: string }>(
+      'agent-done',
       async (event) => {
-        activeToolName = event.payload.name;
+        if (!isThisSession(event.payload)) return;
+        isStreaming = false;
+        streamingContent = '';
+        activityStartedAt = null;
+        activeToolName = null;
+        pendingTool = null;
         await loadMessages();
         scrollToBottom();
       }
     );
+
+    unlistenToolStarted = await listen<{ name: string; args_json: string; session_id: string }>(
+      'agent-tool-started',
+      (event) => {
+        if (!isThisSession(event.payload)) return;
+        pendingTool = { name: event.payload.name, startedAt: Date.now() };
+        activeToolName = event.payload.name;
+        scrollToBottom();
+      }
+    );
+
+    unlistenToolCalled = await listen<{
+      name: string;
+      args_json: string;
+      result_json: string;
+      session_id: string;
+    }>('agent-tool-called', async (event) => {
+      if (!isThisSession(event.payload)) return;
+      pendingTool = null;
+      activeToolName = event.payload.name;
+      await loadMessages();
+      scrollToBottom();
+    });
 
     unlistenError = await listen<{ message: string }>('agent-error', (event) => {
       isStreaming = false;
       streamingContent = '';
       activityStartedAt = null;
       activeToolName = null;
+      pendingTool = null;
       errorMessage = event.payload.message;
     });
   });
@@ -141,6 +176,7 @@
   onDestroy(() => {
     unlistenChunk?.();
     unlistenDone?.();
+    unlistenToolStarted?.();
     unlistenToolCalled?.();
     unlistenError?.();
   });
@@ -178,8 +214,22 @@
       <ChatMessage {message} />
     {/each}
 
+    {#if pendingTool}
+      <div class="flex justify-start mb-2">
+        <div class="max-w-[80%] rounded-card border border-line bg-surface-hover px-3 py-2">
+          <div class="flex items-center gap-2">
+            <Wrench size={14} class="text-fg-subtle shrink-0" />
+            <ThinkingIndicator
+              startedAt={pendingTool.startedAt}
+              label={chatToolActivityLabel(pendingTool.name, $t, true)}
+            />
+          </div>
+        </div>
+      </div>
+    {/if}
+
     <!-- Streaming assistant message -->
-    {#if isStreaming}
+    {#if isStreaming && (streamingContent || !pendingTool)}
       <ChatMessage
         message={{
           id: 'streaming',
@@ -214,7 +264,7 @@
       <textarea
         bind:value={inputText}
         onkeydown={handleKeydown}
-        disabled={!isModelLoaded || isStreaming || isLoadingModel}
+        disabled={!isModelLoaded || isStreaming || turnInFlight || isLoadingModel}
         placeholder={isModelLoaded ? $t('chat.typeMessageHint') : $t('settings.modelNotLoaded')}
         rows={2}
         class="flex-1 bg-surface-raised border border-line rounded-control px-3 py-2 text-body text-fg
@@ -222,7 +272,11 @@
  disabled:opacity-50 disabled:cursor-not-allowed"></textarea>
       <button
         onclick={handleSubmit}
-        disabled={!isModelLoaded || isStreaming || isLoadingModel || !inputText.trim()}
+        disabled={!isModelLoaded ||
+          isStreaming ||
+          turnInFlight ||
+          isLoadingModel ||
+          !inputText.trim()}
         class="h-8 px-3 bg-accent text-on-accent rounded-control text-body font-medium
  hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed
  self-end"
@@ -231,7 +285,9 @@
       </button>
     </div>
     <div class="flex flex-wrap items-center justify-between gap-2">
-      <ThinkingEffortSelect disabled={!isModelLoaded || isStreaming || isLoadingModel} />
+      <ThinkingEffortSelect
+        disabled={!isModelLoaded || isStreaming || turnInFlight || isLoadingModel}
+      />
       {#if isModelLoaded && modelName}
         <span class="text-caption text-fg-subtle truncate max-w-[16rem]" title={modelName}
           >{modelName}</span

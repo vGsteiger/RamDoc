@@ -14,6 +14,7 @@
   } from '$lib/api';
   import ErrorDisplay from '$lib/components/ErrorDisplay.svelte';
   import { FileText, FileType, Check, AlertTriangle } from 'lucide-svelte';
+  import { ListSkeleton } from '$lib/components/ui';
   import { t } from '$lib/translations';
 
   let literature: Literature[] = $state([]);
@@ -205,10 +206,7 @@
 
     <!-- Loading State -->
     {#if loading}
-      <div class="text-center py-8">
-        <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-accent"></div>
-        <p class="text-fg-muted mt-2">{$t('literature.loading')}</p>
-      </div>
+      <ListSkeleton variant="tile" count={6} />
     {:else if literature.length === 0}
       <!-- Empty State -->
       <div class="text-center py-12">

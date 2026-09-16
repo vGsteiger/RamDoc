@@ -103,11 +103,11 @@
             class="whitespace-pre-wrap font-sans text-caption text-fg-muted italic mt-1">{thinkContent()}</pre>
         </details>
       {/if}
-      {#if mainContent() || showActivity}
+      {#if mainContent().trim() || showActivity}
         <div
           class="bg-surface-hover border border-line rounded-card px-4 py-2 text-body text-fg whitespace-pre-wrap"
         >
-          {#if mainContent()}
+          {#if mainContent().trim()}
             {mainContent()}
           {:else if showActivity}
             <ThinkingIndicator stage={activityStage} {startedAt} toolName={activeToolName} />

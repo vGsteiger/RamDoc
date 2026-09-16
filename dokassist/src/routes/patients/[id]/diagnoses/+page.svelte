@@ -12,6 +12,7 @@
   } from '$lib/api';
   import DiagnosisCard from '$lib/components/DiagnosisCard.svelte';
   import IcdSearch from '$lib/components/IcdSearch.svelte';
+  import { ListSkeleton } from '$lib/components/ui';
   import { get } from 'svelte/store';
   import { t } from '$lib/translations';
 
@@ -268,9 +269,7 @@
   {/if}
 
   {#if loading}
-    <div class="flex justify-center items-center py-12">
-      <div class="text-fg-muted">{$t('common.loading')}</div>
-    </div>
+    <ListSkeleton variant="file" count={4} />
   {:else if diagnoses.length === 0}
     <div class="text-center py-12">
       <p class="text-fg-muted mb-4">{$t('diagnoses.noDiagnoses')}</p>

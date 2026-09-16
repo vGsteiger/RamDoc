@@ -251,6 +251,7 @@ pub fn run_agent_loop(
         user_message,
         thinking_effort,
     } = input;
+    let session_id = inference_session.conversation_id.clone();
     let system_prompt = build_system_prompt(&scope, patient_context.as_deref());
     let probe_profile = GenerationTask::ToolProbe.profile(thinking_effort);
     let chat_profile = GenerationTask::Chat.profile(thinking_effort);
@@ -309,6 +310,15 @@ pub fn run_agent_loop(
 
             let args_json = serde_json::to_string(&call.args).unwrap_or_default();
 
+            let _ = app.emit(
+                "agent-tool-started",
+                serde_json::json!({
+                    "name": call.name,
+                    "args_json": args_json,
+                    "session_id": session_id,
+                }),
+            );
+
             let result = {
                 let conn = pool.conn()?;
                 super::tools::dispatch_tool(&conn, app, engine, &scope, &call, thinking_effort)
@@ -333,6 +343,7 @@ pub fn run_agent_loop(
                     "name": call.name,
                     "args_json": args_json,
                     "result_json": result_json,
+                    "session_id": session_id,
                 }),
             );
 
@@ -373,7 +384,10 @@ pub fn run_agent_loop(
 
             let _ = app.emit(
                 "agent-done",
-                serde_json::json!({"final_answer": final_answer}),
+                serde_json::json!({
+                    "final_answer": final_answer,
+                    "session_id": session_id,
+                }),
             );
 
             return Ok(AgentLoopResult {
@@ -398,7 +412,10 @@ pub fn run_agent_loop(
     )?;
     let _ = app.emit(
         "agent-done",
-        serde_json::json!({"final_answer": final_answer}),
+        serde_json::json!({
+            "final_answer": final_answer,
+            "session_id": session_id,
+        }),
     );
     Ok(AgentLoopResult {
         final_answer,
