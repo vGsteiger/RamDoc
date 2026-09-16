@@ -2,6 +2,8 @@
   import type { ChatMessageRow } from '$lib/api';
   import { t } from '$lib/translations';
   import { Wrench, Check } from 'lucide-svelte';
+  import { ThinkingIndicator } from '$lib/components/ui';
+  import { THINK_END, THINK_START, chatActivityStage } from '$lib/chat-activity';
 
   // Internal fields to hide from tool result display
   const HIDDEN_FIELDS = new Set([
@@ -51,12 +53,11 @@
   interface Props {
     message: ChatMessageRow;
     isStreaming?: boolean;
+    activityStartedAt?: number;
+    activeToolName?: string | null;
   }
 
-  let { message, isStreaming = false }: Props = $props();
-
-  const THINK_START = '<think>';
-  const THINK_END = '</think>';
+  let { message, isStreaming = false, activityStartedAt, activeToolName = null }: Props = $props();
 
   let thinkContent = $derived(() => {
     if (!message.content.startsWith(THINK_START)) return '';
@@ -74,6 +75,12 @@
 
   let toolCallCollapsed = $state(true);
   let toolResultCollapsed = $state(true);
+  let fallbackStartedAt = $state(Date.now());
+  let activityStage = $derived(
+    chatActivityStage(message.content, isStreaming ? activeToolName : null)
+  );
+  let showActivity = $derived(isStreaming && activityStage !== 'writing');
+  let startedAt = $derived(activityStartedAt ?? fallbackStartedAt);
 </script>
 
 {#if message.role === 'user'}
@@ -96,15 +103,17 @@
             class="whitespace-pre-wrap font-sans text-caption text-fg-muted italic mt-1">{thinkContent()}</pre>
         </details>
       {/if}
-      <div
-        class="bg-surface-hover border border-line rounded-card px-4 py-2 text-body text-fg whitespace-pre-wrap"
-      >
-        {#if mainContent()}
-          {mainContent()}
-        {:else if isStreaming}
-          <span class="animate-pulse text-fg-muted">●</span>
-        {/if}
-      </div>
+      {#if mainContent() || showActivity}
+        <div
+          class="bg-surface-hover border border-line rounded-card px-4 py-2 text-body text-fg whitespace-pre-wrap"
+        >
+          {#if mainContent()}
+            {mainContent()}
+          {:else if showActivity}
+            <ThinkingIndicator stage={activityStage} {startedAt} toolName={activeToolName} />
+          {/if}
+        </div>
+      {/if}
     </div>
   </div>
 {:else if message.role === 'tool_call'}

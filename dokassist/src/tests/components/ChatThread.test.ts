@@ -149,4 +149,20 @@ describe('ChatThread', () => {
     // The optimistic message should appear in the DOM right away
     await waitFor(() => expect(screen.getByText('Optimistic message')).toBeInTheDocument());
   });
+
+  it('shows a thinking status immediately after submit, before tokens arrive', async () => {
+    mockInvoke
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce(ENGINE_LOADED)
+      .mockResolvedValueOnce({ session_id: 'sess1', final_answer: '', tool_calls_made: [] });
+    render(ChatThread, { props: { sessionId: 'sess1', scope: 'global' } });
+    await waitFor(() => expect(screen.getByRole('textbox')).not.toBeDisabled());
+
+    const textarea = screen.getByRole<HTMLTextAreaElement>('textbox');
+    textarea.value = 'What medications is she on?';
+    await fireEvent.input(textarea);
+    await fireEvent.click(screen.getByRole('button', { name: /Send/i }));
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Thinking'));
+  });
 });

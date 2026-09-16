@@ -6,6 +6,7 @@ import Card from '$lib/components/ui/Card.svelte';
 import IconButton from '$lib/components/ui/IconButton.svelte';
 import Input from '$lib/components/ui/Input.svelte';
 import Spinner from '$lib/components/ui/Spinner.svelte';
+import ThinkingIndicator from '$lib/components/ui/ThinkingIndicator.svelte';
 
 /**
  * These guard the contract the rest of the app relies on: primitives must emit
@@ -192,5 +193,23 @@ describe('Spinner', () => {
   it('uses the provided label as the accessible name', () => {
     render(Spinner, { label: 'Generating report' });
     expect(screen.getByRole('status')).toHaveTextContent('Generating report');
+  });
+});
+
+describe('ThinkingIndicator', () => {
+  it('exposes a live status with the current stage label', () => {
+    render(ThinkingIndicator, { stage: 'thinking', startedAt: Date.now() });
+    const status = screen.getByRole('status');
+    expect(status).toHaveAttribute('aria-live', 'polite');
+    expect(status).toHaveTextContent('Thinking');
+  });
+
+  it('names a completed tool lookup', () => {
+    render(ThinkingIndicator, {
+      stage: 'looking_up',
+      startedAt: Date.now(),
+      toolName: 'list_medications',
+    });
+    expect(screen.getByRole('status')).toHaveTextContent('Looked up medications');
   });
 });

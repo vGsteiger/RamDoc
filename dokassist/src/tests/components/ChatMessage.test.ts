@@ -67,13 +67,46 @@ describe('ChatMessage', () => {
     expect(screen.getByRole('button', { name: /Show result/ })).toBeInTheDocument();
   });
 
-  it('renders pulse indicator when streaming with empty content', () => {
+  it('renders a thinking status when streaming with empty content', () => {
     render(ChatMessage, {
       props: {
         message: makeMsg({ role: 'assistant', content: '' }),
         isStreaming: true,
       },
     });
-    expect(screen.getByText('●')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Thinking');
+    expect(screen.queryByText('●')).not.toBeInTheDocument();
+  });
+
+  it('names the tool that just ran while still streaming', () => {
+    render(ChatMessage, {
+      props: {
+        message: makeMsg({ role: 'assistant', content: '' }),
+        isStreaming: true,
+        activeToolName: 'list_medications',
+      },
+    });
+    expect(screen.getByRole('status')).toHaveTextContent('Looked up medications');
+  });
+
+  it('uses Reasoning while a think block is still streaming', () => {
+    render(ChatMessage, {
+      props: {
+        message: makeMsg({ role: 'assistant', content: '<think>drafting' }),
+        isStreaming: true,
+      },
+    });
+    expect(screen.getByRole('status')).toHaveTextContent('Reasoning');
+  });
+
+  it('hides the thinking status once answer tokens stream in', () => {
+    render(ChatMessage, {
+      props: {
+        message: makeMsg({ role: 'assistant', content: 'Here is the answer.' }),
+        isStreaming: true,
+      },
+    });
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.getByText('Here is the answer.')).toBeInTheDocument();
   });
 });

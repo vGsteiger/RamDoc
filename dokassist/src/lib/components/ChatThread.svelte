@@ -21,6 +21,8 @@
   let messages = $state<ChatMessageRow[]>([]);
   let streamingContent = $state('');
   let isStreaming = $state(false);
+  let activityStartedAt = $state<number | null>(null);
+  let activeToolName = $state<string | null>(null);
   let inputText = $state('');
   let isModelLoaded = $state(true);
   let modelName = $state('');
@@ -63,6 +65,8 @@
     isStreaming = true;
     streamingContent = '';
     errorMessage = '';
+    activityStartedAt = Date.now();
+    activeToolName = null;
 
     // Optimistic user message
     const optimisticMsg: ChatMessageRow = {
@@ -83,6 +87,8 @@
       // agent-done triggers re-fetch via event listener
     } catch (e: unknown) {
       isStreaming = false;
+      activityStartedAt = null;
+      activeToolName = null;
       const msg =
         e instanceof Error
           ? e.message
@@ -108,6 +114,7 @@
     scrollToBottom();
 
     unlistenChunk = await listen<string>('agent-chunk', (event) => {
+      activeToolName = null;
       streamingContent += event.payload;
       scrollToBottom();
     });
@@ -115,13 +122,16 @@
     unlistenDone = await listen<{ final_answer: string }>('agent-done', async () => {
       isStreaming = false;
       streamingContent = '';
+      activityStartedAt = null;
+      activeToolName = null;
       await loadMessages();
       scrollToBottom();
     });
 
     unlistenToolCalled = await listen<{ name: string; args_json: string; result_json: string }>(
       'agent-tool-called',
-      async () => {
+      async (event) => {
+        activeToolName = event.payload.name;
         await loadMessages();
         scrollToBottom();
       }
@@ -130,6 +140,8 @@
     unlistenError = await listen<{ message: string }>('agent-error', (event) => {
       isStreaming = false;
       streamingContent = '';
+      activityStartedAt = null;
+      activeToolName = null;
       errorMessage = event.payload.message;
     });
 
@@ -168,7 +180,7 @@
     {/each}
 
     <!-- Streaming assistant message -->
-    {#if isStreaming && streamingContent}
+    {#if isStreaming}
       <ChatMessage
         message={{
           id: 'streaming',
@@ -181,13 +193,9 @@
           created_at: new Date().toISOString(),
         }}
         isStreaming={true}
+        activityStartedAt={activityStartedAt ?? undefined}
+        {activeToolName}
       />
-    {:else if isStreaming && !streamingContent}
-      <div class="flex justify-start mb-3">
-        <div class="bg-surface-hover border border-line rounded-card px-4 py-2">
-          <span class="animate-pulse text-fg-muted text-body">●</span>
-        </div>
-      </div>
     {/if}
 
     {#if errorMessage}
