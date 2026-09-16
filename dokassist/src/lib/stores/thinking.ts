@@ -5,13 +5,14 @@ import type { ThinkingEffort } from '$lib/api';
 const STORAGE_KEY = 'thinking-effort';
 const LEVELS: ThinkingEffort[] = ['low', 'medium', 'high', 'extra_high'];
 
-function getInitialEffort(): ThinkingEffort {
-  if (!browser) return 'medium';
+export function getStoredThinkingEffort(): ThinkingEffort | null {
+  if (!browser) return null;
   const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored && LEVELS.includes(stored as ThinkingEffort)) {
-    return stored as ThinkingEffort;
-  }
-  return 'medium';
+  return stored && LEVELS.includes(stored as ThinkingEffort) ? (stored as ThinkingEffort) : null;
+}
+
+function getInitialEffort(): ThinkingEffort {
+  return getStoredThinkingEffort() ?? 'medium';
 }
 
 function createThinkingEffortStore() {
@@ -19,6 +20,8 @@ function createThinkingEffortStore() {
 
   return {
     subscribe,
+    // Applies a task-specific default without turning it into a user preference.
+    setTransient: set,
     set: (value: ThinkingEffort) => {
       if (browser) {
         localStorage.setItem(STORAGE_KEY, value);

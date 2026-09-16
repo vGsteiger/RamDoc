@@ -1,4 +1,5 @@
 use crate::error::AppError;
+use crate::llm::harness::SamplerConfig;
 use crate::llm::{
     self, download, embed::EmbedEngine, evidence, quantization, EngineStatus, LetterType,
     LlmEngine, ModelChoice, ReportType, ThinkingEffort, SYSTEM_PROMPT_DE, SYSTEM_PROMPT_FR,
@@ -221,6 +222,7 @@ pub async fn generate_report(
     instructions: Option<String>,
     system_prompt: Option<String>,
     thinking_effort: Option<ThinkingEffort>,
+    sampler: Option<SamplerConfig>,
 ) -> Result<String, AppError> {
     // Check authentication before processing patient data
     check_auth(&state)?;
@@ -252,7 +254,7 @@ pub async fn generate_report(
     // Run the potentially long-running report generation on a blocking thread.
     let app_clone = app.clone();
     let report = tokio::task::spawn_blocking(move || {
-        llm::generate_report_streaming_with_prompt(
+        llm::generate_report_streaming_with_sampler(
             &app_clone,
             &engine,
             rt,
@@ -262,6 +264,7 @@ pub async fn generate_report(
             instructions.as_deref(),
             &prompt,
             thinking_effort.unwrap_or_default(),
+            sampler,
         )
     })
     .await

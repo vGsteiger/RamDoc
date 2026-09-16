@@ -224,16 +224,21 @@ impl LlmEngine {
         let model_params = LlamaModelParams::default().with_n_gpu_layers(ALL_GPU_LAYERS);
         #[cfg(feature = "metal")]
         let model_params = {
-            let metal_devices: Vec<usize> = llama_cpp_2::list_llama_ggml_backend_devices()
-                .into_iter()
-                .filter(|device| device.backend.eq_ignore_ascii_case("metal"))
+            let available_devices = llama_cpp_2::list_llama_ggml_backend_devices();
+            let metal_devices: Vec<usize> = available_devices
+                .iter()
+                .filter(|device| is_selectable_metal_device(&device.backend, &device.name))
                 .map(|device| device.index)
                 .collect();
             if metal_devices.is_empty() {
-                return Err(AppError::Llm(
-                    "Metal inference was requested, but llama.cpp reported no Metal device; refusing a silent CPU downgrade"
-                        .to_string(),
-                ));
+                let observed = available_devices
+                    .iter()
+                    .map(|device| format!("{}:{}", device.backend, device.name))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                return Err(AppError::Llm(format!(
+                    "Metal inference was requested, but llama.cpp reported no Metal device; refusing a silent CPU downgrade (observed: {observed})"
+                )));
             }
             model_params.with_devices(&metal_devices).map_err(|error| {
                 AppError::Llm(format!(
@@ -1153,6 +1158,10 @@ fn max_persistent_contexts_for_ram(ram: u64) -> usize {
     }
 }
 
+fn is_selectable_metal_device(backend: &str, name: &str) -> bool {
+    backend.eq_ignore_ascii_case("metal") || name.to_ascii_lowercase().starts_with("mtl")
+}
+
 fn sha256_bytes(bytes: &[u8]) -> String {
     hex::encode(ring::digest::digest(&SHA256, bytes).as_ref())
 }
@@ -1240,6 +1249,14 @@ mod tests {
         assert_eq!(max_persistent_contexts_for_ram(16 * GB), 1);
         assert_eq!(max_persistent_contexts_for_ram(32 * GB), 1);
         assert_eq!(max_persistent_contexts_for_ram(48 * GB), 2);
+    }
+
+    #[test]
+    fn recognises_llama_cpp_metal_device_labels() {
+        assert!(is_selectable_metal_device("Metal", "Apple M5 Pro"));
+        assert!(is_selectable_metal_device("", "MTL0"));
+        assert!(!is_selectable_metal_device("MTL", ""));
+        assert!(!is_selectable_metal_device("CPU", "CPU"));
     }
 
     /// Hardware benchmark harness for issue #400. It is ignored because CI has

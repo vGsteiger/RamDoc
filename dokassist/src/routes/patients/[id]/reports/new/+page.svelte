@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
+  import { resolve } from '$app/paths';
   import { onMount, onDestroy } from 'svelte';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import {
@@ -9,6 +10,8 @@
     listDiagnosesForPatient,
     listMedicationsForPatient,
     listSessionsForPatient,
+    listTreatmentGoalsForPlan,
+    listTreatmentPlansForPatient,
     createReport,
     parseError,
     type LlmEngineStatus,
@@ -17,6 +20,8 @@
     type Diagnosis,
     type Medication,
     type Session,
+    type TreatmentGoal,
+    type TreatmentPlan,
     type AppError,
   } from '$lib/api';
   import { invoke } from '@tauri-apps/api/core';
@@ -27,8 +32,13 @@
   import { get } from 'svelte/store';
   import { t } from '$lib/translations';
   import ThinkingEffortSelect from '$lib/components/ThinkingEffortSelect.svelte';
-  import { thinkingEffort } from '$lib/stores/thinking';
-  import { stripThinkTags } from '$lib/llm/strip-think';
+  import { thinkingEffort, getStoredThinkingEffort } from '$lib/stores/thinking';
+  import {
+    reportGenerationSettings,
+    resolveReportSampler,
+    resolveReportThinkingEffort,
+  } from '$lib/stores/report-generation';
+  import { cleanGeneratedReport } from '$lib/llm/clean-generated-report';
 
   $: patientId = $page.params.id!;
 
@@ -36,6 +46,8 @@
   let sessionNotes = '';
   let patientContext = '';
   let instructions = '';
+  let referralRecipient = '';
+  let referralQuestion = '';
   let uploadedFileContent = '';
   let uploadedFileName = '';
   let generatedContent = '';
@@ -50,6 +62,12 @@
   let unlistenChunk: UnlistenFn | null = null;
   let unlistenDone: UnlistenFn | null = null;
   let unlistenSummarizing: UnlistenFn | null = null;
+
+  $: {
+    thinkingEffort.setTransient(
+      resolveReportThinkingEffort(selectedType, getStoredThinkingEffort())
+    );
+  }
 
   async function checkLlmStatus() {
     try {
@@ -74,6 +92,15 @@
         code: 'LLM_ERROR',
         message: get(t)('reports.editor.modelNotLoaded'),
         ref: 'LLM_NOT_LOADED',
+      };
+      return;
+    }
+
+    if (selectedType === 'Ueberweisungsschreiben' && !referralQuestion.trim()) {
+      error = {
+        code: 'VALIDATION_ERROR',
+        message: get(t)('reports.referralQuestionRequired'),
+        ref: 'VALIDATION',
       };
       return;
     }
@@ -107,7 +134,7 @@
       unlistenDone = await listen('report-done', () => {
         isGenerating = false;
         isSummarizing = false;
-        editableContent = stripThinkTags(generatedContent);
+        editableContent = cleanGeneratedReport(generatedContent);
         isEditing = true;
         // Unlisten after completion
         if (unlistenSummarizing) {
@@ -124,14 +151,16 @@
         }
       });
 
+      const generationInstructions = buildGenerationInstructions();
       await invoke('generate_report', {
         patientContext,
         reportType: selectedType,
         sessionNotes,
         additionalContext: uploadedFileContent || null,
-        instructions: instructions || null,
+        instructions: generationInstructions || null,
         systemPrompt: null,
         thinkingEffort: get(thinkingEffort),
+        sampler: resolveReportSampler(get(reportGenerationSettings)),
       });
     } catch (e) {
       error = parseError(e);
@@ -165,7 +194,7 @@
       };
 
       await createReport(input);
-      await goto(`/patients/${patientId}/reports`);
+      await goto(resolve('/patients/[id]/reports', { id: patientId }));
     } catch (e) {
       error = parseError(e);
     }
@@ -196,6 +225,8 @@
     sessionNotes = '';
     patientContext = '';
     instructions = '';
+    referralRecipient = '';
+    referralQuestion = '';
     uploadedFileContent = '';
     uploadedFileName = '';
     generatedContent = '';
@@ -219,10 +250,24 @@
     editableContent = '';
   }
 
+  function buildGenerationInstructions(): string {
+    const parts: string[] = [];
+    if (selectedType === 'Ueberweisungsschreiben') {
+      if (referralRecipient.trim()) {
+        parts.push(`Empfänger oder Fachgebiet: ${referralRecipient.trim()}`);
+      }
+      parts.push(`Überweisungsgrund und konkrete Fragestellung: ${referralQuestion.trim()}`);
+    }
+    if (instructions.trim()) parts.push(`Weitere Vorgaben: ${instructions.trim()}`);
+    return parts.join('\n\n');
+  }
+
   function formatClinicalContext(
     diagnoses: Diagnosis[],
     medications: Medication[],
-    sessions: Session[]
+    sessions: Session[],
+    treatmentPlans: TreatmentPlan[],
+    goalsByPlan: Map<string, TreatmentGoal[]>
   ): string {
     const lines: string[] = [];
 
@@ -239,7 +284,22 @@
     if (currentMeds.length > 0) {
       lines.push('\nAktuelle Medikamente:');
       for (const m of currentMeds) {
-        lines.push(`- ${m.substance} ${m.dosage}, ${m.frequency}`);
+        let line = `- ${m.substance} ${m.dosage}, ${m.frequency}`;
+        if (m.notes) line += ` (${m.notes})`;
+        lines.push(line);
+      }
+    }
+
+    const activePlans = treatmentPlans.filter((plan) => plan.status === 'active');
+    if (activePlans.length > 0) {
+      lines.push('\nAktuelle Behandlungspläne:');
+      for (const plan of activePlans) {
+        let line = `- ${plan.title} (${plan.status}, seit ${plan.start_date})`;
+        if (plan.description) line += `: ${plan.description}`;
+        lines.push(line);
+        for (const goal of goalsByPlan.get(plan.id) ?? []) {
+          lines.push(`  Therapieziel (${goal.status}): ${goal.description}`);
+        }
       }
     }
 
@@ -249,7 +309,7 @@
         let line = `- ${s.session_date}: ${s.session_type}`;
         if (s.duration_minutes) line += ` (${s.duration_minutes} min)`;
         const summary = s.clinical_summary || s.notes;
-        if (summary) line += ` — ${summary.slice(0, 400)}`;
+        if (summary) line += ` — ${summary.slice(0, 800)}`;
         lines.push(line);
       }
     }
@@ -276,14 +336,34 @@
   onMount(async () => {
     await checkLlmStatus();
     try {
-      const [patient, diagnoses, medications, sessions] = await Promise.all([
+      const [patient, diagnoses, medications, sessions, treatmentPlans] = await Promise.all([
         getPatient(patientId),
         listDiagnosesForPatient(patientId, 20),
         listMedicationsForPatient(patientId, 20),
         listSessionsForPatient(patientId, 5),
+        listTreatmentPlansForPatient(patientId, 10).catch((planError) => {
+          console.error('Failed to load treatment plans:', planError);
+          return [] as TreatmentPlan[];
+        }),
       ]);
+      const goalEntries = await Promise.all(
+        treatmentPlans.map(async (plan) => {
+          try {
+            return [plan.id, await listTreatmentGoalsForPlan(plan.id, 20)] as const;
+          } catch {
+            return [plan.id, [] as TreatmentGoal[]] as const;
+          }
+        })
+      );
       patientContext =
-        formatPatientContext(patient) + formatClinicalContext(diagnoses, medications, sessions);
+        formatPatientContext(patient) +
+        formatClinicalContext(
+          diagnoses,
+          medications,
+          sessions,
+          treatmentPlans,
+          new Map(goalEntries)
+        );
     } catch (e) {
       // Non-fatal: user can still fill in patient context manually
       console.error('Failed to load patient data:', e);
@@ -291,6 +371,7 @@
   });
 
   onDestroy(() => {
+    thinkingEffort.setTransient(getStoredThinkingEffort() ?? 'medium');
     if (unlistenSummarizing) unlistenSummarizing();
     if (unlistenChunk) unlistenChunk();
     if (unlistenDone) unlistenDone();
@@ -303,7 +384,10 @@
       <h2 class="text-display font-semibold text-fg">
         {$t('reports.newReportTitle')}
       </h2>
-      <a href={`/patients/${patientId}/reports`} class="text-body text-fg-muted hover:text-fg">
+      <a
+        href={resolve('/patients/[id]/reports', { id: patientId })}
+        class="text-body text-fg-muted hover:text-fg"
+      >
         {$t('reports.backToReports')}
       </a>
     </div>
@@ -323,7 +407,7 @@
               {$t('reports.llmNotConfiguredDesc')}
             </p>
             <a
-              href="/settings"
+              href={resolve('/settings')}
               class="inline-flex items-center inline-block h-8 px-3 bg-accent text-on-accent rounded-card hover:bg-accent-hover transition-colors"
             >
               {$t('reports.goToSettings')}
@@ -399,6 +483,48 @@
         {/if}
 
         {#if createMode === 'generate'}
+          {#if selectedType === 'Ueberweisungsschreiben'}
+            <section class="bg-accent-subtle border border-accent/30 rounded-card p-5 space-y-4">
+              <div>
+                <h3 class="text-heading font-semibold text-fg">
+                  {$t('reports.referralDetails')}
+                </h3>
+                <p class="text-body text-fg-muted mt-1">
+                  {$t('reports.referralDetailsHint')}
+                </p>
+              </div>
+              <div>
+                <label
+                  for="referral-recipient"
+                  class="block text-body font-medium text-fg-muted mb-2"
+                >
+                  {$t('reports.referralRecipient')}
+                  <span class="text-fg-subtle">{$t('reports.optional')}</span>
+                </label>
+                <input
+                  id="referral-recipient"
+                  bind:value={referralRecipient}
+                  class="w-full px-4 py-3 bg-surface-raised border border-line rounded-control text-fg focus:outline-none focus:border-accent"
+                  placeholder={$t('reports.referralRecipientPlaceholder')}
+                />
+              </div>
+              <div>
+                <label
+                  for="referral-question"
+                  class="block text-body font-medium text-fg-muted mb-2"
+                >
+                  {$t('reports.referralQuestion')}
+                </label>
+                <textarea
+                  id="referral-question"
+                  bind:value={referralQuestion}
+                  required
+                  class="w-full h-28 px-4 py-3 bg-surface-raised border border-line rounded-control text-fg focus:outline-none focus:border-accent"
+                  placeholder={$t('reports.referralQuestionPlaceholder')}></textarea>
+              </div>
+            </section>
+          {/if}
+
           <div>
             <label for="patient-context" class="block text-body font-medium text-fg-muted mb-2">
               {$t('reports.patientContext')}

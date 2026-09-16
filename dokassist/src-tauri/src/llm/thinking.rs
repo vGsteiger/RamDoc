@@ -8,7 +8,7 @@
 
 use super::context_cache::InferenceSession;
 use super::engine::LlmEngine;
-use super::harness::{GenerationProfile, GenerationTask};
+use super::harness::{GenerationProfile, GenerationTask, SamplerConfig};
 use super::prompts;
 use super::utf8;
 use crate::error::AppError;
@@ -89,7 +89,33 @@ pub fn generate_with_think_budget(
     effort: ThinkingEffort,
     emit: &dyn Fn(&str),
 ) -> Result<String, AppError> {
-    let profile = task.profile(effort);
+    generate_with_think_budget_and_sampler(
+        engine,
+        system_prompt,
+        user_message,
+        task,
+        effort,
+        None,
+        emit,
+    )
+}
+
+/// Like [`generate_with_think_budget`], with an optional validated sampler
+/// override. This is intentionally separate from reasoning effort: effort
+/// controls the token budget, while the sampler controls token selection.
+pub fn generate_with_think_budget_and_sampler(
+    engine: &LlmEngine,
+    system_prompt: &str,
+    user_message: &str,
+    task: GenerationTask,
+    effort: ThinkingEffort,
+    sampler: Option<SamplerConfig>,
+    emit: &dyn Fn(&str),
+) -> Result<String, AppError> {
+    let mut profile = task.profile(effort);
+    if let Some(sampler) = sampler {
+        profile.sampler = sampler.validate().map_err(AppError::Validation)?;
+    }
     let system_prompt = profile.effort.apply_to_system_prompt(system_prompt);
     let system_prompt = task.apply_to_system_prompt(&system_prompt);
     generate_with_think_budget_from_prompt(

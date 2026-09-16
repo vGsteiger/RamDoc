@@ -47,10 +47,15 @@
     type ColumnMapping,
     type ImportResult,
     type BackupInfo,
+    type SamplerConfig,
   } from '$lib/api';
   import { themePreference } from '$lib/stores/theme';
   import { language } from '$lib/stores/language';
   import { engine, loadEngineModel, loadingModelLabel } from '$lib/stores/engine';
+  import {
+    reportGenerationSettings,
+    type ReportGenerationPreset,
+  } from '$lib/stores/report-generation';
   import { ThinkingIndicator } from '$lib/components/ui';
   import { t } from '$lib/translations';
   import PromotedModelImportDialog from '$lib/components/PromotedModelImportDialog.svelte';
@@ -96,6 +101,27 @@
   let loadingModels = $state(false);
   let importDialogOpen = $state(false);
   let inferenceProfile = $state<InferenceProfile>('conservative');
+  const samplerFields: readonly (readonly [keyof SamplerConfig, string, number, number, number])[] =
+    [
+      ['temperature', 'settings.samplerTemperature', 0, 2, 0.05],
+      ['top_k', 'settings.samplerTopK', 1, 200, 1],
+      ['top_p', 'settings.samplerTopP', 0, 1, 0.05],
+      ['min_p', 'settings.samplerMinP', 0, 1, 0.05],
+      ['repeat_penalty', 'settings.samplerRepeatPenalty', 0.8, 2, 0.05],
+      ['presence_penalty', 'settings.samplerPresencePenalty', 0, 2, 0.1],
+      ['seed', 'settings.samplerSeed', 0, 4_294_967_295, 1],
+    ];
+
+  function setReportPreset(preset: ReportGenerationPreset) {
+    reportGenerationSettings.update((settings) => ({ ...settings, preset }));
+  }
+
+  function setSamplerValue(field: keyof SamplerConfig, value: number) {
+    reportGenerationSettings.update((settings) => ({
+      ...settings,
+      custom: { ...settings.custom, [field]: value },
+    }));
+  }
 
   // Embedding model state
   let embedStatus = $state<EmbedStatus | null>(null);
@@ -910,6 +936,48 @@
       <p class="text-caption text-fg-muted mt-2">
         {$t('settings.inferenceProfileDescription')}
       </p>
+    </div>
+
+    <div class="bg-surface-hover rounded-card p-4 mb-6">
+      <label for="report-generation-preset" class="block text-body font-medium text-fg mb-2">
+        {$t('settings.reportGenerationPreset')}
+      </label>
+      <select
+        id="report-generation-preset"
+        value={$reportGenerationSettings.preset}
+        onchange={(event) => setReportPreset(event.currentTarget.value as ReportGenerationPreset)}
+        class="w-full max-w-md rounded-control border border-line bg-surface-raised px-3 py-2 text-body text-fg"
+      >
+        <option value="clinical">{$t('settings.reportPresetClinical')}</option>
+        <option value="conservative">{$t('settings.reportPresetConservative')}</option>
+        <option value="varied">{$t('settings.reportPresetVaried')}</option>
+        <option value="custom">{$t('settings.reportPresetCustom')}</option>
+      </select>
+      <p class="text-caption text-fg-muted mt-2">
+        {$t('settings.reportGenerationPresetDescription')}
+      </p>
+
+      {#if $reportGenerationSettings.preset === 'custom'}
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-4">
+          {#each samplerFields as field (field[0])}
+            <label class="block text-caption text-fg-muted">
+              {$t(field[1])}
+              <input
+                type="number"
+                value={$reportGenerationSettings.custom[field[0]]}
+                min={field[2]}
+                max={field[3]}
+                step={field[4]}
+                onchange={(event) => setSamplerValue(field[0], event.currentTarget.valueAsNumber)}
+                class="mt-1 w-full rounded-control border border-line bg-surface-raised px-3 py-2 text-body text-fg"
+              />
+            </label>
+          {/each}
+        </div>
+        <p class="text-caption text-warning-fg mt-3">
+          {$t('settings.customSamplerWarning')}
+        </p>
+      {/if}
     </div>
 
     <!-- Currently loaded model status -->
