@@ -233,4 +233,13 @@ describe('ThinkingIndicator', () => {
     });
     expect(screen.getByRole('status')).toHaveTextContent('Loading phi4 into memory');
   });
+
+  it('keeps the elapsed clock visible but out of the live region', () => {
+    render(ThinkingIndicator, { stage: 'thinking', startedAt: Date.now() - 3000 });
+    const status = screen.getByRole('status');
+    expect(status).toHaveAttribute('aria-live', 'polite');
+    expect(status).toHaveTextContent('Thinking');
+    expect(status.textContent).not.toMatch(/\d:\d{2}/);
+    expect(screen.getByText('0:03')).toBeInTheDocument();
+  });
 });

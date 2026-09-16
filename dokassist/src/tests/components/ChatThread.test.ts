@@ -205,11 +205,135 @@ describe('ChatThread', () => {
 
     await waitFor(() => expect(handlers['agent-tool-started']).toBeDefined());
     handlers['agent-tool-started']({
-      payload: { name: 'list_medications', args_json: '{}' },
+      payload: { name: 'list_medications', args_json: '{}', session_id: 'sess1' },
     });
 
     await waitFor(() =>
       expect(screen.getByRole('status')).toHaveTextContent(/Looking up medications/i)
     );
+  });
+
+  it('names the completed tool when agent-tool-called fires during a streaming turn', async () => {
+    const handlers: Record<string, (e: { payload: unknown }) => void> = {};
+    mockListen.mockImplementation((event, handler) => {
+      handlers[event] = handler as (e: { payload: unknown }) => void;
+      return Promise.resolve(() => {});
+    });
+    mockInvoke.mockImplementation((cmd) => {
+      if (cmd === 'get_chat_messages') return Promise.resolve([]);
+      if (cmd === 'get_engine_status') return Promise.resolve(ENGINE_LOADED);
+      if (cmd === 'run_agent_turn') return new Promise(() => {});
+      return Promise.resolve(null);
+    });
+    render(ChatThread, { props: { sessionId: 'sess1', scope: 'global' } });
+    await waitFor(() => expect(screen.getByRole('textbox')).not.toBeDisabled());
+
+    const textarea = screen.getByRole<HTMLTextAreaElement>('textbox');
+    textarea.value = 'What medications is she on?';
+    await fireEvent.input(textarea);
+    await fireEvent.click(screen.getByRole('button', { name: /Send/i }));
+
+    await waitFor(() => expect(handlers['agent-tool-called']).toBeDefined());
+    handlers['agent-tool-called']({
+      payload: {
+        name: 'list_medications',
+        args_json: '{}',
+        result_json: '[]',
+        session_id: 'sess1',
+      },
+    });
+
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent(/Looked up medications/i)
+    );
+  });
+
+  it('ignores tool events from another session', async () => {
+    const handlers: Record<string, (e: { payload: unknown }) => void> = {};
+    mockListen.mockImplementation((event, handler) => {
+      handlers[event] = handler as (e: { payload: unknown }) => void;
+      return Promise.resolve(() => {});
+    });
+    mockInvoke
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce(ENGINE_LOADED)
+      .mockReturnValueOnce(new Promise(() => {}));
+    render(ChatThread, { props: { sessionId: 'sess1', scope: 'global' } });
+    await waitFor(() => expect(screen.getByRole('textbox')).not.toBeDisabled());
+
+    const textarea = screen.getByRole<HTMLTextAreaElement>('textbox');
+    textarea.value = 'What medications is she on?';
+    await fireEvent.input(textarea);
+    await fireEvent.click(screen.getByRole('button', { name: /Send/i }));
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Thinking'));
+    handlers['agent-tool-started']({
+      payload: { name: 'list_medications', args_json: '{}', session_id: 'other-sess' },
+    });
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Thinking'));
+    expect(screen.queryByText(/Looking up medications/i)).not.toBeInTheDocument();
+  });
+
+  it('does not let a stale agent-done start a second overlapping turn', async () => {
+    const handlers: Record<string, (e: { payload: unknown }) => void> = {};
+    mockListen.mockImplementation((event, handler) => {
+      handlers[event] = handler as (e: { payload: unknown }) => void;
+      return Promise.resolve(() => {});
+    });
+    mockInvoke.mockImplementation((cmd) => {
+      if (cmd === 'get_chat_messages') return Promise.resolve([]);
+      if (cmd === 'get_engine_status') return Promise.resolve(ENGINE_LOADED);
+      if (cmd === 'run_agent_turn') return new Promise(() => {});
+      return Promise.resolve(null);
+    });
+    render(ChatThread, { props: { sessionId: 'sess1', scope: 'global' } });
+    await waitFor(() => expect(screen.getByRole('textbox')).not.toBeDisabled());
+
+    const textarea = screen.getByRole<HTMLTextAreaElement>('textbox');
+    textarea.value = 'First question';
+    await fireEvent.input(textarea);
+    await fireEvent.click(screen.getByRole('button', { name: /Send/i }));
+
+    await waitFor(() => expect(handlers['agent-done']).toBeDefined());
+    await handlers['agent-done']({
+      payload: { final_answer: 'done', session_id: 'sess1' },
+    });
+
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+
+    textarea.value = 'Second question';
+    await fireEvent.input(textarea);
+    await fireEvent.click(screen.getByRole('button', { name: /Send/i }));
+
+    expect(screen.queryByText('Second question')).not.toBeInTheDocument();
+    const turnCalls = mockInvoke.mock.calls.filter(([cmd]) => cmd === 'run_agent_turn');
+    expect(turnCalls).toHaveLength(1);
+  });
+
+  it('ignores agent-done from another session while this thread is streaming', async () => {
+    const handlers: Record<string, (e: { payload: unknown }) => void> = {};
+    mockListen.mockImplementation((event, handler) => {
+      handlers[event] = handler as (e: { payload: unknown }) => void;
+      return Promise.resolve(() => {});
+    });
+    mockInvoke
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce(ENGINE_LOADED)
+      .mockReturnValueOnce(new Promise(() => {}));
+    render(ChatThread, { props: { sessionId: 'sess1', scope: 'global' } });
+    await waitFor(() => expect(screen.getByRole('textbox')).not.toBeDisabled());
+
+    const textarea = screen.getByRole<HTMLTextAreaElement>('textbox');
+    textarea.value = 'Still thinking about this';
+    await fireEvent.input(textarea);
+    await fireEvent.click(screen.getByRole('button', { name: /Send/i }));
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Thinking'));
+    await handlers['agent-done']({
+      payload: { final_answer: 'other', session_id: 'other-sess' },
+    });
+
+    expect(screen.getByRole('status')).toHaveTextContent('Thinking');
   });
 });

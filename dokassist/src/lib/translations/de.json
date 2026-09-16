@@ -748,7 +748,9 @@
       "writing": "Schreibt",
       "lookedUp": "Nachgeschlagen: {tool}",
       "lookingUp": "Sucht {tool}",
-      "looking_up": "Schlägt nach"
+      "looking_up": "Schlägt nach",
+      "prepared": "Vorbereitet: {tool}",
+      "preparing": "Bereitet {tool} vor"
     },
     "toolNames": {
       "get_patient": "Patientendossier",

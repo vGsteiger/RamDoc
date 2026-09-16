@@ -748,7 +748,9 @@
       "writing": "Writing",
       "lookedUp": "Looked up {tool}",
       "lookingUp": "Looking up {tool}",
-      "looking_up": "Looking things up"
+      "looking_up": "Looking things up",
+      "prepared": "Prepared {tool}",
+      "preparing": "Preparing {tool}"
     },
     "toolNames": {
       "get_patient": "the patient record",
