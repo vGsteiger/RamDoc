@@ -239,6 +239,11 @@ fn validate_external_output(path: &Path) -> Result<(), String> {
     if parent.starts_with(repository_root()) {
         return Err("raw generated letters must not be written inside the repository".into());
     }
+    if let Ok(metadata) = std::fs::symlink_metadata(path) {
+        if metadata.file_type().is_symlink() {
+            return Err("--output must not be a symlink".into());
+        }
+    }
     Ok(())
 }
 
@@ -499,6 +504,7 @@ pub fn cli_main() -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::tempdir;
 
     #[test]
     fn embedded_sweep_is_synthetic_and_partitioned() {
@@ -535,5 +541,18 @@ mod tests {
             "<think>hidden</think>\nF33.1 [gesichert]\n[Name des Psychiaters]\nGrüße",
         );
         assert_eq!(cleaned, "F33.1 [gesichert]\nGrüsse");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_output_path_is_rejected() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempdir().unwrap();
+        let target = repository_root().join("README.md");
+        let output = dir.path().join("referral.json");
+        symlink(&target, &output).unwrap();
+
+        assert!(validate_external_output(&output).is_err());
     }
 }

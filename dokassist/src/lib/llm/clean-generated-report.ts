@@ -3,17 +3,9 @@ import { stripThinkTags } from './strip-think';
 const SIGNATURE_PLACEHOLDER =
   /^\s*\[(?:name|praxis|adresse|telefon|e-?mail|unterschrift)[^\]]*\]\s*$/i;
 
-type CleanGeneratedReportOptions = {
-  normalizeSwissOrthography?: boolean;
-};
-
 /** Normalize model-only artifacts without changing clinical prose. */
-export function cleanGeneratedReport(
-  content: string,
-  { normalizeSwissOrthography = false }: CleanGeneratedReportOptions = {}
-): string {
-  const normalizedContent = normalizeSwissOrthography ? content.replaceAll('ß', 'ss') : content;
-  const lines = stripThinkTags(normalizedContent)
+export function cleanGeneratedReport(content: string): string {
+  const lines = stripThinkTags(content)
     .split('\n')
     .filter((line) => !SIGNATURE_PLACEHOLDER.test(line));
 
