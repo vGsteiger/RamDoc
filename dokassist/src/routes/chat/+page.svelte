@@ -6,12 +6,19 @@
     listChatSessions,
     createChatSession,
     getOrCreatePatientChatSession,
+    getPatient,
     type ChatSession,
   } from '$lib/api';
   import { ensureEngineLoaded } from '$lib/stores/engine';
   import ChatSessionList from '$lib/components/ChatSessionList.svelte';
   import ChatThread from '$lib/components/ChatThread.svelte';
   import { t } from '$lib/translations';
+  import ContextPicker from '$lib/components/context-picker/ContextPicker.svelte';
+  import {
+    createContextPlan,
+    selectContextPatient,
+    type ContextPlan,
+  } from '$lib/components/context-picker';
 
   let sessions = $state<ChatSession[]>([]);
   let activeSessionId = $state<string | null>(null);
@@ -20,6 +27,17 @@
   let intent = $derived($page.url.searchParams.get('intent'));
   let scope = $derived<'global' | 'patient'>(patientId ? 'patient' : 'global');
   let starterPrompt = $derived(intent === 'report' ? get(t)('chat.reportStarterPrompt') : '');
+  let contextPlan = $state<ContextPlan>(createContextPlan());
+  let showContextPicker = $state(false);
+
+  async function preloadLegacyPatientContext() {
+    if (!patientId) return;
+    try {
+      contextPlan = selectContextPatient(contextPlan, await getPatient(patientId));
+    } catch (error) {
+      console.error('Failed to preselect patient context:', error);
+    }
+  }
 
   async function loadSessions() {
     try {
@@ -52,14 +70,18 @@
   }
 
   onMount(() => {
+    if (patientId) showContextPicker = true;
+    void preloadLegacyPatientContext();
     loadSessions();
     void ensureEngineLoaded();
   });
 </script>
 
-<div class="flex h-full">
+<div class="flex h-full flex-col sm:flex-row">
   <!-- Sidebar: session list -->
-  <div class="w-64 border-r border-line flex flex-col shrink-0">
+  <div
+    class="h-52 w-full border-b border-line flex flex-col shrink-0 sm:h-auto sm:w-64 sm:border-b-0 sm:border-r"
+  >
     <div class="p-4 border-b border-line">
       <h2 class="text-body font-semibold text-fg-muted uppercase tracking-wide">
         {$t('chat.chats')}
@@ -78,11 +100,38 @@
 
   <!-- Main: chat thread -->
   <div class="flex-1 flex flex-col min-w-0">
-    {#if patientId}
-      <div class="border-b border-line bg-surface-hover px-4 py-2 text-caption text-fg-muted">
-        {$t('chat.patientContextAttached')}
+    <div class="border-b border-line bg-surface px-3 py-2 sm:px-4">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="min-w-0">
+          {#if contextPlan.selectedPatients.length}
+            <p class="truncate text-caption text-fg-muted">
+              {$t('chat.contextSummary').replace(
+                '{patients}',
+                contextPlan.selectedPatients
+                  .map((patient) => `${patient.first_name} ${patient.last_name}`)
+                  .join(', ')
+              )}
+            </p>
+          {:else}
+            <p class="text-caption text-fg-muted">{$t('chat.noContextAttached')}</p>
+          {/if}
+        </div>
+        <button
+          type="button"
+          class="min-h-10 shrink-0 rounded-control border border-line px-3 text-body text-fg hover:bg-surface-hover"
+          aria-expanded={showContextPicker}
+          onclick={() => (showContextPicker = !showContextPicker)}
+          >{contextPlan.selectedPatients.length
+            ? $t('chat.changeContext')
+            : $t('chat.attachContext')}</button
+        >
       </div>
-    {/if}
+      {#if showContextPicker}
+        <div class="mt-3">
+          <ContextPicker bind:value={contextPlan} />
+        </div>
+      {/if}
+    </div>
     {#if activeSessionId}
       {#key activeSessionId}
         <ChatThread
@@ -90,6 +139,7 @@
           {scope}
           patientId={patientId ?? undefined}
           initialMessage={starterPrompt}
+          {contextPlan}
         />
       {/key}
     {:else if !isLoading}

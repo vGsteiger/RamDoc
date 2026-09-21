@@ -12,6 +12,7 @@
   import { AlertTriangle, Wrench } from 'lucide-svelte';
   import { t } from '$lib/translations';
   import { chatToolActivityLabel } from '$lib/chat-activity';
+  import { serializeContextPreamble, type ContextPlan } from './context-picker';
 
   interface Props {
     sessionId: string;
@@ -19,9 +20,17 @@
     patientId?: string;
     /** A route-supplied, editable starter prompt; it is never auto-submitted. */
     initialMessage?: string;
+    /** Explicit, request-scoped context; it is not presented as durable session state. */
+    contextPlan?: ContextPlan;
   }
 
-  let { sessionId, scope: _scope, patientId: _patientId, initialMessage = '' }: Props = $props();
+  let {
+    sessionId,
+    scope: _scope,
+    patientId: _patientId,
+    initialMessage = '',
+    contextPlan = undefined,
+  }: Props = $props();
 
   let messages = $state<ChatMessageRow[]>([]);
   let streamingContent = $state('');
@@ -43,6 +52,7 @@
   let unlistenError: UnlistenFn | null = null;
   /** True until `run_agent_turn` settles, including the post-loop persist emit. */
   let turnInFlight = $state(false);
+  let requestContextPreamble = $derived(contextPlan ? serializeContextPreamble(contextPlan) : null);
 
   function isThisSession(payload: { session_id?: string } | null | undefined): boolean {
     return payload?.session_id === sessionId;
@@ -92,7 +102,11 @@
     scrollToBottom();
 
     try {
-      await runAgentTurn(sessionId, text, get(thinkingEffort));
+      await runAgentTurn(
+        sessionId,
+        requestContextPreamble ? `${requestContextPreamble}\n\n[User request]\n${text}` : text,
+        get(thinkingEffort)
+      );
       // agent-done triggers re-fetch via event listener
     } catch (e: unknown) {
       isStreaming = false;
@@ -275,6 +289,13 @@
 
   <!-- Input area -->
   <div class="border-t border-line p-4 space-y-2">
+    {#if contextPlan?.selectedPatients.length}
+      <div
+        class="rounded-control border border-accent-line bg-accent-subtle px-3 py-2 text-caption text-accent-fg"
+      >
+        {$t('chat.contextWillBeAttached')}
+      </div>
+    {/if}
     <div class="flex gap-2">
       <textarea
         bind:value={inputText}

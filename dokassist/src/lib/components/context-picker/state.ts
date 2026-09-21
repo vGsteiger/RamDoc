@@ -145,3 +145,27 @@ export async function refreshContextPlan(plan: ContextPlan): Promise<ContextPlan
     planning: { ...next.planning, isRefreshing: false, refreshedAt: new Date().toISOString() },
   };
 }
+
+/**
+ * The current agent command has no durable context-plan argument. Keep the
+ * selection explicit by serialising it into the request, rather than implying
+ * that a UI selection has been persisted on the session.
+ */
+export function serializeContextPreamble(plan: ContextPlan): string | null {
+  if (plan.selectedPatients.length === 0) return null;
+  const patients = plan.selectedPatients
+    .map((patient) => `${patient.first_name} ${patient.last_name} (${patient.id})`)
+    .join(', ');
+  const sources = plan.sources
+    .filter((source) => source.included)
+    .map((source) => `${source.kind}${source.pinned ? ' [must include]' : ''}`)
+    .join(', ');
+
+  return [
+    '[Visible context plan for this request — not a durable session setting]',
+    `Patients: ${patients}`,
+    `Requested sources: ${sources || 'none'}`,
+    `Planning metadata: included=${plan.planning.included.length}; retrieved=${plan.planning.retrieved}; summarized=${plan.planning.summarized}.`,
+    'Use this plan only for this request. State clearly when a requested source is unavailable.',
+  ].join('\n');
+}
