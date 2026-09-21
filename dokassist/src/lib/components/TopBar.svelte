@@ -3,7 +3,7 @@
   import { goto } from '$app/navigation';
   import { globalSearch, type SearchResult } from '$lib/api';
   import { t } from '$lib/translations';
-  import { Search } from 'lucide-svelte';
+  import { Menu, Search } from 'lucide-svelte';
   import { ThinkingIndicator } from '$lib/components/ui';
   import { engine, loadEngineModel, refreshEngineStatus } from '$lib/stores/engine';
 
@@ -13,6 +13,7 @@
   let showDropdown = $state(false);
   let isSearching = $state(false);
   let searchTimeout: ReturnType<typeof setTimeout> | null = null;
+  let { onMenuToggle = undefined }: { onMenuToggle?: () => void } = $props();
 
   let isLoaded = $derived($engine.status?.is_loaded ?? false);
   let isDownloaded = $derived($engine.status?.is_downloaded ?? false);
@@ -129,7 +130,19 @@
 
 <!-- The bar sits on the page surface with a single hairline under it; the old
      sunken slab read as a second chrome layer above the content. -->
-<header class="flex h-14 shrink-0 items-center gap-3 border-b border-line-subtle px-4">
+<header
+  class="flex h-14 shrink-0 items-center gap-2 border-b border-line-subtle px-3 sm:gap-3 sm:px-4"
+>
+  {#if onMenuToggle}
+    <button
+      type="button"
+      onclick={onMenuToggle}
+      class="flex h-10 w-10 shrink-0 items-center justify-center rounded-control text-fg-muted hover:bg-surface-hover hover:text-fg sm:hidden"
+      aria-label="Open navigation"
+    >
+      <Menu size={20} aria-hidden="true" />
+    </button>
+  {/if}
   <div class="relative w-full max-w-md">
     <Search
       size={14}

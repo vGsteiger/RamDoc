@@ -135,7 +135,7 @@
     <AhvInput id="ahv_number" bind:value={formData.ahv_number} error={errors.ahv_number} />
   </Field>
 
-  <div class="grid grid-cols-2 gap-3">
+  <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
     <Field label={$t('patients.firstName')} for="first_name" required error={errors.first_name}>
       <Input id="first_name" bind:value={formData.first_name} invalid={!!errors.first_name} />
     </Field>
@@ -145,7 +145,7 @@
     </Field>
   </div>
 
-  <div class="grid grid-cols-2 gap-3">
+  <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
     <Field
       label={$t('patients.dateOfBirth')}
       for="date_of_birth"
@@ -170,7 +170,7 @@
     </Field>
   </div>
 
-  <div class="grid grid-cols-2 gap-3">
+  <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
     <Field label={$t('patients.phone')} for="phone">
       <Input id="phone" type="tel" bind:value={formData.phone} />
     </Field>
@@ -188,7 +188,7 @@
     <Input id="insurance" bind:value={formData.insurance} />
   </Field>
 
-  <div class="grid grid-cols-2 gap-3">
+  <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
     <Field label={$t('patients.gpName')} for="gp_name">
       <Input id="gp_name" bind:value={formData.gp_name} />
     </Field>

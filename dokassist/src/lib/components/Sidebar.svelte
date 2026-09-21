@@ -14,6 +14,13 @@
   } from 'lucide-svelte';
   import { t } from '$lib/translations';
 
+  interface Props {
+    mobileOpen?: boolean;
+    onMobileClose?: () => void;
+  }
+
+  let { mobileOpen = $bindable(false), onMobileClose }: Props = $props();
+
   const navItems = [
     { path: '/dashboard', labelKey: 'nav.dashboard', icon: LayoutDashboard },
     { path: '/patients', labelKey: 'nav.patients', icon: Users },
@@ -36,12 +43,26 @@
   let currentPath = $derived($page.url.pathname);
 </script>
 
-<aside class="flex h-screen w-56 flex-col border-r border-line-subtle bg-surface-sunken">
-  <div class="flex h-14 shrink-0 items-center px-3">
-    <span class="text-heading text-fg">RamDoc</span>
+{#if mobileOpen}
+  <button
+    type="button"
+    class="fixed inset-0 z-30 bg-black/25 sm:hidden"
+    aria-label="Close navigation"
+    onclick={() => onMobileClose?.()}
+  ></button>
+{/if}
+
+<aside
+  class="fixed inset-y-0 left-0 z-40 flex h-screen w-64 -translate-x-full flex-col border-r border-line-subtle bg-surface-sunken transition-transform duration-150 sm:relative sm:z-auto sm:w-56 sm:translate-x-0 sm:max-[900px]:w-14 {mobileOpen
+    ? 'translate-x-0 shadow-modal'
+    : ''}"
+>
+  <div class="flex h-14 shrink-0 items-center px-3 sm:max-[900px]:justify-center">
+    <span class="text-heading text-fg sm:max-[900px]:sr-only">RamDoc</span>
+    <span class="hidden text-heading text-fg sm:max-[900px]:block" aria-hidden="true">R</span>
   </div>
 
-  <nav class="flex-1 px-2 pb-2">
+  <nav class="flex-1 px-2 pb-2" aria-label="Primary navigation">
     <ul class="space-y-0.5">
       {#each navItems as item}
         {@const Icon = item.icon}
@@ -51,8 +72,9 @@
                saturated fill: the accent stays meaningful because it is scarce. -->
           <a
             href={item.path}
+            onclick={() => onMobileClose?.()}
             aria-current={active ? 'page' : undefined}
-            class="relative flex h-8 items-center gap-2.5 rounded-control px-2.5 text-body transition-colors duration-150 ease-standard {active
+            class="relative flex h-10 items-center gap-2.5 rounded-control px-2.5 text-body transition-colors duration-150 ease-standard sm:max-[900px]:justify-center sm:max-[900px]:px-0 {active
               ? 'bg-surface-selected font-medium text-fg'
               : 'text-fg-muted hover:bg-surface-hover hover:text-fg'}"
           >
@@ -62,8 +84,8 @@
                 aria-hidden="true"
               ></span>
             {/if}
-            <Icon size={16} class={active ? 'text-fg' : 'text-fg-subtle'} />
-            <span class="truncate">{$t(item.labelKey)}</span>
+            <Icon size={18} class={active ? 'text-fg' : 'text-fg-subtle'} aria-hidden="true" />
+            <span class="truncate sm:max-[900px]:sr-only">{$t(item.labelKey)}</span>
           </a>
         </li>
       {/each}
@@ -73,10 +95,10 @@
   <div class="shrink-0 border-t border-line-subtle p-2">
     <button
       onclick={handleLock}
-      class="flex h-8 w-full items-center gap-2.5 rounded-control px-2.5 text-body text-fg-muted transition-colors duration-150 ease-standard hover:bg-surface-hover hover:text-fg"
+      class="flex h-10 w-full items-center gap-2.5 rounded-control px-2.5 text-body text-fg-muted transition-colors duration-150 ease-standard hover:bg-surface-hover hover:text-fg sm:max-[900px]:justify-center sm:max-[900px]:px-0"
     >
-      <Lock size={16} class="text-fg-subtle" />
-      <span>{$t('nav.lock')}</span>
+      <Lock size={18} class="text-fg-subtle" aria-hidden="true" />
+      <span class="sm:max-[900px]:sr-only">{$t('nav.lock')}</span>
     </button>
   </div>
 </aside>

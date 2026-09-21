@@ -40,8 +40,8 @@
   };
 
   const sizes: Record<Size, string> = {
-    sm: 'h-7 gap-1.5 px-2.5 text-label',
-    md: 'h-8 gap-2 px-3 text-body',
+    sm: 'min-h-9 gap-1.5 px-3 text-label',
+    md: 'min-h-10 gap-2 px-3.5 text-body',
   };
 
   // Anchors are never :disabled, so the disabled: variants below do nothing on

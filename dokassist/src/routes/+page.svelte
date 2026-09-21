@@ -27,7 +27,9 @@
           if (!settings.onboarding_completed) {
             goto('/onboarding/step1');
           } else {
-            goto('/dashboard');
+            // The conversation workspace is the daily starting point. Dashboard
+            // remains available from navigation for clinicians who need its overview.
+            goto('/chat');
           }
         } catch (err) {
           console.error('Failed to check onboarding status:', err);

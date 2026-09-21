@@ -27,6 +27,17 @@
 
   let panel = $state<HTMLElement | null>(null);
   let titleId = $props.id();
+  let returnFocus = $state<HTMLElement | null>(null);
+
+  function focusableElements() {
+    return panel
+      ? Array.from(
+          panel.querySelectorAll<HTMLElement>(
+            'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          )
+        )
+      : [];
+  }
 
   function close() {
     open = false;
@@ -38,16 +49,37 @@
       event.stopPropagation();
       close();
     }
+    if (event.key === 'Tab' && panel) {
+      const targets = focusableElements();
+      if (targets.length === 0) {
+        event.preventDefault();
+        panel.focus();
+        return;
+      }
+      const first = targets[0];
+      const last = targets[targets.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
   }
 
   /* Move focus into the panel when it opens so keyboard users are not left
    * behind on the trigger. */
   $effect(() => {
     if (open && panel) {
+      returnFocus ??= document.activeElement instanceof HTMLElement ? document.activeElement : null;
       const target = panel.querySelector<HTMLElement>(
         'input, textarea, select, button:not([data-dialog-dismiss])'
       );
       (target ?? panel).focus();
+    } else if (!open && returnFocus) {
+      returnFocus.focus();
+      returnFocus = null;
     }
   });
 </script>

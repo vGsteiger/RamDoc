@@ -197,7 +197,7 @@
 
 <svelte:window onclick={handleClickOutside} />
 
-<div class="p-8">
+<div class="p-4 sm:p-6 lg:p-8">
   <div class="max-w-4xl mx-auto">
     {#if isLoading}
       <div class="flex justify-center items-center py-12">
@@ -210,7 +210,7 @@
     {:else if patient}
       <!-- Edit Mode -->
       {#if isEditing}
-        <div class="bg-surface-raised rounded-card p-6">
+        <div class="bg-surface-raised rounded-card p-4 sm:p-6">
           <PatientForm
             {patient}
             on:submit={handleUpdate}
@@ -220,19 +220,19 @@
         </div>
       {:else}
         <!-- View Mode -->
-        <div class="bg-surface-raised rounded-card p-6">
+        <div class="bg-surface-raised rounded-card p-4 sm:p-6">
           <!-- Action Buttons -->
-          <div class="flex justify-between mb-6">
-            <div class="flex gap-3">
+          <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div class="flex flex-wrap gap-2">
               <button
                 onclick={() => (isEditing = true)}
-                class="h-8 px-3 bg-accent text-on-accent rounded-control hover:bg-accent-hover transition-colors"
+                class="min-h-10 px-3.5 bg-accent text-on-accent rounded-control hover:bg-accent-hover transition-colors"
               >
                 {$t('patients.editPatient')}
               </button>
               <a
                 href={`/patients/${patientId}/email/new`}
-                class="h-8 px-3 bg-success text-on-success rounded-card hover:bg-success-hover transition-colors inline-flex items-center"
+                class="min-h-10 px-3.5 bg-surface-hover text-fg rounded-control hover:bg-surface-selected transition-colors inline-flex items-center"
               >
                 {$t('patients.sendEmail')}
               </a>
@@ -241,7 +241,9 @@
                 <button
                   onclick={() => (showExportMenu = !showExportMenu)}
                   disabled={isExporting}
-                  class="h-8 px-3 bg-accent text-on-accent rounded-control hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                  class="min-h-10 px-3.5 border border-line bg-surface-raised text-fg rounded-control hover:bg-surface-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                  aria-expanded={showExportMenu}
+                  aria-haspopup="menu"
                 >
                   {isExporting ? $t('patients.exporting') : $t('common.export')}
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -256,17 +258,20 @@
                 {#if showExportMenu}
                   <div
                     class="absolute left-0 mt-2 w-48 bg-surface-raised rounded-card shadow-popover border border-line z-10"
+                    role="menu"
                   >
                     <button
                       onclick={handleExportFhir}
-                      class="w-full text-left h-8 px-3 hover:bg-surface-hover rounded-control transition-colors"
+                      class="w-full min-h-10 text-left px-3 hover:bg-surface-hover rounded-control transition-colors"
+                      role="menuitem"
                     >
                       {$t('patients.exportFhir')}
                     </button>
                     <button
                       onclick={handleExportPdf}
                       disabled={isExporting}
-                      class="h-8 px-3 bg-accent text-on-accent rounded-control hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      class="w-full min-h-10 px-3 text-left bg-surface-raised text-fg rounded-control hover:bg-surface-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      role="menuitem"
                     >
                       {isExporting ? $t('patients.exporting') : $t('patients.exportPdf')}
                     </button>
@@ -276,16 +281,22 @@
             </div>
             <button
               onclick={() => (showDeleteConfirm = true)}
-              class="h-8 px-3 bg-danger text-on-danger rounded-control hover:bg-danger-hover transition-colors"
+              class="min-h-10 px-3.5 bg-danger text-on-danger rounded-control hover:bg-danger-hover transition-colors self-start sm:self-auto"
             >
               {$t('patients.deletePatient')}
             </button>
           </div>
 
           <!-- Patient History Query Interface -->
-          <div class="mb-6">
+          <section class="mb-6" aria-labelledby="patient-timeline-title">
+            <div class="mb-3 border-b border-line-subtle pb-3">
+              <h2 id="patient-timeline-title" class="text-title text-fg">
+                {$t('patientHistory.timelineTitle')}
+              </h2>
+              <p class="mt-1 text-body text-fg-muted">{$t('patientHistory.timelineDescription')}</p>
+            </div>
             <PatientHistoryQuery {patientId} />
-          </div>
+          </section>
 
           <!-- Patient Details -->
           <div class="space-y-6">
@@ -329,7 +340,7 @@
             {/if}
 
             <!-- Basic Info -->
-            <div class="grid grid-cols-2 gap-6">
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6">
               <div>
                 <span class="block text-body font-medium text-fg-muted mb-1"
                   >{$t('patients.firstName')}</span
@@ -344,7 +355,7 @@
               </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-6">
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6">
               <div>
                 <span class="block text-body font-medium text-fg-muted mb-1"
                   >{$t('patients.ahvNumber')}</span
@@ -374,7 +385,7 @@
                 <h3 class="text-heading font-semibold text-fg mb-4">
                   {$t('patients.contactInfo')}
                 </h3>
-                <div class="grid grid-cols-2 gap-6">
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6">
                   {#if patient.phone}
                     <div>
                       <span class="block text-body font-medium text-fg-muted mb-1"
@@ -423,7 +434,7 @@
                 {/if}
 
                 {#if patient.gp_name || patient.gp_address}
-                  <div class="grid grid-cols-2 gap-6">
+                  <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6">
                     {#if patient.gp_name}
                       <div>
                         <span class="block text-body font-medium text-fg-muted mb-1"
@@ -457,7 +468,7 @@
 
             <!-- Metadata -->
             <div class="border-t border-line pt-6 text-body text-fg-muted">
-              <div class="grid grid-cols-2 gap-4">
+              <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-4">
                 <div>{$t('patients.created')}: {formatDate(patient.created_at)}</div>
                 <div>{$t('patients.lastUpdated')}: {formatDate(patient.updated_at)}</div>
               </div>
