@@ -2,7 +2,9 @@
 use crate::constants::KEYCHAIN_SERVICE;
 use crate::constants::{DATABASE_FILENAME, RECOVERY_FILENAME};
 use crate::database::DbPool;
-use crate::llm::{embed::EmbedEngine, LlmEngine};
+use crate::llm::{
+    embed::EmbedEngine, EngineLifecyclePhase, EngineLifecycleStatus, LlmEngine,
+};
 use rusqlite::Connection;
 use std::sync::{Arc, Mutex};
 
@@ -19,6 +21,11 @@ pub struct AppState {
     /// Serializes model/context swaps so the old allocation is released before
     /// a replacement model begins loading.
     pub llm_swap: tokio::sync::Mutex<()>,
+    /// Runtime-only lifecycle for the single resident writing engine. The
+    /// durable desired model remains the registry default and is resolved by
+    /// commands when needed.
+    pub llm_lifecycle: Mutex<EngineLifecycleStatus>,
+    pub llm_lifecycle_changed: tokio::sync::Notify,
     /// Embedding engine for semantic search.  Populated lazily by `process_file`.
     pub embed: Mutex<Option<Arc<Mutex<EmbedEngine>>>>,
     /// Unencrypted medication reference SQLite (public AIPS data).
@@ -79,6 +86,8 @@ impl AppState {
             db: Mutex::new(None),
             llm: Mutex::new(None),
             llm_swap: tokio::sync::Mutex::new(()),
+            llm_lifecycle: Mutex::new(EngineLifecycleStatus::default()),
+            llm_lifecycle_changed: tokio::sync::Notify::new(),
             embed: Mutex::new(None),
             medication_ref: Mutex::new(medication_ref),
         }
@@ -204,6 +213,127 @@ impl AppState {
         }
     }
 
+    pub fn llm_lifecycle(&self) -> EngineLifecycleStatus {
+        self.llm_lifecycle
+            .lock()
+            .map(|status| status.clone())
+            .unwrap_or_else(|_| EngineLifecycleStatus {
+                phase: EngineLifecyclePhase::Error,
+                requested_filename: None,
+                active_filename: None,
+                error: Some("LLM lifecycle mutex poisoned".to_string()),
+            })
+    }
+
+    /// Start a load. A duplicate request for the same file joins the active
+    /// operation; a different file must be retried after the current swap.
+    pub fn begin_llm_load(&self, filename: &str) -> Result<LlmLoadDisposition, crate::error::AppError> {
+        let mut lifecycle = self
+            .llm_lifecycle
+            .lock()
+            .map_err(|_| crate::error::AppError::Llm("LLM lifecycle mutex poisoned".to_string()))?;
+        match lifecycle.phase {
+            EngineLifecyclePhase::Loading if lifecycle.requested_filename.as_deref() == Some(filename) => {
+                Ok(LlmLoadDisposition::Join)
+            }
+            EngineLifecyclePhase::Loading | EngineLifecyclePhase::Unloading => Err(
+                crate::error::AppError::Llm("A model lifecycle operation is already in progress".to_string()),
+            ),
+            EngineLifecyclePhase::Ready if lifecycle.active_filename.as_deref() == Some(filename) => {
+                // Lock/reset/window-close can clear the engine without taking
+                // the asynchronous lifecycle coordinator. Confirm residency
+                // before treating a stale Ready snapshot as a no-op.
+                let is_resident = self
+                    .llm
+                    .lock()
+                    .map(|engine| engine.is_some())
+                    .unwrap_or(false);
+                if is_resident {
+                    Ok(LlmLoadDisposition::AlreadyReady)
+                } else {
+                    lifecycle.phase = EngineLifecyclePhase::Loading;
+                    lifecycle.requested_filename = Some(filename.to_string());
+                    lifecycle.active_filename = None;
+                    lifecycle.error = None;
+                    Ok(LlmLoadDisposition::Start)
+                }
+            }
+            _ => {
+                lifecycle.phase = EngineLifecyclePhase::Loading;
+                lifecycle.requested_filename = Some(filename.to_string());
+                lifecycle.active_filename = None;
+                lifecycle.error = None;
+                Ok(LlmLoadDisposition::Start)
+            }
+        }
+    }
+
+    pub async fn wait_for_llm_load(&self, filename: &str) -> Result<(), crate::error::AppError> {
+        loop {
+            let changed = self.llm_lifecycle_changed.notified();
+            let lifecycle = self.llm_lifecycle();
+            match lifecycle.phase {
+                EngineLifecyclePhase::Loading if lifecycle.requested_filename.as_deref() == Some(filename) => {
+                    changed.await;
+                }
+                EngineLifecyclePhase::Ready if lifecycle.active_filename.as_deref() == Some(filename) => return Ok(()),
+                EngineLifecyclePhase::Error if lifecycle.requested_filename.as_deref() == Some(filename) => {
+                    return Err(crate::error::AppError::Llm(
+                        lifecycle.error.unwrap_or_else(|| "Model load failed".to_string()),
+                    ));
+                }
+                _ => return Err(crate::error::AppError::Llm("Requested model did not become ready".to_string())),
+            }
+        }
+    }
+
+    pub fn mark_llm_ready(&self, filename: String) {
+        if let Ok(mut lifecycle) = self.llm_lifecycle.lock() {
+            *lifecycle = EngineLifecycleStatus {
+                phase: EngineLifecyclePhase::Ready,
+                requested_filename: None,
+                active_filename: Some(filename),
+                error: None,
+            };
+        }
+        self.llm_lifecycle_changed.notify_waiters();
+    }
+
+    pub fn mark_llm_load_failed(&self, filename: String, error: String) {
+        if let Ok(mut lifecycle) = self.llm_lifecycle.lock() {
+            *lifecycle = EngineLifecycleStatus {
+                phase: EngineLifecyclePhase::Error,
+                requested_filename: Some(filename),
+                active_filename: None,
+                error: Some(error),
+            };
+        }
+        self.llm_lifecycle_changed.notify_waiters();
+    }
+
+    pub fn begin_llm_unload(&self) -> Result<(), crate::error::AppError> {
+        let mut lifecycle = self
+            .llm_lifecycle
+            .lock()
+            .map_err(|_| crate::error::AppError::Llm("LLM lifecycle mutex poisoned".to_string()))?;
+        if matches!(lifecycle.phase, EngineLifecyclePhase::Loading | EngineLifecyclePhase::Unloading) {
+            return Err(crate::error::AppError::Llm(
+                "Cannot unload while another model lifecycle operation is in progress".to_string(),
+            ));
+        }
+        lifecycle.phase = EngineLifecyclePhase::Unloading;
+        lifecycle.requested_filename = None;
+        lifecycle.error = None;
+        Ok(())
+    }
+
+    pub fn mark_llm_unloaded(&self) {
+        if let Ok(mut lifecycle) = self.llm_lifecycle.lock() {
+            *lifecycle = EngineLifecycleStatus::default();
+        }
+        self.llm_lifecycle_changed.notify_waiters();
+    }
+
     /// Acquire a lock on the medication reference DB connection, if installed.
     pub fn get_medication_ref(&self) -> Option<std::sync::MutexGuard<'_, Option<Connection>>> {
         self.medication_ref.lock().ok()
@@ -217,6 +347,12 @@ impl AppState {
         *guard = Some(conn);
         Ok(())
     }
+}
+
+pub enum LlmLoadDisposition {
+    Start,
+    Join,
+    AlreadyReady,
 }
 
 fn determine_initial_auth_state(data_dir: &std::path::Path) -> AuthState {

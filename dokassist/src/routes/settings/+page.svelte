@@ -9,7 +9,6 @@
   import {
     getEngineStatus,
     getRecommendedModel,
-    downloadModel,
     resetApp,
     checkForUpdates,
     installUpdate,
@@ -24,10 +23,6 @@
     deleteModel,
     setDefaultModel,
     getDefaultModel,
-    setTaskModel,
-    getTaskModel,
-    listTaskModels,
-    clearTaskModel,
     listAvailableModels,
     parseCsvPreview,
     importCsvData,
@@ -41,7 +36,6 @@
     type UpdateInfo,
     type EmbedStatus,
     type ModelInfo,
-    type TaskModel,
     type AvailableModel,
     type CsvPreview,
     type ColumnMapping,
@@ -95,8 +89,6 @@
   // Model management state
   let installedModels = $state<ModelInfo[]>([]);
   let availableModels = $state<AvailableModel[]>([]);
-  let taskModels = $state<TaskModel[]>([]);
-  let selectedTaskModel = $state<Record<string, string>>({});
   let modelManagementError = $state('');
   let loadingModels = $state(false);
   let importDialogOpen = $state(false);
@@ -162,11 +154,7 @@
   async function loadInstalledModels() {
     try {
       loadingModels = true;
-      const results = await Promise.allSettled([
-        listModels(),
-        listTaskModels(),
-        listAvailableModels(),
-      ]);
+      const results = await Promise.allSettled([listModels(), listAvailableModels()]);
 
       // Handle each result separately
       if (results[0].status === 'fulfilled') {
@@ -176,25 +164,10 @@
       }
 
       if (results[1].status === 'fulfilled') {
-        taskModels = results[1].value;
+        availableModels = results[1].value;
       } else {
-        console.error('Failed to load task models:', results[1].reason);
+        console.error('Failed to load available models:', results[1].reason);
       }
-
-      if (results[2].status === 'fulfilled') {
-        availableModels = results[2].value;
-      } else {
-        console.error('Failed to load available models:', results[2].reason);
-      }
-
-      // Build a map of task -> model_id for easy lookup
-      selectedTaskModel = taskModels.reduce(
-        (acc, tm) => {
-          acc[tm.task_type] = tm.model_id;
-          return acc;
-        },
-        {} as Record<string, string>
-      );
     } catch (e) {
       modelManagementError = $errorText(e);
     } finally {
@@ -308,47 +281,6 @@
     return inferenceFallbackLabel(config.fallback_code) || config.fallback;
   }
 
-  async function handleDownload() {
-    if (!recommended) return;
-    phase = 'downloading';
-    downloadProgress = 0;
-    errorMsg = '';
-
-    unlisten = await listen<number>('model-download-progress', (e) => {
-      downloadProgress = Math.round(e.payload * 100);
-    });
-
-    const doneUnsub = await listen('model-download-done', () => {
-      doneUnsub();
-    });
-
-    try {
-      await downloadModel(recommended);
-      unlisten();
-      unlisten = null;
-      await handleLoad();
-    } catch (e) {
-      unlisten?.();
-      unlisten = null;
-      phase = 'error';
-      errorMsg = $errorText(e);
-    }
-  }
-
-  async function handleLoad() {
-    if (!recommended) return;
-    phase = 'loading';
-    errorMsg = '';
-    try {
-      await loadEngineModel(recommended.filename, inferenceProfile);
-      status = get(engine).status;
-      phase = 'done';
-    } catch (e) {
-      phase = 'error';
-      errorMsg = $errorText(e);
-    }
-  }
-
   // Model management handlers
   let doneUnsubscribe: UnlistenFn | null = null;
 
@@ -408,20 +340,6 @@
   async function handleSetDefaultModel(modelId: string) {
     try {
       await setDefaultModel(modelId);
-      await loadInstalledModels();
-    } catch (e) {
-      modelManagementError = $errorText(e);
-    }
-  }
-
-  async function handleSetTaskModel(taskType: string, modelId: string) {
-    try {
-      if (modelId === '') {
-        // Clear the task model assignment
-        await clearTaskModel(taskType);
-      } else {
-        await setTaskModel(taskType, modelId);
-      }
       await loadInstalledModels();
     } catch (e) {
       modelManagementError = $errorText(e);
@@ -923,9 +841,14 @@
     <h2 class="text-heading font-semibold text-fg mb-4">
       {$t('settings.modelManagement')}
     </h2>
+    <p class="mb-5 max-w-3xl text-body text-fg-muted">
+      {$t('settings.modelManagementDescription')}
+    </p>
 
     <div class="bg-surface-hover rounded-card p-4 mb-6">
-      <label for="inference-profile" class="block text-body font-medium text-fg mb-2">
+      <p class="text-heading font-medium text-fg">{$t('settings.toolEngine')}</p>
+      <p class="mt-1 text-caption text-fg-muted">{$t('settings.toolEngineDescription')}</p>
+      <label for="inference-profile" class="mt-4 block text-body font-medium text-fg mb-2">
         {$t('settings.inferenceProfile')}
       </label>
       <select
@@ -945,7 +868,9 @@
     </div>
 
     <div class="bg-surface-hover rounded-card p-4 mb-6">
-      <label for="report-generation-preset" class="block text-body font-medium text-fg mb-2">
+      <p class="text-heading font-medium text-fg">{$t('settings.writingModel')}</p>
+      <p class="mt-1 text-caption text-fg-muted">{$t('settings.writingModelDescription')}</p>
+      <label for="report-generation-preset" class="mt-4 block text-body font-medium text-fg mb-2">
         {$t('settings.reportGenerationPreset')}
       </label>
       <select
@@ -988,6 +913,7 @@
 
     <!-- Currently loaded model status -->
     <div class="bg-surface-hover rounded-card p-4 mb-6">
+      <p class="mb-4 text-heading font-medium text-fg">{$t('settings.sharedRuntime')}</p>
       {#if $engine.isLoading && $engine.loadingStartedAt}
         <div class="mb-4">
           <ThinkingIndicator
@@ -1405,48 +1331,6 @@
         </div>
       </div>
     {/if}
-
-    <!-- Task-Specific Model Assignment -->
-    <div class="mb-6">
-      <h3 class="text-md font-semibold text-fg mb-3">
-        {$t('settings.taskSpecificModels')}
-      </h3>
-      <p class="text-caption text-fg-muted mb-4">
-        {$t('settings.taskSpecificModelsDesc')}
-      </p>
-
-      {#if installedModels.length > 0}
-        <div class="space-y-3">
-          {#each ['summary', 'letter', 'report'] as taskType}
-            <div class="bg-surface-hover border border-line rounded-card p-4">
-              <label
-                for="task-{taskType}"
-                class="block text-body font-medium text-fg mb-2 capitalize"
-              >
-                {$t(`settings.${taskType}`)}
-              </label>
-              <select
-                id="task-{taskType}"
-                value={selectedTaskModel[taskType] || ''}
-                onchange={(e) => handleSetTaskModel(taskType, e.currentTarget.value)}
-                class="w-full px-3 py-2 text-body border border-line rounded-control bg-surface-raised text-fg focus:ring-2 focus:ring-accent/30 focus:border-transparent"
-              >
-                <option value="">{$t('settings.useDefaultModel')}</option>
-                {#each installedModels as model}
-                  <option value={model.id}>
-                    {model.name} ({formatBytes(model.size_bytes)})
-                  </option>
-                {/each}
-              </select>
-            </div>
-          {/each}
-        </div>
-      {:else}
-        <p class="text-caption text-fg-muted">
-          {$t('settings.installModelFirst')}
-        </p>
-      {/if}
-    </div>
 
     {#if modelManagementError}
       <div class="bg-danger-subtle border border-danger-line rounded-card p-3 mb-4">

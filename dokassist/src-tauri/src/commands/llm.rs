@@ -1,10 +1,12 @@
 use crate::error::AppError;
 use crate::llm::harness::SamplerConfig;
 use crate::llm::{
-    self, download, embed::EmbedEngine, evidence, quantization, EngineStatus, LetterType,
-    LlmEngine, ModelChoice, ReportType, ThinkingEffort, SYSTEM_PROMPT_DE, SYSTEM_PROMPT_FR,
+    self, embed::EmbedEngine, evidence, quantization, DesiredModelStatus,
+    EngineStatus, LetterType, LlmEngine, ModelChoice, ReportType,
+    ThinkingEffort, SYSTEM_PROMPT_DE, SYSTEM_PROMPT_FR,
 };
-use crate::state::{llm_lock_poisoned, AppState, AuthState};
+use crate::models::model;
+use crate::state::{llm_lock_poisoned, AppState, AuthState, LlmLoadDisposition};
 use serde::Serialize;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
@@ -59,30 +61,63 @@ fn check_auth(state: &AppState) -> Result<(), AppError> {
 /// Return the current engine status (safe to call before a model is loaded).
 #[tauri::command]
 pub async fn get_engine_status(state: State<'_, AppState>) -> Result<EngineStatus, AppError> {
+    let desired_model = resolve_desired_model(&state);
+    let lifecycle = state.llm_lifecycle();
     let llm = state.llm.lock().map_err(|_| llm_lock_poisoned())?;
     match &*llm {
-        Some(engine) => Ok(engine.status()),
+        Some(engine) => {
+            let mut status = engine.status();
+            status.desired_model = desired_model;
+            status.lifecycle = lifecycle;
+            Ok(status)
+        }
         None => {
             let recommended = LlmEngine::recommended_model();
-            let model_path = state.data_dir.join("models").join(&recommended.filename);
-            let is_downloaded = model_path.exists();
+            let desired_filename = desired_model
+                .as_ref()
+                .filter(|model| model.exists_on_disk)
+                .map(|model| model.filename.clone());
+            let fallback_path = state.data_dir.join("models").join(&recommended.filename);
+            let downloaded_filename = desired_filename.or_else(|| {
+                fallback_path
+                    .exists()
+                    .then_some(recommended.filename)
+            });
             Ok(EngineStatus {
                 is_loaded: false,
                 model_name: None,
                 model_path: None,
                 total_ram_bytes: LlmEngine::total_ram(),
-                is_downloaded,
-                downloaded_filename: if is_downloaded {
-                    Some(recommended.filename)
-                } else {
-                    None
-                },
+                is_downloaded: downloaded_filename.is_some(),
+                downloaded_filename,
                 last_generation_stats: None,
                 inference_config: None,
                 context_cache: Default::default(),
+                desired_model,
+                lifecycle: if matches!(lifecycle.phase, crate::llm::EngineLifecyclePhase::Ready) {
+                    // Lock/reset/window-close clear the engine independently
+                    // of an explicit user unload. Status remains truthful
+                    // without changing those security-owned transitions.
+                    crate::llm::EngineLifecycleStatus::default()
+                } else {
+                    lifecycle
+                },
             })
         }
     }
+}
+
+fn resolve_desired_model(state: &AppState) -> Option<DesiredModelStatus> {
+    let db = state.get_db().ok()?;
+    let conn = db.conn().ok()?;
+    let model = model::get_default_model(&conn).ok()??;
+    let exists_on_disk = state.data_dir.join("models").join(&model.filename).is_file();
+    Some(DesiredModelStatus {
+        id: model.id,
+        name: model.name,
+        filename: model.filename,
+        exists_on_disk,
+    })
 }
 
 /// Return the model tier recommended for this machine's RAM.
@@ -97,26 +132,6 @@ pub async fn get_default_system_prompt() -> Result<String, AppError> {
     Ok(SYSTEM_PROMPT_DE.to_string())
 }
 
-/// Download a GGUF model from HuggingFace to ~/DokAssist/models/.
-/// Streams progress via `"model-download-progress"` (f64) and `"model-download-done"` events.
-#[tauri::command]
-pub async fn download_model(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    model: ModelChoice,
-) -> Result<(), AppError> {
-    // Validate filename to prevent path traversal
-    validate_model_filename(&model.filename)?;
-
-    let dest_dir = state.data_dir.join("models");
-    tokio::fs::create_dir_all(&dest_dir).await?;
-
-    let dest_path = dest_dir.join(&model.filename);
-    let url = download::model_url(&model.filename)?;
-    download::download_model_with_progress(&app, &url, &dest_path, &model.filename).await?;
-    Ok(())
-}
-
 /// Load a GGUF model from ~/DokAssist/models/ into memory (Metal-accelerated).
 /// Uses spawn_blocking because model loading is a long blocking C-FFI operation.
 #[tauri::command]
@@ -128,12 +143,70 @@ pub async fn load_model(
     // Validate filename to prevent path traversal
     validate_model_filename(&model_filename)?;
 
-    let model_path = state.data_dir.join("models").join(&model_filename);
+    load_model_request(&state, model_filename, inference_profile).await
+}
+
+/// Ensure the configured writing model is resident. The durable registry
+/// default is the sole automatic model-selection policy; task-specific rows
+/// are intentionally not consulted because they never selected an engine.
+#[tauri::command]
+pub async fn ensure_writing_model_loaded(state: State<'_, AppState>) -> Result<EngineStatus, AppError> {
+    let desired = resolve_desired_model(&state).ok_or_else(|| {
+        AppError::Validation("Choose an installed default writing model before starting a chat".to_string())
+    })?;
+    if !desired.exists_on_disk {
+        return Err(AppError::Validation(format!(
+            "The configured writing model '{}' is missing from disk",
+            desired.filename
+        )));
+    }
+    load_model_request(&state, desired.filename, None).await?;
+    get_engine_status(state).await
+}
+
+/// Explicitly release the resident writing model. Existing inference leases
+/// keep their Arc until they finish; this command only prevents new work from
+/// acquiring the engine and releases the state-owned allocation.
+#[tauri::command]
+pub async fn unload_model(state: State<'_, AppState>) -> Result<(), AppError> {
+    state.begin_llm_unload()?;
+    let _swap_lease = state.llm_swap.lock().await;
+    let old_engine = state.llm.lock().map_err(|_| llm_lock_poisoned())?.take();
+    drop(old_engine);
+    state.mark_llm_unloaded();
+    Ok(())
+}
+
+async fn load_model_request(
+    state: &AppState,
+    model_filename: String,
+    inference_profile: Option<String>,
+) -> Result<(), AppError> {
+    match state.begin_llm_load(&model_filename)? {
+        LlmLoadDisposition::Join => return state.wait_for_llm_load(&model_filename).await,
+        LlmLoadDisposition::AlreadyReady => return Ok(()),
+        LlmLoadDisposition::Start => {}
+    }
+
+    let result = load_model_after_lifecycle_start(state, &model_filename, inference_profile).await;
+    match &result {
+        Ok(()) => state.mark_llm_ready(model_filename),
+        Err(error) => state.mark_llm_load_failed(model_filename, error.to_string()),
+    }
+    result
+}
+
+async fn load_model_after_lifecycle_start(
+    state: &AppState,
+    model_filename: &str,
+    inference_profile: Option<String>,
+) -> Result<(), AppError> {
+    let model_path = state.data_dir.join("models").join(model_filename);
     let verification_path = model_path.clone();
     tokio::task::spawn_blocking(move || quantization::verify_promoted_model(&verification_path))
         .await
         .map_err(|error| AppError::Llm(format!("promotion verification task failed: {error}")))??;
-    let model_name = model_filename.clone();
+    let model_name = model_filename.to_string();
     // "governed" is the safe default. Named profiles remain available as
     // explicit research overrides and are checked against the same budget.
     let inference_profile = inference_profile.unwrap_or_else(|| "governed".to_string());
@@ -171,6 +244,21 @@ pub async fn load_model(
 
     *state.llm.lock().map_err(|_| llm_lock_poisoned())? = Some(Arc::new(engine));
     Ok(())
+}
+
+/// Explain the managed tool-router policy without claiming that an advanced
+/// override is active. A future dual-engine implementation can extend this
+/// command while retaining the same diagnostics contract.
+#[tauri::command]
+pub async fn get_router_diagnostics(
+    state: State<'_, AppState>,
+) -> Result<llm::router::RouterDiagnostics, AppError> {
+    let desired_filename = resolve_desired_model(&state).map(|model| model.filename);
+    let active_filename = state.llm_lifecycle().active_filename;
+    Ok(llm::router::RouterDiagnostics::managed(
+        desired_filename,
+        active_filename,
+    ))
 }
 
 /// Extract structured metadata from a document using the loaded LLM.

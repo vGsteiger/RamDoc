@@ -323,6 +323,8 @@ mod tests {
             db: Mutex::new(None),
             llm: Mutex::new(None),
             llm_swap: tokio::sync::Mutex::new(()),
+            llm_lifecycle: Mutex::new(crate::llm::EngineLifecycleStatus::default()),
+            llm_lifecycle_changed: tokio::sync::Notify::new(),
             embed: Mutex::new(None),
             medication_ref: Mutex::new(None),
         };

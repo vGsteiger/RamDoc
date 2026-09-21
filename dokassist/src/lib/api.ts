@@ -137,6 +137,40 @@ export interface LlmEngineStatus {
   last_generation_stats: GenerationStats | null;
   inference_config: InferenceDiagnostics | null;
   context_cache: ContextCacheTelemetry;
+  desired_model: DesiredModelStatus | null;
+  lifecycle: EngineLifecycleStatus;
+}
+
+export interface DesiredModelStatus {
+  id: string;
+  name: string;
+  filename: string;
+  exists_on_disk: boolean;
+}
+
+export type EngineLifecyclePhase = 'idle' | 'loading' | 'ready' | 'unloading' | 'error';
+
+export interface EngineLifecycleStatus {
+  phase: EngineLifecyclePhase;
+  requested_filename: string | null;
+  active_filename: string | null;
+  error: string | null;
+}
+
+export type RouterMode = 'managed' | 'advanced_override';
+
+export interface RouterDiagnostics {
+  role: 'tool_router';
+  mode: RouterMode;
+  managed_model_filename: string | null;
+  active_model_filename: string | null;
+  resident_engine_count: number;
+  advanced_override: {
+    available: boolean;
+    configured_filename: string | null;
+    requires_separate_engine: boolean;
+    limitation: string;
+  };
 }
 
 export type InferenceProfile = 'conservative' | 'f16-32k' | 'q8-32k' | 'q4-32k';
@@ -189,10 +223,6 @@ export async function getRecommendedModel(): Promise<ModelChoice> {
   return await invoke<ModelChoice>('get_recommended_model');
 }
 
-export async function downloadModel(model: ModelChoice): Promise<void> {
-  return await invoke<void>('download_model', { model });
-}
-
 export async function loadModel(
   modelFilename: string,
   inferenceProfile?: InferenceProfile,
@@ -200,6 +230,21 @@ export async function loadModel(
   const args: { modelFilename: string; inferenceProfile?: InferenceProfile } = { modelFilename };
   if (inferenceProfile) args.inferenceProfile = inferenceProfile;
   return await invoke<void>('load_model', args);
+}
+
+/** Load the configured default writing model, if it is not already resident. */
+export async function ensureWritingModelLoaded(): Promise<LlmEngineStatus> {
+  return await invoke<LlmEngineStatus>('ensure_writing_model_loaded');
+}
+
+/** Explicitly release the resident writing model from application state. */
+export async function unloadModel(): Promise<void> {
+  return await invoke<void>('unload_model');
+}
+
+/** Report the managed tool-router role and advanced-override limitations. */
+export async function getRouterDiagnostics(): Promise<RouterDiagnostics> {
+  return await invoke<RouterDiagnostics>('get_router_diagnostics');
 }
 
 // === Model Management ===
@@ -258,13 +303,6 @@ export interface PromotedModelPreview {
   worst_category_regression: number;
 }
 
-export interface TaskModel {
-  task_type: string;
-  model_id: string;
-  created_at: string;
-  updated_at: string;
-}
-
 export async function listModels(): Promise<ModelInfo[]> {
   return await invoke<ModelInfo[]>('list_models');
 }
@@ -307,26 +345,6 @@ export async function setDefaultModel(modelId: string): Promise<void> {
 
 export async function getDefaultModel(): Promise<Model | null> {
   return await invoke<Model | null>('get_default_model');
-}
-
-export async function setTaskModel(taskType: string, modelId: string): Promise<void> {
-  return await invoke<void>('set_task_model', { taskType, modelId });
-}
-
-export async function getTaskModel(taskType: string): Promise<Model | null> {
-  return await invoke<Model | null>('get_task_model', { taskType });
-}
-
-export async function listTaskModels(): Promise<TaskModel[]> {
-  return await invoke<TaskModel[]>('list_task_models');
-}
-
-export async function clearTaskModel(taskType: string): Promise<void> {
-  return await invoke<void>('clear_task_model', { taskType });
-}
-
-export async function getModelForTask(taskType: string): Promise<Model | null> {
-  return await invoke<Model | null>('get_model_for_task', { taskType });
 }
 
 export interface AvailableModel {

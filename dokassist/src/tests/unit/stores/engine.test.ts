@@ -19,6 +19,8 @@ const ENGINE_LOADED = {
   total_ram_bytes: 16 * 1024 ** 3,
   is_downloaded: true,
   downloaded_filename: 'phi4.gguf',
+  desired_model: { id: 'phi4', name: 'Phi-4 Mini', filename: 'phi4.gguf', exists_on_disk: true },
+  lifecycle: { phase: 'ready', requested_filename: null, active_filename: 'phi4.gguf', error: null },
 };
 
 const ENGINE_NOT_LOADED = {
@@ -28,6 +30,8 @@ const ENGINE_NOT_LOADED = {
   total_ram_bytes: 8 * 1024 ** 3,
   is_downloaded: true,
   downloaded_filename: 'phi4.gguf',
+  desired_model: { id: 'phi4', name: 'Phi-4 Mini', filename: 'phi4.gguf', exists_on_disk: true },
+  lifecycle: { phase: 'idle', requested_filename: null, active_filename: null, error: null },
 };
 
 beforeEach(() => {
@@ -76,15 +80,34 @@ describe('loadEngineModel', () => {
     expect(get(engine).status?.is_loaded).toBe(true);
   });
 
-  it('does not start a second load while one is in flight', async () => {
+  it('rejects a different model while a load is in flight instead of false-success', async () => {
+    let resolveLoad: () => void = () => {};
     mockInvoke.mockImplementation((cmd) => {
-      if (cmd === 'load_model') return new Promise(() => {});
+      if (cmd === 'load_model') return new Promise<void>((resolve) => (resolveLoad = resolve));
+      if (cmd === 'get_engine_status') return Promise.resolve(ENGINE_LOADED);
       return Promise.resolve(undefined);
     });
-    void loadEngineModel('a.gguf');
+    const first = loadEngineModel('a.gguf');
     await Promise.resolve();
-    await loadEngineModel('b.gguf');
+    await expect(loadEngineModel('b.gguf')).rejects.toThrow(/a\.gguf.*b\.gguf/);
     expect(mockInvoke.mock.calls.filter(([cmd]) => cmd === 'load_model')).toHaveLength(1);
+    resolveLoad();
+    await first;
+  });
+
+  it('joins duplicate requests and resolves only after that filename finishes loading', async () => {
+    let resolveLoad: () => void = () => {};
+    mockInvoke.mockImplementation((cmd) => {
+      if (cmd === 'load_model') return new Promise<void>((resolve) => (resolveLoad = resolve));
+      if (cmd === 'get_engine_status') return Promise.resolve(ENGINE_LOADED);
+      return Promise.resolve(undefined);
+    });
+    const first = loadEngineModel('phi4.gguf');
+    const second = loadEngineModel('phi4.gguf');
+    expect(mockInvoke.mock.calls.filter(([cmd]) => cmd === 'load_model')).toHaveLength(1);
+    resolveLoad();
+    await expect(second).resolves.toBeUndefined();
+    await first;
   });
 
   it('records the error message when load_model fails', async () => {
@@ -99,12 +122,9 @@ describe('ensureEngineLoaded', () => {
   it('loads a downloaded model that is not yet in memory', async () => {
     mockInvoke
       .mockResolvedValueOnce(ENGINE_NOT_LOADED)
-      .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce(ENGINE_LOADED);
     await ensureEngineLoaded();
-    expect(mockInvoke).toHaveBeenCalledWith('load_model', {
-      modelFilename: 'phi4.gguf',
-    });
+    expect(mockInvoke).toHaveBeenCalledWith('ensure_writing_model_loaded');
     expect(get(engine).status?.is_loaded).toBe(true);
   });
 

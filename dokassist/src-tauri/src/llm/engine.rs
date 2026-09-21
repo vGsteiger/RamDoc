@@ -132,6 +132,49 @@ pub struct EngineStatus {
     /// Effective llama.cpp context parameters and any explicit fallback.
     pub inference_config: Option<InferenceDiagnostics>,
     pub context_cache: ContextCacheTelemetry,
+    /// Durable writing-model intent resolved from the model registry. This is
+    /// deliberately separate from the engine currently resident in memory.
+    pub desired_model: Option<DesiredModelStatus>,
+    /// Authoritative runtime state for callers that need to gate work while a
+    /// model is being loaded or released.
+    pub lifecycle: EngineLifecycleStatus,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DesiredModelStatus {
+    pub id: String,
+    pub name: String,
+    pub filename: String,
+    pub exists_on_disk: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum EngineLifecyclePhase {
+    Idle,
+    Loading,
+    Ready,
+    Unloading,
+    Error,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EngineLifecycleStatus {
+    pub phase: EngineLifecyclePhase,
+    pub requested_filename: Option<String>,
+    pub active_filename: Option<String>,
+    pub error: Option<String>,
+}
+
+impl Default for EngineLifecycleStatus {
+    fn default() -> Self {
+        Self {
+            phase: EngineLifecyclePhase::Idle,
+            requested_filename: None,
+            active_filename: None,
+            error: None,
+        }
+    }
 }
 
 impl LlmEngine {
@@ -609,6 +652,13 @@ impl LlmEngine {
                 .lock()
                 .map(|pool| pool.telemetry.clone())
                 .unwrap_or_default(),
+            desired_model: None,
+            lifecycle: EngineLifecycleStatus {
+                phase: EngineLifecyclePhase::Ready,
+                requested_filename: None,
+                active_filename: self.model.as_ref().map(|_| self.model_name.clone()),
+                error: None,
+            },
         }
     }
 
