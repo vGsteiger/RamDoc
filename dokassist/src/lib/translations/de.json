@@ -807,7 +807,18 @@
     "hideToolResult": "Ergebnis ausblenden",
     "noChats": "Keine Chats vorhanden",
     "defaultTitle": "Neuer Chat",
-    "emailDraftTitle": "E-Mail-Entwurf"
+    "emailDraftTitle": "E-Mail-Entwurf",
+    "patientContextAttached": "Patientenkontext angehängt. Dieses Gespräch ist auf den ausgewählten Patienten beschränkt.",
+    "reportStarterPrompt": "Bitte erstelle einen Berichtsvorschlag. Frage zuerst nach fehlenden Angaben und speichere nichts ohne meine ausdrückliche Bestätigung.",
+    "openingChat": "Chat wird geöffnet …",
+    "openingReportChat": "Berichts-Chat wird geöffnet …",
+    "reportDraftUnsaved": "Berichtsentwurf — nicht gespeichert",
+    "reportDraftReviewHint": "Prüfen Sie den generierten Text. Das Speichern erfordert diese ausdrückliche Bestätigung; der gespeicherte Bericht kann gelöscht werden.",
+    "reviewReportDraft": "Entwurf prüfen",
+    "confirmReportDraftReviewed": "Ich habe diesen Entwurf geprüft und möchte ihn speichern.",
+    "reportDraftSaved": "Berichtsentwurf zur klinischen Prüfung gespeichert.",
+    "saveReviewedReportDraft": "Geprüften Berichtsentwurf speichern",
+    "savingReportDraft": "Speichern…"
   },
   "calendar": {
     "title": "Kalender",

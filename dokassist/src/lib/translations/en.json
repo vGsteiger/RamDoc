@@ -807,7 +807,18 @@
     "hideToolResult": "Hide result",
     "noChats": "No chats yet",
     "defaultTitle": "New chat",
-    "emailDraftTitle": "Email draft"
+    "emailDraftTitle": "Email draft",
+    "patientContextAttached": "Patient context attached. This conversation is limited to the selected patient.",
+    "reportStarterPrompt": "Please create a report draft. Ask first for missing information and do not save anything without my explicit confirmation.",
+    "openingChat": "Opening chat …",
+    "openingReportChat": "Opening report chat …",
+    "reportDraftUnsaved": "Report draft — not saved",
+    "reportDraftReviewHint": "Review the generated text below. Saving requires this explicit confirmation and can be reversed by deleting the saved report.",
+    "reviewReportDraft": "Review draft",
+    "confirmReportDraftReviewed": "I reviewed this draft and want to save it.",
+    "reportDraftSaved": "Report draft saved for clinician review.",
+    "saveReviewedReportDraft": "Save reviewed report draft",
+    "savingReportDraft": "Saving…"
   },
   "calendar": {
     "title": "Calendar",
