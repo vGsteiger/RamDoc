@@ -31,7 +31,6 @@ pub use engine::{
     ModelChoice,
 };
 pub use extract::{extract_metadata_with_prompt, FileMetadata};
-    generate_report_streaming_with_sampler_and_stream_id,
 pub use prompts::{LetterType, ReportType, SYSTEM_PROMPT_DE, SYSTEM_PROMPT_FR};
 pub use report::{
     generate_evidence_answer_streaming, generate_letter_streaming_with_prompt,
