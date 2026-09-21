@@ -64,6 +64,10 @@ pub struct ExecutedToolCall {
 pub struct AgentLoopResult {
     pub final_answer: String,
     pub tool_calls_made: Vec<ExecutedToolCall>,
+    /// Router benchmark telemetry is reported by the command after the
+    /// blocking turn, never embedded in patient-facing chat history.
+    pub router_probe_count: u64,
+    pub router_probe_duration_ms: u64,
 }
 
 pub struct AgentTurnInput {
@@ -259,6 +263,7 @@ fn summarize_history(
 pub fn run_agent_loop(
     app: &tauri::AppHandle,
     engine: &Arc<LlmEngine>,
+    router_engine: Option<&Arc<LlmEngine>>,
     pool: &DbPool,
     input: AgentTurnInput,
 ) -> Result<AgentLoopResult, AppError> {
@@ -286,6 +291,9 @@ pub fn run_agent_loop(
     });
 
     let mut tool_calls_made: Vec<ExecutedToolCall> = Vec::new();
+    let probe_engine = router_engine.unwrap_or(engine);
+    let mut router_probe_count = 0_u64;
+    let mut router_probe_duration_ms = 0_u64;
     let summarize_threshold = engine
         .context_size()
         .saturating_sub(probe_profile.max_tokens + chat_profile.max_tokens + 512);
@@ -301,12 +309,13 @@ pub fn run_agent_loop(
             history = summarize_history(engine, &system_prompt, history);
         }
 
-        let prompt = engine.format_chat_history(&probe_system, &history)?;
+        let prompt = probe_engine.format_chat_history(&probe_system, &history)?;
 
         // Probe: collect output to check for tool call. Thinking is forced off
         // so Extra high effort cannot hide a tool call inside <think>.
         let mut probe_output = String::new();
-        engine.generate_streaming_session_with_sampler(
+        let probe_started = std::time::Instant::now();
+        probe_engine.generate_streaming_session_with_sampler(
             &inference_session,
             &probe_system,
             &prompt,
@@ -317,6 +326,13 @@ pub fn run_agent_loop(
                 !probe_output.contains("</tool_call>")
             },
         )?;
+        router_probe_count = router_probe_count.saturating_add(1);
+        router_probe_duration_ms = router_probe_duration_ms.saturating_add(
+            probe_started
+                .elapsed()
+                .as_millis()
+                .min(u128::from(u64::MAX)) as u64,
+        );
 
         let probe_trimmed = probe_output.trim();
 
@@ -410,6 +426,8 @@ pub fn run_agent_loop(
             return Ok(AgentLoopResult {
                 final_answer,
                 tool_calls_made,
+                router_probe_count,
+                router_probe_duration_ms,
             });
         }
     }
@@ -434,6 +452,8 @@ pub fn run_agent_loop(
     Ok(AgentLoopResult {
         final_answer,
         tool_calls_made,
+        router_probe_count,
+        router_probe_duration_ms,
     })
 }
 

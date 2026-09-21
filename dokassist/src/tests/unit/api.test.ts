@@ -33,6 +33,8 @@ import {
   ensureWritingModelLoaded,
   unloadModel,
   getRouterDiagnostics,
+  unloadRouterModel,
+  setRouterModelOverride,
   createSession,
   getSession,
   listAllSessions,
@@ -1705,6 +1707,20 @@ describe('writing model lifecycle API', () => {
     mockInvoke.mockResolvedValueOnce({ role: 'tool_router', mode: 'managed' });
     await getRouterDiagnostics();
     expect(mockInvoke).toHaveBeenCalledWith('get_router_diagnostics');
+  });
+
+  it('persists and clears the expert router override', async () => {
+    mockInvoke.mockResolvedValueOnce(undefined).mockResolvedValueOnce(undefined);
+    await setRouterModelOverride('router-model');
+    await setRouterModelOverride(null);
+    expect(mockInvoke).toHaveBeenNthCalledWith(1, 'set_router_model_override', { modelId: 'router-model' });
+    expect(mockInvoke).toHaveBeenNthCalledWith(2, 'set_router_model_override', { modelId: null });
+  });
+
+  it('explicitly unloads the dedicated router runtime', async () => {
+    mockInvoke.mockResolvedValueOnce(undefined);
+    await unloadRouterModel();
+    expect(mockInvoke).toHaveBeenCalledWith('unload_router_model');
   });
 });
 

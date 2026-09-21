@@ -325,6 +325,11 @@ mod tests {
             llm_swap: tokio::sync::Mutex::new(()),
             llm_lifecycle: Mutex::new(crate::llm::EngineLifecycleStatus::default()),
             llm_lifecycle_changed: tokio::sync::Notify::new(),
+            router_llm: Mutex::new(None),
+            router_llm_swap: tokio::sync::Mutex::new(()),
+            router_lifecycle: Mutex::new(crate::llm::EngineLifecycleStatus::default()),
+            router_lifecycle_changed: tokio::sync::Notify::new(),
+            router_benchmark: Mutex::new(crate::llm::router::RouterBenchmarkDiagnostics::default()),
             embed: Mutex::new(None),
             medication_ref: Mutex::new(None),
         };

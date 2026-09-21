@@ -2,6 +2,11 @@ use crate::error::AppError;
 use rusqlite::{params, Connection, Row};
 use serde::{Deserialize, Serialize};
 
+/// Existing model-registry assignment namespace for the optional dedicated
+/// tool router. Keeping this in the registry makes the expert preference
+/// durable without creating a second settings/security storage path.
+const ROUTER_ASSIGNMENT: &str = "tool_router";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Model {
     pub id: String,
@@ -13,7 +18,6 @@ pub struct Model {
     pub last_used: Option<String>,
     pub is_default: bool,
 }
-
 
 impl Model {
     fn from_row(row: &Row) -> Result<Self, rusqlite::Error> {
@@ -29,7 +33,6 @@ impl Model {
         })
     }
 }
-
 
 /// Create a new model record after successful download
 pub fn create_model(
@@ -139,5 +142,42 @@ pub fn update_model_last_used(conn: &Connection, id: &str) -> Result<(), AppErro
         "UPDATE models SET last_used = datetime('now') WHERE id = ?",
         params![id],
     )?;
+    Ok(())
+}
+
+/// Return the expert router override, if one has been configured.
+pub fn get_router_override(conn: &Connection) -> Result<Option<Model>, AppError> {
+    match conn.query_row(
+        "SELECT m.id, m.name, m.filename, m.sha256, m.size_bytes, m.downloaded_at, m.last_used, m.is_default
+         FROM task_models tm JOIN models m ON m.id = tm.model_id
+         WHERE tm.task_type = ?",
+        params![ROUTER_ASSIGNMENT],
+        Model::from_row,
+    ) {
+        Ok(model) => Ok(Some(model)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(error) => Err(AppError::Database(error)),
+    }
+}
+
+/// Persist (or clear) the expert tool-router assignment. The foreign key and
+/// explicit lookup ensure an override cannot point at an arbitrary filename.
+pub fn set_router_override(conn: &Connection, model_id: Option<&str>) -> Result<(), AppError> {
+    match model_id {
+        Some(model_id) => {
+            get_model(conn, model_id)?;
+            conn.execute(
+                "INSERT INTO task_models (task_type, model_id) VALUES (?, ?)
+                 ON CONFLICT(task_type) DO UPDATE SET model_id = excluded.model_id",
+                params![ROUTER_ASSIGNMENT, model_id],
+            )?;
+        }
+        None => {
+            conn.execute(
+                "DELETE FROM task_models WHERE task_type = ?",
+                params![ROUTER_ASSIGNMENT],
+            )?;
+        }
+    }
     Ok(())
 }

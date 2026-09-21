@@ -13,6 +13,7 @@
   import { t } from '$lib/translations';
   import { chatToolActivityLabel } from '$lib/chat-activity';
   import { serializeContextPreamble, type ContextPlan } from './context-picker';
+  import { evidenceForTurn, provenanceForAnswer } from '$lib/chat-provenance';
 
   interface Props {
     sessionId: string;
@@ -26,7 +27,7 @@
 
   let {
     sessionId,
-    scope: _scope,
+    scope,
     patientId: _patientId,
     initialMessage = '',
     contextPlan = undefined,
@@ -239,8 +240,14 @@
 
   <!-- Message list -->
   <div class="flex-1 overflow-y-auto px-4 py-4 space-y-1">
-    {#each messages as message (message.id)}
-      <ChatMessage {message} />
+    {#each messages as message, index (message.id)}
+      <ChatMessage
+        {message}
+        provenance={message.role === 'assistant'
+          ? provenanceForAnswer(messages, index, scope === 'patient')
+          : undefined}
+        draftEvidence={message.role === 'tool_result' ? evidenceForTurn(messages, index) : []}
+      />
     {/each}
 
     {#if pendingTool}

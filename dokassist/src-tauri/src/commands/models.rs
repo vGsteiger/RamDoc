@@ -397,7 +397,12 @@ pub async fn list_available_models(
             // A registry row alone is not a usable download. Keep the picker
             // able to repair a model whose file was removed externally.
             if let Some(installed) = installed_models.iter().find(|m| m.filename == am.filename) {
-                if state.data_dir.join("models").join(&installed.filename).is_file() {
+                if state
+                    .data_dir
+                    .join("models")
+                    .join(&installed.filename)
+                    .is_file()
+                {
                     am.is_downloaded = true;
                     am.model_id = Some(installed.id.clone());
                 }
