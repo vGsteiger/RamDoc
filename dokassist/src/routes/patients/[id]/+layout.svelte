@@ -74,7 +74,10 @@
     </div>
 
     <div class="overflow-x-auto bg-surface-sunken border-b border-line-subtle">
-      <nav class="flex min-w-max gap-1 px-3 sm:px-6" aria-label="Patient workspace">
+      <nav
+        class="flex min-w-max gap-1 px-3 sm:px-6"
+        aria-label={$t('patients.workspaceNavigation')}
+      >
         {#each tabs as tab}
           <a
             href={tab.path}

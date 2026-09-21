@@ -20,7 +20,12 @@ const ENGINE_LOADED = {
   is_downloaded: true,
   downloaded_filename: 'phi4.gguf',
   desired_model: { id: 'phi4', name: 'Phi-4 Mini', filename: 'phi4.gguf', exists_on_disk: true },
-  lifecycle: { phase: 'ready', requested_filename: null, active_filename: 'phi4.gguf', error: null },
+  lifecycle: {
+    phase: 'ready',
+    requested_filename: null,
+    active_filename: 'phi4.gguf',
+    error: null,
+  },
 };
 
 const ENGINE_NOT_LOADED = {
@@ -120,9 +125,7 @@ describe('loadEngineModel', () => {
 
 describe('ensureEngineLoaded', () => {
   it('loads a downloaded model that is not yet in memory', async () => {
-    mockInvoke
-      .mockResolvedValueOnce(ENGINE_NOT_LOADED)
-      .mockResolvedValueOnce(ENGINE_LOADED);
+    mockInvoke.mockResolvedValueOnce(ENGINE_NOT_LOADED).mockResolvedValueOnce(ENGINE_LOADED);
     await ensureEngineLoaded();
     expect(mockInvoke).toHaveBeenCalledWith('ensure_writing_model_loaded');
     expect(get(engine).status?.is_loaded).toBe(true);

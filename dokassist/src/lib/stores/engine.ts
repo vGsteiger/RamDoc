@@ -65,7 +65,9 @@ export async function loadEngineModel(
   if (activeLoad) {
     if (activeLoad.filename === filename) return activeLoad.promise;
     return Promise.reject(
-      new Error(`Model '${activeLoad.filename}' is already loading; wait before loading '${filename}'.`)
+      new Error(
+        `Model '${activeLoad.filename}' is already loading; wait before loading '${filename}'.`
+      )
     );
   }
 

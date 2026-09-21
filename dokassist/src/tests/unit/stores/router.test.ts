@@ -18,7 +18,12 @@ const DIAGNOSTICS = {
   selected_model_filename: 'small.gguf',
   active_model_filename: null,
   resident_engine_count: 1,
-  lifecycle: { phase: 'idle' as const, requested_filename: null, active_filename: null, error: null },
+  lifecycle: {
+    phase: 'idle' as const,
+    requested_filename: null,
+    active_filename: null,
+    error: null,
+  },
   residency: 'unloaded' as const,
   dual_residency_safe: true,
   total_ram_bytes: 32,
@@ -60,7 +65,9 @@ describe('router store', () => {
       advanced_override: { ...DIAGNOSTICS.advanced_override, configured_filename: 'expert.gguf' },
     });
     await setRouterOverride('expert-id');
-    expect(mockInvoke).toHaveBeenNthCalledWith(1, 'set_router_model_override', { modelId: 'expert-id' });
+    expect(mockInvoke).toHaveBeenNthCalledWith(1, 'set_router_model_override', {
+      modelId: 'expert-id',
+    });
     expect(get(router).diagnostics?.selection_source).toBe('expert_override');
   });
 

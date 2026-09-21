@@ -9,7 +9,10 @@
     "literature": "Literatur",
     "chat": "Chat",
     "settings": "Einstellungen",
-    "lock": "Sperren"
+    "lock": "Sperren",
+    "openNavigation": "Navigation öffnen",
+    "closeNavigation": "Navigation schließen",
+    "primaryNavigation": "Hauptnavigation"
   },
   "settings": {
     "title": "Einstellungen",
@@ -314,6 +317,7 @@
   },
   "patients": {
     "title": "Patienten",
+    "workspaceNavigation": "Patientenarbeitsbereich",
     "newPatient": "Neuer Patient",
     "noPatients": "Noch keine Patienten",
     "search": "Patienten nach Name oder AHV-Nummer suchen...",

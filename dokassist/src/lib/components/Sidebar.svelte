@@ -47,7 +47,7 @@
   <button
     type="button"
     class="fixed inset-0 z-30 bg-black/25 sm:hidden"
-    aria-label="Close navigation"
+    aria-label={$t('nav.closeNavigation')}
     onclick={() => onMobileClose?.()}
   ></button>
 {/if}
@@ -62,7 +62,7 @@
     <span class="hidden text-heading text-fg sm:max-[900px]:block" aria-hidden="true">R</span>
   </div>
 
-  <nav class="flex-1 px-2 pb-2" aria-label="Primary navigation">
+  <nav class="flex-1 px-2 pb-2" aria-label={$t('nav.primaryNavigation')}>
     <ul class="space-y-0.5">
       {#each navItems as item}
         {@const Icon = item.icon}

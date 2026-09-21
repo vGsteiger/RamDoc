@@ -31,6 +31,13 @@ const EMPTY_CONTEXT_CACHE = {
   max_contexts: 0,
 };
 
+const IDLE_LIFECYCLE = {
+  phase: 'idle' as const,
+  requested_filename: null,
+  active_filename: null,
+  error: null,
+};
+
 const ENGINE_LOADED = {
   is_loaded: true,
   model_name: 'Phi-4 Mini',
@@ -41,6 +48,8 @@ const ENGINE_LOADED = {
   last_generation_stats: null,
   inference_config: null,
   context_cache: EMPTY_CONTEXT_CACHE,
+  desired_model: null,
+  lifecycle: { ...IDLE_LIFECYCLE, phase: 'ready', active_filename: 'phi4.gguf' },
 } satisfies LlmEngineStatus;
 
 const ENGINE_NOT_LOADED = {
@@ -53,6 +62,8 @@ const ENGINE_NOT_LOADED = {
   last_generation_stats: null,
   inference_config: null,
   context_cache: EMPTY_CONTEXT_CACHE,
+  desired_model: null,
+  lifecycle: IDLE_LIFECYCLE,
 } satisfies LlmEngineStatus;
 
 const USER_MSG: ChatMessageRow = {

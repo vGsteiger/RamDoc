@@ -1713,7 +1713,9 @@ describe('writing model lifecycle API', () => {
     mockInvoke.mockResolvedValueOnce(undefined).mockResolvedValueOnce(undefined);
     await setRouterModelOverride('router-model');
     await setRouterModelOverride(null);
-    expect(mockInvoke).toHaveBeenNthCalledWith(1, 'set_router_model_override', { modelId: 'router-model' });
+    expect(mockInvoke).toHaveBeenNthCalledWith(1, 'set_router_model_override', {
+      modelId: 'router-model',
+    });
     expect(mockInvoke).toHaveBeenNthCalledWith(2, 'set_router_model_override', { modelId: null });
   });
 

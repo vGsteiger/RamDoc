@@ -8,7 +8,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard};
 use zeroize::Zeroize;
 
-pub const LATEST_SCHEMA_VERSION: i32 = 15;
+pub const LATEST_SCHEMA_VERSION: i32 = 16;
 
 trait CheckpointStore: Send + Sync {
     fn read(&self) -> Result<Option<ChainCheckpoint>, AppError>;

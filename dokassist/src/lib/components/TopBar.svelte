@@ -138,7 +138,7 @@
       type="button"
       onclick={onMenuToggle}
       class="flex h-10 w-10 shrink-0 items-center justify-center rounded-control text-fg-muted hover:bg-surface-hover hover:text-fg sm:hidden"
-      aria-label="Open navigation"
+      aria-label={$t('nav.openNavigation')}
     >
       <Menu size={20} aria-hidden="true" />
     </button>

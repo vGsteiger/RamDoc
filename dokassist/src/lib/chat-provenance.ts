@@ -96,7 +96,7 @@ export function unsupportedDraftClaims(
   content: string,
   evidence: ProvenanceSource[]
 ): UnsupportedClaim[] {
-  const claims = citationLikeTokens(content).map((citation) => ({
+  const claims: UnsupportedClaim[] = citationLikeTokens(content).map((citation) => ({
     id: `citation:${citation}`,
     kind: 'unverified_citation' as const,
     citation,

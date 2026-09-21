@@ -220,10 +220,11 @@ pub async fn run_agent_turn(
         }
     };
 
-    if result.router_probe_count > 0 {
-        let per_probe = std::time::Duration::from_millis(
-            result.router_probe_duration_ms / result.router_probe_count,
-        );
+    if let Some(average_ms) = result
+        .router_probe_duration_ms
+        .checked_div(result.router_probe_count)
+    {
+        let per_probe = std::time::Duration::from_millis(average_ms);
         for _ in 0..result.router_probe_count {
             state.record_router_probe(dedicated_router, per_probe);
         }
