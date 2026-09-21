@@ -67,6 +67,32 @@ describe('ChatMessage', () => {
     expect(screen.getByRole('button', { name: /Show result/ })).toBeInTheDocument();
   });
 
+  it('renders an unsaved report proposal with an explicit review gate', () => {
+    render(ChatMessage, {
+      props: {
+        message: makeMsg({
+          role: 'tool_result',
+          content: JSON.stringify({
+            status: 'pending_clinician_confirmation',
+            action: 'create_report',
+            proposal: {
+              patient_id: 'p1',
+              report_type: 'Befundbericht',
+              content: 'Reviewed report content',
+              model_name: null,
+              prompt_hash: null,
+              session_ids: null,
+            },
+          }),
+        }),
+      },
+    });
+
+    expect(screen.getByText('Report draft — not saved')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox')).not.toBeChecked();
+    expect(screen.getByRole('button', { name: /Save reviewed report draft/i })).toBeDisabled();
+  });
+
   it('renders a thinking status when streaming with empty content', () => {
     render(ChatMessage, {
       props: {

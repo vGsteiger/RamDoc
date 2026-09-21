@@ -17,9 +17,11 @@
     sessionId: string;
     scope: 'global' | 'patient';
     patientId?: string;
+    /** A route-supplied, editable starter prompt; it is never auto-submitted. */
+    initialMessage?: string;
   }
 
-  let { sessionId, scope: _scope, patientId: _patientId }: Props = $props();
+  let { sessionId, scope: _scope, patientId: _patientId, initialMessage = '' }: Props = $props();
 
   let messages = $state<ChatMessageRow[]>([]);
   let streamingContent = $state('');
@@ -52,6 +54,10 @@
     } catch (e) {
       console.error('Failed to load messages:', e);
     }
+  }
+
+  function applyInitialMessage() {
+    if (initialMessage && !inputText && messages.length === 0) inputText = initialMessage;
   }
 
   function scrollToBottom() {
@@ -117,14 +123,19 @@
   onMount(async () => {
     await loadMessages();
     await refreshEngineStatus();
+    applyInitialMessage();
     scrollToBottom();
 
-    unlistenChunk = await listen<string>('agent-chunk', (event) => {
-      activeToolName = null;
-      pendingTool = null;
-      streamingContent += event.payload;
-      scrollToBottom();
-    });
+    unlistenChunk = await listen<{ session_id: string; token: string }>(
+      'agent-chunk-session',
+      (event) => {
+        if (!isThisSession(event.payload)) return;
+        activeToolName = null;
+        pendingTool = null;
+        streamingContent += event.payload.token;
+        scrollToBottom();
+      }
+    );
 
     unlistenDone = await listen<{ final_answer: string; session_id: string }>(
       'agent-done',
@@ -163,14 +174,18 @@
       scrollToBottom();
     });
 
-    unlistenError = await listen<{ message: string }>('agent-error', (event) => {
-      isStreaming = false;
-      streamingContent = '';
-      activityStartedAt = null;
-      activeToolName = null;
-      pendingTool = null;
-      errorMessage = event.payload.message;
-    });
+    unlistenError = await listen<{ session_id: string; message: string }>(
+      'agent-error-session',
+      (event) => {
+        if (!isThisSession(event.payload)) return;
+        isStreaming = false;
+        streamingContent = '';
+        activityStartedAt = null;
+        activeToolName = null;
+        pendingTool = null;
+        errorMessage = event.payload.message;
+      }
+    );
   });
 
   onDestroy(() => {

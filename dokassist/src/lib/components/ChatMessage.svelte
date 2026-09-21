@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ChatMessageRow } from '$lib/api';
+  import { createReport, type CreateReport } from '$lib/api';
   import { t } from '$lib/translations';
   import { Wrench, Check } from 'lucide-svelte';
   import { ThinkingIndicator } from '$lib/components/ui';
@@ -50,6 +51,38 @@
     return Object.entries(obj).filter(([k]) => !HIDDEN_FIELDS.has(k));
   }
 
+  function reportDraftProposal(content: string): CreateReport | null {
+    const parsed = parseToolResult(content);
+    if (!parsed || Array.isArray(parsed)) return null;
+    if (
+      parsed.status !== 'pending_clinician_confirmation' ||
+      parsed.action !== 'create_report' ||
+      !parsed.proposal ||
+      typeof parsed.proposal !== 'object' ||
+      Array.isArray(parsed.proposal)
+    ) {
+      return null;
+    }
+
+    const proposal = parsed.proposal as Record<string, unknown>;
+    if (
+      typeof proposal.patient_id !== 'string' ||
+      typeof proposal.report_type !== 'string' ||
+      typeof proposal.content !== 'string'
+    ) {
+      return null;
+    }
+
+    return {
+      patient_id: proposal.patient_id,
+      report_type: proposal.report_type,
+      content: proposal.content,
+      model_name: typeof proposal.model_name === 'string' ? proposal.model_name : null,
+      prompt_hash: typeof proposal.prompt_hash === 'string' ? proposal.prompt_hash : null,
+      session_ids: typeof proposal.session_ids === 'string' ? proposal.session_ids : null,
+    };
+  }
+
   interface Props {
     message: ChatMessageRow;
     isStreaming?: boolean;
@@ -75,12 +108,30 @@
 
   let toolCallCollapsed = $state(true);
   let toolResultCollapsed = $state(true);
+  let reviewedDraft = $state(false);
+  let isSavingDraft = $state(false);
+  let savedDraft = $state(false);
+  let draftError = $state('');
   let fallbackStartedAt = $state(Date.now());
   let activityStage = $derived(
     chatActivityStage(message.content, isStreaming ? activeToolName : null)
   );
   let showActivity = $derived(isStreaming && activityStage !== 'writing');
   let startedAt = $derived(activityStartedAt ?? fallbackStartedAt);
+
+  async function saveReviewedDraft(proposal: CreateReport) {
+    if (!reviewedDraft || isSavingDraft || savedDraft) return;
+    isSavingDraft = true;
+    draftError = '';
+    try {
+      await createReport(proposal);
+      savedDraft = true;
+    } catch (error) {
+      draftError = error instanceof Error ? error.message : String(error);
+    } finally {
+      isSavingDraft = false;
+    }
+  }
 </script>
 
 {#if message.role === 'user'}
@@ -139,6 +190,7 @@
   </div>
 {:else if message.role === 'tool_result'}
   {@const parsed = parseToolResult(message.content)}
+  {@const reportDraft = reportDraftProposal(message.content)}
   <div class="flex justify-start mb-3">
     <div class="max-w-[80%]">
       <button
@@ -182,6 +234,36 @@
           {:else}
             <pre
               class="text-caption text-fg-muted whitespace-pre-wrap overflow-x-auto">{message.content}</pre>
+          {/if}
+        </div>
+      {/if}
+      {#if reportDraft}
+        <div class="mt-2 rounded-card border border-accent/30 bg-accent-subtle p-3 space-y-2">
+          <p class="text-caption font-medium text-fg">{$t('chat.reportDraftUnsaved')}</p>
+          <p class="text-caption text-fg-muted">
+            {$t('chat.reportDraftReviewHint')}
+          </p>
+          <details class="text-caption text-fg-muted">
+            <summary class="cursor-pointer text-fg">{$t('chat.reviewReportDraft')}</summary>
+            <pre class="mt-2 whitespace-pre-wrap font-sans">{reportDraft.content}</pre>
+          </details>
+          {#if savedDraft}
+            <p class="text-caption text-success-fg">{$t('chat.reportDraftSaved')}</p>
+          {:else}
+            <label class="flex items-start gap-2 text-caption text-fg-muted">
+              <input type="checkbox" bind:checked={reviewedDraft} disabled={isSavingDraft} />
+              <span>{$t('chat.confirmReportDraftReviewed')}</span>
+            </label>
+            {#if draftError}
+              <p class="text-caption text-danger-fg">{draftError}</p>
+            {/if}
+            <button
+              onclick={() => saveReviewedDraft(reportDraft)}
+              disabled={!reviewedDraft || isSavingDraft}
+              class="h-8 px-3 bg-accent text-on-accent rounded-control disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSavingDraft ? $t('chat.savingReportDraft') : $t('chat.saveReviewedReportDraft')}
+            </button>
           {/if}
         </div>
       {/if}

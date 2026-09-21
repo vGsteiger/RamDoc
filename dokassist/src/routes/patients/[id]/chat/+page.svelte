@@ -1,84 +1,13 @@
 <script lang="ts">
-  import { get } from 'svelte/store';
-  import { t } from '$lib/translations';
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
-  import { listChatSessions, createChatSession, type ChatSession } from '$lib/api';
-  import { ensureEngineLoaded } from '$lib/stores/engine';
-  import ChatSessionList from '$lib/components/ChatSessionList.svelte';
-  import ChatThread from '$lib/components/ChatThread.svelte';
-
-  let patientId = $derived($page.params.id);
-  let sessions = $state<ChatSession[]>([]);
-  let activeSessionId = $state<string | null>(null);
-  let isLoading = $state(true);
-
-  async function loadSessions() {
-    try {
-      sessions = await listChatSessions('patient', patientId);
-      if (sessions.length > 0 && !activeSessionId) {
-        activeSessionId = sessions[0].id;
-      }
-    } catch (e) {
-      console.error('Failed to load chat sessions:', e);
-    } finally {
-      isLoading = false;
-    }
-  }
-
-  async function handleNewSession() {
-    try {
-      const session = await createChatSession('patient', patientId, get(t)('chat.defaultTitle'));
-      sessions = [session, ...sessions];
-      activeSessionId = session.id;
-    } catch (e) {
-      console.error('Failed to create session:', e);
-    }
-  }
+  import { goto } from '$app/navigation';
+  import { resolve } from '$app/paths';
+  import { t } from '$lib/translations';
 
   onMount(() => {
-    loadSessions();
-    void ensureEngineLoaded();
+    void goto(`${resolve('/chat')}?patientId=${encodeURIComponent($page.params.id ?? '')}`);
   });
 </script>
 
-<div class="flex h-full">
-  <!-- Sidebar: session list -->
-  <div class="w-56 border-r border-line flex flex-col shrink-0">
-    <div class="p-4 border-b border-line">
-      <h2 class="text-body font-semibold text-fg-muted uppercase tracking-wide">
-        {$t('chat.chats')}
-      </h2>
-    </div>
-    {#if !isLoading}
-      <ChatSessionList
-        bind:sessions
-        {activeSessionId}
-        onsessionselect={(id) => (activeSessionId = id)}
-        onsessionnew={handleNewSession}
-        onlistchange={loadSessions}
-      />
-    {/if}
-  </div>
-
-  <!-- Main: chat thread -->
-  <div class="flex-1 flex flex-col min-w-0">
-    {#if activeSessionId}
-      {#key activeSessionId}
-        <ChatThread sessionId={activeSessionId} scope="patient" {patientId} />
-      {/key}
-    {:else if !isLoading}
-      <div class="flex-1 flex items-center justify-center text-fg-subtle">
-        <div class="text-center">
-          <p class="text-heading mb-2">{$t('chat.noChat')}</p>
-          <button
-            onclick={handleNewSession}
-            class="text-accent-fg hover:text-accent-fg underline text-body"
-          >
-            {$t('chat.startNewChat')}
-          </button>
-        </div>
-      </div>
-    {/if}
-  </div>
-</div>
+<div class="p-8 text-fg-muted">{$t('chat.openingChat')}</div>

@@ -138,7 +138,19 @@ pub async fn run_agent_turn(
         )
     })
     .await
-    .map_err(|e| AppError::Llm(format!("spawn_blocking error: {e}")))??;
+    .map_err(|e| AppError::Llm(format!("spawn_blocking error: {e}")));
+
+    let result = match result {
+        Ok(Ok(result)) => result,
+        Ok(Err(error)) | Err(error) => {
+            let message = error.to_string();
+            let _ = app.emit(
+                "agent-error-session",
+                serde_json::json!({"session_id": session_id, "message": message}),
+            );
+            return Err(error);
+        }
+    };
 
     // Persist tool calls and assistant answer
     {

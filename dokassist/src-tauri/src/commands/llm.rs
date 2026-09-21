@@ -223,6 +223,7 @@ pub async fn generate_report(
     system_prompt: Option<String>,
     thinking_effort: Option<ThinkingEffort>,
     sampler: Option<SamplerConfig>,
+    generation_id: Option<String>,
 ) -> Result<String, AppError> {
     // Check authentication before processing patient data
     check_auth(&state)?;
@@ -253,8 +254,10 @@ pub async fn generate_report(
 
     // Run the potentially long-running report generation on a blocking thread.
     let app_clone = app.clone();
+    let generation_id = generation_id.unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
+    let generation_id_for_task = generation_id.clone();
     let report = tokio::task::spawn_blocking(move || {
-        llm::generate_report_streaming_with_sampler(
+        llm::generate_report_streaming_with_sampler_and_stream_id(
             &app_clone,
             &engine,
             rt,
@@ -265,12 +268,17 @@ pub async fn generate_report(
             &prompt,
             thinking_effort.unwrap_or_default(),
             sampler,
+            Some(&generation_id_for_task),
         )
     })
     .await
     .map_err(|e| AppError::Llm(format!("spawn_blocking error: {e}")))??;
 
     let _ = app.emit("report-done", ());
+    let _ = app.emit(
+        "report-done-session",
+        serde_json::json!({"generation_id": generation_id}),
+    );
     Ok(report)
 }
 
