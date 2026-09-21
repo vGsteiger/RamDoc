@@ -73,6 +73,7 @@ describe('ChatMessage', () => {
       props: {
         message: makeMsg({
           role: 'tool_result',
+          tool_name: 'write_report',
           content: JSON.stringify({
             status: 'pending_clinician_confirmation',
             action: 'create_report',
@@ -92,6 +93,28 @@ describe('ChatMessage', () => {
     expect(screen.getByText('Report draft — not saved')).toBeInTheDocument();
     expect(screen.getByRole('checkbox')).not.toBeChecked();
     expect(screen.getByRole('button', { name: /Save reviewed report draft/i })).toBeDisabled();
+  });
+
+  it('does not render a draft workflow for a non-write_report tool result', () => {
+    render(ChatMessage, {
+      props: {
+        message: makeMsg({
+          role: 'tool_result',
+          tool_name: 'get_patient',
+          content: JSON.stringify({
+            status: 'pending_clinician_confirmation',
+            action: 'create_report',
+            proposal: {
+              patient_id: 'p1',
+              report_type: 'Befundbericht',
+              content: 'Not a report tool result',
+            },
+          }),
+        }),
+      },
+    });
+
+    expect(screen.queryByText('Report draft — not saved')).not.toBeInTheDocument();
   });
 
   it('blocks a draft with an unverified citation until the clinician resolves it', async () => {

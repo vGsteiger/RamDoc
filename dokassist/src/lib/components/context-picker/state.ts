@@ -123,8 +123,7 @@ async function countSource(patientId: string, kind: ContextSourceKind): Promise<
 
 /** Read-only source planning. Consumers retain the records and choose their own budget policy. */
 export async function refreshContextPlan(plan: ContextPlan): Promise<ContextPlan> {
-  const patient = plan.selectedPatients[0];
-  if (!patient)
+  if (plan.selectedPatients.length === 0)
     return withPlanning(
       { ...plan, planning: { ...plan.planning, isRefreshing: false } },
       plan.sources
@@ -132,9 +131,14 @@ export async function refreshContextPlan(plan: ContextPlan): Promise<ContextPlan
 
   const pending = plan.sources.filter((item) => item.included);
   const counts = await Promise.all(
-    pending.map(async (item) => [item.kind, await countSource(patient.id, item.kind)] as const)
+    plan.selectedPatients.flatMap((patient) =>
+      pending.map(async (item) => [item.kind, await countSource(patient.id, item.kind)] as const)
+    )
   );
-  const countByKind = new Map(counts);
+  const countByKind = new Map<ContextSourceKind, number>();
+  for (const [kind, count] of counts) {
+    countByKind.set(kind, (countByKind.get(kind) ?? 0) + count);
+  }
   const sources = plan.sources.map((item) => {
     const retrieved = item.included ? (countByKind.get(item.kind) ?? 0) : null;
     return { ...item, retrieved, summarized: retrieved };

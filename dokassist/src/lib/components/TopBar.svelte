@@ -13,7 +13,10 @@
   let showDropdown = $state(false);
   let isSearching = $state(false);
   let searchTimeout: ReturnType<typeof setTimeout> | null = null;
-  let { onMenuToggle = undefined }: { onMenuToggle?: () => void } = $props();
+  let {
+    onMenuToggle = undefined,
+    isNavigationOpen = false,
+  }: { onMenuToggle?: () => void; isNavigationOpen?: boolean } = $props();
 
   let isLoaded = $derived($engine.status?.is_loaded ?? false);
   let isDownloaded = $derived($engine.status?.is_downloaded ?? false);
@@ -138,7 +141,8 @@
       type="button"
       onclick={onMenuToggle}
       class="flex h-10 w-10 shrink-0 items-center justify-center rounded-control text-fg-muted hover:bg-surface-hover hover:text-fg sm:hidden"
-      aria-label={$t('nav.openNavigation')}
+      aria-label={$t(isNavigationOpen ? 'nav.closeNavigation' : 'nav.openNavigation')}
+      aria-expanded={isNavigationOpen}
     >
       <Menu size={20} aria-hidden="true" />
     </button>

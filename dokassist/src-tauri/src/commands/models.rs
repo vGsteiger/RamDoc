@@ -260,12 +260,16 @@ pub async fn delete_model(state: State<'_, AppState>, model_id: String) -> Resul
     // Share the swap coordinator with loading so a status snapshot cannot
     // delete a file while it is becoming resident.
     let _swap_lease = state.llm_swap.lock().await;
+    let _router_swap_lease = state.router_llm_swap.lock().await;
     if matches!(
         state.llm_lifecycle().phase,
         crate::llm::EngineLifecyclePhase::Loading | crate::llm::EngineLifecyclePhase::Unloading
+    ) || matches!(
+        state.router_lifecycle().phase,
+        crate::llm::EngineLifecyclePhase::Loading | crate::llm::EngineLifecyclePhase::Unloading
     ) {
         return Err(AppError::Validation(
-            "Cannot delete a model while its runtime lifecycle is changing".to_string(),
+            "Cannot delete a model while a runtime lifecycle is changing".to_string(),
         ));
     }
     let db = state.get_db()?;
@@ -278,6 +282,13 @@ pub async fn delete_model(state: State<'_, AppState>, model_id: String) -> Resul
         let is_loaded = {
             let llm = state.llm.lock().map_err(|_| llm_lock_poisoned())?;
             llm.as_ref()
+                .and_then(|engine| engine.status().downloaded_filename)
+                .as_ref()
+                == Some(&model.filename)
+        } || {
+            let router_llm = state.router_llm.lock().map_err(|_| llm_lock_poisoned())?;
+            router_llm
+                .as_ref()
                 .and_then(|engine| engine.status().downloaded_filename)
                 .as_ref()
                 == Some(&model.filename)

@@ -117,7 +117,7 @@
   <div class="flex h-screen bg-surface">
     <Sidebar bind:mobileOpen={isSidebarOpen} onMobileClose={() => (isSidebarOpen = false)} />
     <div class="flex-1 min-w-0 flex flex-col overflow-hidden">
-      <TopBar onMenuToggle={() => (isSidebarOpen = !isSidebarOpen)} />
+      <TopBar onMenuToggle={() => (isSidebarOpen = !isSidebarOpen)} isNavigationOpen={isSidebarOpen} />
       <main class="flex-1 overflow-auto">
         {@render children()}
       </main>

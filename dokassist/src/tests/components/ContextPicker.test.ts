@@ -1,8 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { invoke } from '@tauri-apps/api/core';
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import ContextPicker from '$lib/components/context-picker/ContextPicker.svelte';
 import {
   createContextPlan,
+  refreshContextPlan,
   selectContextPatient,
   setComparisonMode,
   toggleContextSource,
@@ -30,6 +32,9 @@ const ada: Patient = {
 const grace: Patient = { ...ada, id: 'grace', first_name: 'Grace', last_name: 'Hopper' };
 
 describe('context plan state', () => {
+  beforeEach(() => {
+    vi.mocked(invoke).mockReset();
+  });
   it('keeps exactly one patient outside explicit comparison mode', () => {
     let plan = selectContextPatient(createContextPlan(), ada);
     plan = selectContextPatient(plan, grace);
@@ -51,6 +56,27 @@ describe('context plan state', () => {
     });
     plan = toggleContextSource(plan, 'files');
     expect(plan.sources.find((source) => source.kind === 'files')?.included).toBe(true);
+  });
+
+  it('aggregates planning counts across selected patients in comparison mode', async () => {
+    vi.mocked(invoke).mockImplementation(async (command, args) => {
+      const patientId =
+        (args as { patientId?: string; id?: string }).patientId ??
+        (args as { patientId?: string; id?: string }).id;
+      if (!patientId) throw new Error(`Missing patient id for ${command}`);
+      if (command === 'get_patient') return { id: patientId };
+      if (command === 'list_diagnoses_for_patient') return patientId === 'ada' ? [{}] : [{}, {}];
+      if (command === 'list_medications_for_patient') return [{}];
+      if (command === 'list_sessions_for_patient') return patientId === 'ada' ? [{}, {}] : [{}];
+      return [];
+    });
+
+    let plan = setComparisonMode(createContextPlan(), true);
+    plan = selectContextPatient(selectContextPatient(plan, ada), grace);
+    const refreshed = await refreshContextPlan(plan);
+
+    expect(refreshed.planning.retrieved).toBe(10);
+    expect(refreshed.planning.summarized).toBe(10);
   });
 });
 

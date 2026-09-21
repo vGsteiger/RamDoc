@@ -96,6 +96,10 @@
     };
   }
 
+  function writeReportDraftProposal(message: ChatMessageRow): CreateReport | null {
+    return message.tool_name === 'write_report' ? reportDraftProposal(message.content) : null;
+  }
+
   interface Props {
     message: ChatMessageRow;
     isStreaming?: boolean;
@@ -148,7 +152,7 @@
   let startedAt = $derived(activityStartedAt ?? fallbackStartedAt);
   let latestDraftVersion = $derived(draftVersions.at(-1) ?? null);
   let draftClaims = $derived(
-    reportDraftProposal(message.content) ? unsupportedDraftClaims(draftContent, draftEvidence) : []
+    writeReportDraftProposal(message) ? unsupportedDraftClaims(draftContent, draftEvidence) : []
   );
   let unresolvedDraftClaims = $derived(unresolvedClaims(draftClaims, claimResolutions));
 
@@ -177,7 +181,7 @@
   }
 
   async function loadDraftVersions() {
-    const proposal = reportDraftProposal(message.content);
+    const proposal = writeReportDraftProposal(message);
     if (!proposal) return;
     try {
       const loaded = await listChatDraftVersions(message.id);
@@ -321,7 +325,7 @@
   </div>
 {:else if message.role === 'tool_result'}
   {@const parsed = parseToolResult(message.content)}
-  {@const reportDraft = reportDraftProposal(message.content)}
+  {@const reportDraft = writeReportDraftProposal(message)}
   <div class="flex justify-start mb-3">
     <div class="max-w-[80%]">
       <button
