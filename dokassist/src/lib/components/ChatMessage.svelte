@@ -1,6 +1,19 @@
 <script lang="ts">
-  import type { ChatMessageRow } from '$lib/api';
-  import { createReport, type CreateReport } from '$lib/api';
+  import { onMount } from 'svelte';
+  import type { ChatDraftVersion, ChatMessageRow } from '$lib/api';
+  import {
+    appendChatDraftVersion,
+    createReport,
+    listChatDraftVersions,
+    type CreateReport,
+  } from '$lib/api';
+  import {
+    type ChatProvenance,
+    type ClaimResolution,
+    type ProvenanceSource,
+    unsupportedDraftClaims,
+    unresolvedClaims,
+  } from '$lib/chat-provenance';
   import { t } from '$lib/translations';
   import { Wrench, Check } from 'lucide-svelte';
   import { ThinkingIndicator } from '$lib/components/ui';
@@ -88,9 +101,20 @@
     isStreaming?: boolean;
     activityStartedAt?: number;
     activeToolName?: string | null;
+    /** Provenance assembled from persisted typed tool results in this turn. */
+    provenance?: ChatProvenance;
+    /** Read sources preceding this report proposal; never assistant citation text. */
+    draftEvidence?: ProvenanceSource[];
   }
 
-  let { message, isStreaming = false, activityStartedAt, activeToolName = null }: Props = $props();
+  let {
+    message,
+    isStreaming = false,
+    activityStartedAt,
+    activeToolName = null,
+    provenance = undefined,
+    draftEvidence = [],
+  }: Props = $props();
 
   let thinkContent = $derived(() => {
     if (!message.content.startsWith(THINK_START)) return '';
@@ -112,19 +136,38 @@
   let isSavingDraft = $state(false);
   let savedDraft = $state(false);
   let draftError = $state('');
+  let draftVersions = $state<ChatDraftVersion[]>([]);
+  let draftContent = $state('');
+  let claimResolutions = $state<Record<string, ClaimResolution | ''>>({});
+  let isSavingRevision = $state(false);
   let fallbackStartedAt = $state(Date.now());
   let activityStage = $derived(
     chatActivityStage(message.content, isStreaming ? activeToolName : null)
   );
   let showActivity = $derived(isStreaming && activityStage !== 'writing');
   let startedAt = $derived(activityStartedAt ?? fallbackStartedAt);
+  let latestDraftVersion = $derived(draftVersions.at(-1) ?? null);
+  let draftClaims = $derived(
+    reportDraftProposal(message.content) ? unsupportedDraftClaims(draftContent, draftEvidence) : []
+  );
+  let unresolvedDraftClaims = $derived(unresolvedClaims(draftClaims, claimResolutions));
 
   async function saveReviewedDraft(proposal: CreateReport) {
-    if (!reviewedDraft || isSavingDraft || savedDraft) return;
+    if (!reviewedDraft || isSavingDraft || savedDraft || unresolvedDraftClaims.length > 0) return;
     isSavingDraft = true;
     draftError = '';
     try {
-      await createReport(proposal);
+      // The acknowledgement becomes an immutable manual revision before the
+      // report write. It gives a later reviewer the exact text and the
+      // clinician's resolution choices without trusting model citations.
+      const version = await appendChatDraftVersion({
+        tool_result_message_id: message.id,
+        content: draftContent,
+        origin: 'manual',
+        claim_resolutions_json: JSON.stringify(claimResolutions),
+      });
+      draftVersions = [...draftVersions, version];
+      await createReport({ ...proposal, content: draftContent });
       savedDraft = true;
     } catch (error) {
       draftError = error instanceof Error ? error.message : String(error);
@@ -132,6 +175,69 @@
       isSavingDraft = false;
     }
   }
+
+  async function loadDraftVersions() {
+    const proposal = reportDraftProposal(message.content);
+    if (!proposal) return;
+    try {
+      const loaded = await listChatDraftVersions(message.id);
+      draftVersions = Array.isArray(loaded) ? loaded : [];
+      draftContent = draftVersions.at(-1)?.content ?? proposal.content;
+    } catch (error) {
+      // An initial version is persisted with the tool result. A failed read
+      // must not turn the original proposal into a silently-saveable draft.
+      draftContent = proposal.content;
+      draftError = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  async function saveManualRevision() {
+    if (isSavingRevision || !draftContent.trim()) return;
+    isSavingRevision = true;
+    draftError = '';
+    try {
+      const version = await appendChatDraftVersion({
+        tool_result_message_id: message.id,
+        content: draftContent,
+        origin: 'manual',
+        claim_resolutions_json: JSON.stringify(claimResolutions),
+      });
+      draftVersions = [...draftVersions, version];
+    } catch (error) {
+      draftError = error instanceof Error ? error.message : String(error);
+    } finally {
+      isSavingRevision = false;
+    }
+  }
+
+  function restoreDraftVersion(version: ChatDraftVersion) {
+    draftContent = version.content;
+    try {
+      const saved: unknown = JSON.parse(version.claim_resolutions_json);
+      claimResolutions =
+        saved && typeof saved === 'object' && !Array.isArray(saved)
+          ? (saved as Record<string, ClaimResolution | ''>)
+          : {};
+    } catch {
+      claimResolutions = {};
+    }
+    reviewedDraft = false;
+    savedDraft = false;
+  }
+
+  function claimLabel(claim: (typeof draftClaims)[number]) {
+    return claim.kind === 'unverified_citation'
+      ? $t('chat.unverifiedCitationClaim').replace('{citation}', claim.citation ?? '')
+      : $t('chat.missingTypedSourceClaim');
+  }
+
+  function sourceLabel(source: ProvenanceSource) {
+    return $t(`chat.provenanceSource.${source.toolName}`);
+  }
+
+  onMount(() => {
+    void loadDraftVersions();
+  });
 </script>
 
 {#if message.role === 'user'}
@@ -162,6 +268,31 @@
             {mainContent()}
           {:else if showActivity}
             <ThinkingIndicator stage={activityStage} {startedAt} toolName={activeToolName} />
+          {/if}
+        </div>
+      {/if}
+      {#if provenance && !isStreaming}
+        <div
+          class="rounded-card border border-line bg-surface-raised px-3 py-2 text-caption text-fg-muted"
+        >
+          {#if provenance.sources.length}
+            <p class="font-medium text-fg">{$t('chat.evidenceSources')}</p>
+            <ul class="mt-1 list-disc pl-4">
+              {#each provenance.sources as source (source.toolName)}
+                <li>{sourceLabel(source)}</li>
+              {/each}
+            </ul>
+            <p class="mt-1">{$t('chat.evidenceInference')}</p>
+          {:else}
+            <p class="text-warning-fg">{$t('chat.evidenceUnsupported')}</p>
+          {/if}
+          {#if provenance.unverifiedCitations.length}
+            <p class="mt-1 text-warning-fg">
+              {$t('chat.unverifiedCitations').replace(
+                '{citations}',
+                provenance.unverifiedCitations.join(', ')
+              )}
+            </p>
           {/if}
         </div>
       {/if}
@@ -245,8 +376,82 @@
           </p>
           <details class="text-caption text-fg-muted">
             <summary class="cursor-pointer text-fg">{$t('chat.reviewReportDraft')}</summary>
-            <pre class="mt-2 whitespace-pre-wrap font-sans">{reportDraft.content}</pre>
+            <textarea
+              bind:value={draftContent}
+              aria-label={$t('chat.editReportDraft')}
+              disabled={savedDraft || isSavingDraft}
+              rows="10"
+              class="mt-2 w-full rounded-control border border-line bg-surface-raised p-2 font-sans text-body text-fg"
+            ></textarea>
           </details>
+          <div class="flex flex-wrap items-center gap-2">
+            <button
+              onclick={saveManualRevision}
+              disabled={isSavingRevision ||
+                savedDraft ||
+                draftContent === latestDraftVersion?.content}
+              class="h-8 rounded-control border border-line px-3 text-caption text-fg disabled:opacity-50"
+              >{isSavingRevision
+                ? $t('chat.savingDraftRevision')
+                : $t('chat.saveDraftRevision')}</button
+            >
+            <span class="text-caption text-fg-muted"
+              >{$t('chat.draftVersionCount').replace('{count}', String(draftVersions.length))}</span
+            >
+          </div>
+          {#if draftVersions.length > 0}
+            <details class="text-caption text-fg-muted">
+              <summary class="cursor-pointer text-fg">{$t('chat.draftVersionHistory')}</summary>
+              <div class="mt-2 space-y-1">
+                {#each draftVersions as version (version.id)}
+                  <button
+                    onclick={() => restoreDraftVersion(version)}
+                    class="block text-left text-accent-fg underline"
+                    >{$t('chat.restoreDraftVersion')
+                      .replace('{version}', String(version.version_number))
+                      .replace('{origin}', version.origin)}</button
+                  >
+                {/each}
+              </div>
+            </details>
+          {/if}
+          {#if draftEvidence.length}
+            <p class="text-caption text-fg-muted">
+              {$t('chat.draftEvidenceSources').replace(
+                '{sources}',
+                draftEvidence.map(sourceLabel).join(', ')
+              )}
+            </p>
+          {/if}
+          {#if draftClaims.length}
+            <fieldset
+              class="space-y-2 rounded-control border border-warning-line bg-warning-subtle p-2"
+            >
+              <legend class="px-1 text-caption font-medium text-warning-fg">
+                {$t('chat.resolveUnsupportedClaims')}
+              </legend>
+              {#each draftClaims as claim (claim.id)}
+                <label class="block text-caption text-fg-muted">
+                  <span>{claimLabel(claim)}</span>
+                  <select
+                    class="mt-1 block w-full rounded-control border border-line bg-surface-raised p-1 text-fg"
+                    value={claimResolutions[claim.id] ?? ''}
+                    onchange={(event) => {
+                      claimResolutions = {
+                        ...claimResolutions,
+                        [claim.id]: event.currentTarget.value as ClaimResolution | '',
+                      };
+                    }}
+                  >
+                    <option value="">{$t('chat.selectClaimResolution')}</option>
+                    <option value="user_provided">{$t('chat.claimUserProvided')}</option>
+                    <option value="uncertain">{$t('chat.claimUncertain')}</option>
+                    <option value="removed">{$t('chat.claimRemoved')}</option>
+                  </select>
+                </label>
+              {/each}
+            </fieldset>
+          {/if}
           {#if savedDraft}
             <p class="text-caption text-success-fg">{$t('chat.reportDraftSaved')}</p>
           {:else}
@@ -259,7 +464,7 @@
             {/if}
             <button
               onclick={() => saveReviewedDraft(reportDraft)}
-              disabled={!reviewedDraft || isSavingDraft}
+              disabled={!reviewedDraft || isSavingDraft || unresolvedDraftClaims.length > 0}
               class="h-8 px-3 bg-accent text-on-accent rounded-control disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSavingDraft ? $t('chat.savingReportDraft') : $t('chat.saveReviewedReportDraft')}

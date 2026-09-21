@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/svelte';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/svelte';
+import { invoke } from '@tauri-apps/api/core';
 import ChatMessage from '../../lib/components/ChatMessage.svelte';
 import type { ChatMessageRow } from '$lib/api';
 
@@ -91,6 +92,53 @@ describe('ChatMessage', () => {
     expect(screen.getByText('Report draft — not saved')).toBeInTheDocument();
     expect(screen.getByRole('checkbox')).not.toBeChecked();
     expect(screen.getByRole('button', { name: /Save reviewed report draft/i })).toBeDisabled();
+  });
+
+  it('blocks a draft with an unverified citation until the clinician resolves it', async () => {
+    vi.mocked(invoke).mockResolvedValue([]);
+    render(ChatMessage, {
+      props: {
+        message: makeMsg({
+          role: 'tool_result',
+          tool_name: 'write_report',
+          content: JSON.stringify({
+            status: 'pending_clinician_confirmation',
+            action: 'create_report',
+            proposal: {
+              patient_id: 'p1',
+              report_type: 'Befundbericht',
+              content: 'Claim [E404]',
+              model_name: null,
+              prompt_hash: null,
+              session_ids: null,
+            },
+          }),
+        }),
+      },
+    });
+
+    await fireEvent.click(screen.getByRole('checkbox'));
+    expect(screen.getByText('Resolve unsupported claims before saving')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Save reviewed report draft/i })).toBeDisabled();
+    expect(screen.getAllByRole('combobox')).toHaveLength(2);
+  });
+
+  it('shows only typed tool-result sources, not citation-shaped assistant prose', () => {
+    render(ChatMessage, {
+      props: {
+        message: makeMsg({ role: 'assistant', content: 'Answer [E5]' }),
+        provenance: {
+          status: 'inferred',
+          sources: [{ toolName: 'list_medications', status: 'supported' }],
+          unverifiedCitations: ['[E5]'],
+        },
+      },
+    });
+    expect(screen.getByText('Sources used')).toBeInTheDocument();
+    expect(screen.getByText('Medications')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Citation-like text is not verified evidence here: \[E5\]/)
+    ).toBeInTheDocument();
   });
 
   it('renders a thinking status when streaming with empty content', () => {

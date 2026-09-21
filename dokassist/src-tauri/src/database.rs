@@ -397,6 +397,13 @@ fn run_migrations(conn: &Connection, audit_key: &[u8; MAC_SIZE]) -> Result<bool,
         conn.execute("PRAGMA user_version = 15;", [])?;
     }
 
+    // Migration 16: Durable, reversible versions for chat-generated drafts.
+    if version < 16 {
+        log::info!("Running migration 016: Chat draft versions");
+        conn.execute_batch(include_str!("migrations/016_chat_draft_versions.sql"))?;
+        conn.execute("PRAGMA user_version = 16;", [])?;
+    }
+
     log::info!("Database migrations complete");
     Ok(migrated_audit_chain)
 }
