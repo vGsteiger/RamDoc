@@ -84,8 +84,8 @@ describe('ContextPicker', () => {
   it('searches and selects a patient with accessible source controls', async () => {
     render(ContextPicker, { patients: [ada, grace] });
     await fireEvent.input(screen.getByRole('searchbox'), { target: { value: 'grace' } });
-    expect(screen.getByRole('option', { name: /grace hopper/i })).toBeInTheDocument();
-    await fireEvent.click(screen.getByRole('option', { name: /grace hopper/i }));
+    expect(screen.getByRole('button', { name: /grace hopper/i })).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole('button', { name: /grace hopper/i }));
     expect(screen.getByLabelText(/clear selected patients: grace hopper/i)).toBeInTheDocument();
     expect(screen.getByRole('checkbox', { name: 'Overview' })).toBeChecked();
   });

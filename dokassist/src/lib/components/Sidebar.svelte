@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import { page } from '$app/stores';
   import { lockApp } from '$lib/api';
   import { authStatus } from '$lib/stores/auth';
@@ -20,6 +21,8 @@
   }
 
   let { mobileOpen = $bindable(false), onMobileClose }: Props = $props();
+  let sidebarElement = $state<HTMLElement | null>(null);
+  let restoreFocusTo: HTMLElement | null = null;
 
   const navItems = [
     { path: '/dashboard', labelKey: 'nav.dashboard', icon: LayoutDashboard },
@@ -41,6 +44,43 @@
   }
 
   let currentPath = $derived($page.url.pathname);
+
+  function focusableElements(): HTMLElement[] {
+    return sidebarElement
+      ? [...sidebarElement.querySelectorAll<HTMLElement>('a[href], button:not([disabled])')]
+      : [];
+  }
+
+  function handleDrawerKeydown(event: KeyboardEvent) {
+    if (!mobileOpen) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      onMobileClose?.();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    const focusable = focusableElements();
+    if (!focusable.length) return;
+    const currentIndex = focusable.indexOf(document.activeElement as HTMLElement);
+    if (event.shiftKey && currentIndex <= 0) {
+      event.preventDefault();
+      focusable.at(-1)?.focus();
+    } else if (!event.shiftKey && currentIndex === focusable.length - 1) {
+      event.preventDefault();
+      focusable[0]?.focus();
+    }
+  }
+
+  $effect(() => {
+    if (!mobileOpen) return;
+    restoreFocusTo = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    void tick().then(() => focusableElements()[0]?.focus());
+    window.addEventListener('keydown', handleDrawerKeydown);
+    return () => {
+      window.removeEventListener('keydown', handleDrawerKeydown);
+      restoreFocusTo?.focus();
+    };
+  });
 </script>
 
 {#if mobileOpen}
@@ -53,6 +93,7 @@
 {/if}
 
 <aside
+  bind:this={sidebarElement}
   class="fixed inset-y-0 left-0 z-40 flex h-screen w-64 -translate-x-full flex-col border-r border-line-subtle bg-surface-sunken transition-transform duration-150 sm:relative sm:z-auto sm:w-56 sm:translate-x-0 sm:max-[900px]:w-14 {mobileOpen
     ? 'translate-x-0 shadow-modal'
     : ''}"

@@ -5,7 +5,10 @@ use crate::database::DbPool;
 use crate::llm::router::RouterBenchmarkDiagnostics;
 use crate::llm::{embed::EmbedEngine, EngineLifecyclePhase, EngineLifecycleStatus, LlmEngine};
 use rusqlite::Connection;
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc, Mutex,
+};
 
 pub(crate) fn llm_lock_poisoned() -> crate::error::AppError {
     crate::error::AppError::Llm("LLM state mutex poisoned".to_string())
@@ -33,6 +36,8 @@ pub struct AppState {
     pub router_lifecycle: Mutex<EngineLifecycleStatus>,
     pub router_lifecycle_changed: tokio::sync::Notify,
     pub router_benchmark: Mutex<RouterBenchmarkDiagnostics>,
+    /// Invalidates model loads that began before lock/reset teardown.
+    pub runtime_generation: AtomicU64,
     /// Embedding engine for semantic search.  Populated lazily by `process_file`.
     pub embed: Mutex<Option<Arc<Mutex<EmbedEngine>>>>,
     /// Unencrypted medication reference SQLite (public AIPS data).
@@ -100,6 +105,7 @@ impl AppState {
             router_lifecycle: Mutex::new(EngineLifecycleStatus::default()),
             router_lifecycle_changed: tokio::sync::Notify::new(),
             router_benchmark: Mutex::new(RouterBenchmarkDiagnostics::default()),
+            runtime_generation: AtomicU64::new(0),
             embed: Mutex::new(None),
             medication_ref: Mutex::new(medication_ref),
         }
@@ -220,6 +226,7 @@ impl AppState {
 
     /// Drop the LLM engine on app close / reset.
     pub fn clear_llm(&self) {
+        self.runtime_generation.fetch_add(1, Ordering::SeqCst);
         if let Ok(mut g) = self.llm.lock() {
             *g = None;
         }
@@ -237,6 +244,10 @@ impl AppState {
         }
         self.llm_lifecycle_changed.notify_waiters();
         self.router_lifecycle_changed.notify_waiters();
+    }
+
+    pub fn runtime_generation(&self) -> u64 {
+        self.runtime_generation.load(Ordering::SeqCst)
     }
 
     pub fn llm_lifecycle(&self) -> EngineLifecycleStatus {

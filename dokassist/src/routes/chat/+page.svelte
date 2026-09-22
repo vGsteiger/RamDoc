@@ -30,27 +30,41 @@
   let contextPlan = $state<ContextPlan>(createContextPlan());
   let showContextPicker = $state(false);
   let loadedRoute = '';
+  let routeLoadVersion = 0;
 
-  async function preloadLegacyPatientContext() {
-    if (!patientId) return;
+  async function preloadLegacyPatientContext(patientId: string, version: number) {
     try {
-      contextPlan = selectContextPatient(contextPlan, await getPatient(patientId));
+      const patient = await getPatient(patientId);
+      if (version === routeLoadVersion) {
+        contextPlan = selectContextPatient(contextPlan, patient);
+      }
     } catch (error) {
       console.error('Failed to preselect patient context:', error);
     }
   }
 
-  async function loadSessions() {
+  async function loadSessions(
+    currentScope = scope,
+    currentPatientId = patientId,
+    currentIntent = intent,
+    version = routeLoadVersion
+  ) {
     try {
       isLoading = true;
-      sessions = await listChatSessions(scope, patientId ?? undefined);
-      if (patientId && intent === 'report') {
-        const session = await createChatSession('patient', patientId, get(t)('chat.defaultTitle'));
-        sessions = [session, ...sessions];
-      } else if (patientId && sessions.length === 0) {
-        const session = await getOrCreatePatientChatSession(patientId);
-        sessions = [session];
+      let nextSessions = await listChatSessions(currentScope, currentPatientId ?? undefined);
+      if (currentPatientId && currentIntent === 'report') {
+        const session = await createChatSession(
+          'patient',
+          currentPatientId,
+          get(t)('chat.defaultTitle')
+        );
+        nextSessions = [session, ...nextSessions];
+      } else if (currentPatientId && nextSessions.length === 0) {
+        const session = await getOrCreatePatientChatSession(currentPatientId);
+        nextSessions = [session];
       }
+      if (version !== routeLoadVersion) return;
+      sessions = nextSessions;
       if (
         sessions.length > 0 &&
         (!activeSessionId || !sessions.some((session) => session.id === activeSessionId))
@@ -58,9 +72,9 @@
         activeSessionId = sessions[0].id;
       }
     } catch (e) {
-      console.error('Failed to load chat sessions:', e);
+      if (version === routeLoadVersion) console.error('Failed to load chat sessions:', e);
     } finally {
-      isLoading = false;
+      if (version === routeLoadVersion) isLoading = false;
     }
   }
 
@@ -82,11 +96,12 @@
     const route = `${patientId ?? ''}:${intent ?? ''}`;
     if (route === loadedRoute) return;
     loadedRoute = route;
+    const version = ++routeLoadVersion;
     activeSessionId = null;
     contextPlan = createContextPlan();
     showContextPicker = !!patientId;
-    void preloadLegacyPatientContext();
-    void loadSessions();
+    if (patientId) void preloadLegacyPatientContext(patientId, version);
+    void loadSessions(scope, patientId, intent, version);
   });
 
   onMount(() => {

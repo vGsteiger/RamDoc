@@ -265,24 +265,19 @@ pub fn append_chat_draft_version(
     serde_json::from_str::<serde_json::Value>(&input.claim_resolutions_json).map_err(|_| {
         AppError::Validation("claim_resolutions_json must be valid JSON".to_string())
     })?;
-    let version_number: i64 = conn.query_row(
-        "SELECT COALESCE(MAX(version_number), 0) + 1 FROM chat_draft_versions
-         WHERE tool_result_message_id = ?",
-        params![input.tool_result_message_id],
-        |row| row.get(0),
-    )?;
     let id = Uuid::now_v7().to_string();
     conn.execute(
         "INSERT INTO chat_draft_versions
          (id, tool_result_message_id, version_number, content, origin, claim_resolutions_json)
-         VALUES (?, ?, ?, ?, ?, ?)",
+         SELECT ?, ?, COALESCE(MAX(version_number), 0) + 1, ?, ?, ?
+         FROM chat_draft_versions WHERE tool_result_message_id = ?",
         params![
             id,
             input.tool_result_message_id,
-            version_number,
             input.content,
             input.origin,
             input.claim_resolutions_json,
+            input.tool_result_message_id,
         ],
     )?;
     conn.query_row(

@@ -476,14 +476,14 @@
             </fieldset>
           {/if}
           {#if savedDraft}
-            <p class="text-caption text-success-fg">{$t('chat.reportDraftSaved')}</p>
+            <p class="text-caption text-success-fg" role="status">{$t('chat.reportDraftSaved')}</p>
           {:else}
             <label class="flex items-start gap-2 text-caption text-fg-muted">
               <input type="checkbox" bind:checked={reviewedDraft} disabled={isSavingDraft} />
               <span>{$t('chat.confirmReportDraftReviewed')}</span>
             </label>
             {#if draftError}
-              <p class="text-caption text-danger-fg">{draftError}</p>
+              <p class="text-caption text-danger-fg" role="alert">{draftError}</p>
               <Button variant="secondary" size="md" onclick={loadDraftVersions}>
                 {$t('common.retry')}
               </Button>

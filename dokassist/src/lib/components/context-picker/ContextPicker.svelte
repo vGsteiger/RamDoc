@@ -40,6 +40,7 @@
   let query = $state('');
   let loadingPatients = $state(false);
   let refreshVersion = 0;
+  let searchVersion = 0;
   let labels = $derived({ ...DEFAULT_CONTEXT_PICKER_LABELS, ...labelOverrides });
   let matches = $derived(patients);
 
@@ -52,6 +53,7 @@
 
   $effect(() => {
     const needle = query.trim();
+    const version = ++searchVersion;
     if (initialPatients !== undefined) return;
     if (!needle) {
       patients = [];
@@ -65,9 +67,10 @@
         const ids = results
           .filter((result) => result.result_type === 'patient')
           .map((result) => result.entity_id);
-        patients = await Promise.all(ids.map((id) => getPatient(id)));
+        const found = await Promise.all(ids.map((id) => getPatient(id)));
+        if (version === searchVersion) patients = found;
       } finally {
-        loadingPatients = false;
+        if (version === searchVersion) loadingPatients = false;
       }
     }, 200);
     return () => clearTimeout(timeout);
@@ -134,11 +137,7 @@
         placeholder={labels.patientSearchPlaceholder}
         class="min-h-10 w-full rounded-control border border-line bg-surface-raised px-3 text-body text-fg focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25 disabled:bg-surface-sunken"
       />
-      <div
-        class="mt-2 max-h-40 overflow-y-auto rounded-control border border-line"
-        role="listbox"
-        aria-label={labels.patientSearch}
-      >
+      <div class="mt-2 max-h-40 overflow-y-auto rounded-control border border-line">
         {#if loadingPatients}
           <p class="p-3 text-body text-fg-muted">{labels.loading}</p>
         {:else if matches.length === 0}
@@ -148,8 +147,6 @@
             <button
               type="button"
               class="flex min-h-10 w-full items-center justify-between gap-3 px-3 text-left text-body text-fg hover:bg-surface-hover disabled:opacity-50"
-              role="option"
-              aria-selected={value.selectedPatients.some((item) => item.id === patient.id)}
               disabled={disabled || (!!lockedPatientId && patient.id !== lockedPatientId)}
               onclick={() => choose(patient)}
             >

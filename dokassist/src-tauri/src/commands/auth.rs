@@ -330,6 +330,7 @@ mod tests {
             router_lifecycle: Mutex::new(crate::llm::EngineLifecycleStatus::default()),
             router_lifecycle_changed: tokio::sync::Notify::new(),
             router_benchmark: Mutex::new(crate::llm::router::RouterBenchmarkDiagnostics::default()),
+            runtime_generation: std::sync::atomic::AtomicU64::new(0),
             embed: Mutex::new(None),
             medication_ref: Mutex::new(None),
         };

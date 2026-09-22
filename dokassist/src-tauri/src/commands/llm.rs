@@ -251,16 +251,21 @@ async fn load_model_request(
     model_filename: String,
     inference_profile: Option<String>,
 ) -> Result<(), AppError> {
+    let generation = state.runtime_generation();
     match state.begin_llm_load(&model_filename)? {
         LlmLoadDisposition::Join => return state.wait_for_llm_load(&model_filename).await,
         LlmLoadDisposition::AlreadyReady => return Ok(()),
         LlmLoadDisposition::Start => {}
     }
 
-    let result = load_model_after_lifecycle_start(state, &model_filename, inference_profile).await;
-    match &result {
-        Ok(()) => state.mark_llm_ready(model_filename),
-        Err(error) => state.mark_llm_load_failed(model_filename, error.to_string()),
+    let result =
+        load_model_after_lifecycle_start(state, &model_filename, inference_profile, generation)
+            .await;
+    if state.runtime_generation() == generation {
+        match &result {
+            Ok(()) => state.mark_llm_ready(model_filename),
+            Err(error) => state.mark_llm_load_failed(model_filename, error.to_string()),
+        }
     }
     result
 }
@@ -269,6 +274,7 @@ async fn load_model_after_lifecycle_start(
     state: &AppState,
     model_filename: &str,
     inference_profile: Option<String>,
+    generation: u64,
 ) -> Result<(), AppError> {
     let model_path = state.data_dir.join("models").join(model_filename);
     let verification_path = model_path.clone();
@@ -311,7 +317,12 @@ async fn load_model_after_lifecycle_start(
     .await
     .map_err(|e| AppError::Llm(format!("spawn_blocking error: {e}")))??;
 
-    *state.llm.lock().map_err(|_| llm_lock_poisoned())? = Some(Arc::new(engine));
+    check_auth(state)?;
+    let mut slot = state.llm.lock().map_err(|_| llm_lock_poisoned())?;
+    if state.runtime_generation() != generation {
+        return Err(AppError::AuthRequired);
+    }
+    *slot = Some(Arc::new(engine));
     Ok(())
 }
 
@@ -347,11 +358,14 @@ pub async fn ensure_router_engine(state: &AppState) -> Result<Option<Arc<LlmEngi
         }
         LlmLoadDisposition::AlreadyReady => {}
         LlmLoadDisposition::Start => {
-            let result = load_router_after_lifecycle_start(state, &selected).await;
-            match &result {
-                Ok(()) => state.mark_router_ready(selected.filename.clone()),
-                Err(error) => {
-                    state.mark_router_load_failed(selected.filename.clone(), error.to_string())
+            let generation = state.runtime_generation();
+            let result = load_router_after_lifecycle_start(state, &selected, generation).await;
+            if state.runtime_generation() == generation {
+                match &result {
+                    Ok(()) => state.mark_router_ready(selected.filename.clone()),
+                    Err(error) => {
+                        state.mark_router_load_failed(selected.filename.clone(), error.to_string())
+                    }
                 }
             }
             result?;
@@ -390,6 +404,7 @@ async fn unload_router_if_resident(state: &AppState) -> Result<(), AppError> {
 async fn load_router_after_lifecycle_start(
     state: &AppState,
     selected: &model::Model,
+    generation: u64,
 ) -> Result<(), AppError> {
     let model_path = state.data_dir.join("models").join(&selected.filename);
     let verification_path = model_path.clone();
@@ -437,11 +452,15 @@ async fn load_router_after_lifecycle_start(
     })
     .await
     .map_err(|error| AppError::Llm(format!("router spawn_blocking error: {error}")))??;
-    *state
+    check_auth(state)?;
+    let mut slot = state
         .router_llm
         .lock()
-        .map_err(|_| AppError::Llm("Router engine mutex poisoned".to_string()))? =
-        Some(Arc::new(engine));
+        .map_err(|_| AppError::Llm("Router engine mutex poisoned".to_string()))?;
+    if state.runtime_generation() != generation {
+        return Err(AppError::AuthRequired);
+    }
+    *slot = Some(Arc::new(engine));
     Ok(())
 }
 
