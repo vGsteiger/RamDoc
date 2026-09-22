@@ -29,6 +29,7 @@
   let starterPrompt = $derived(intent === 'report' ? get(t)('chat.reportStarterPrompt') : '');
   let contextPlan = $state<ContextPlan>(createContextPlan());
   let showContextPicker = $state(false);
+  let loadedRoute = '';
 
   async function preloadLegacyPatientContext() {
     if (!patientId) return;
@@ -43,11 +44,19 @@
     try {
       isLoading = true;
       sessions = await listChatSessions(scope, patientId ?? undefined);
-      if (patientId && sessions.length === 0) {
+      if (patientId && intent === 'report') {
+        const session = await createChatSession('patient', patientId, get(t)('chat.defaultTitle'));
+        sessions = [session, ...sessions];
+      } else if (patientId && sessions.length === 0) {
         const session = await getOrCreatePatientChatSession(patientId);
         sessions = [session];
       }
-      if (sessions.length > 0) activeSessionId = sessions[0].id;
+      if (
+        sessions.length > 0 &&
+        (!activeSessionId || !sessions.some((session) => session.id === activeSessionId))
+      ) {
+        activeSessionId = sessions[0].id;
+      }
     } catch (e) {
       console.error('Failed to load chat sessions:', e);
     } finally {
@@ -69,15 +78,23 @@
     }
   }
 
-  onMount(() => {
-    if (patientId) showContextPicker = true;
+  $effect(() => {
+    const route = `${patientId ?? ''}:${intent ?? ''}`;
+    if (route === loadedRoute) return;
+    loadedRoute = route;
+    activeSessionId = null;
+    contextPlan = createContextPlan();
+    showContextPicker = !!patientId;
     void preloadLegacyPatientContext();
-    loadSessions();
+    void loadSessions();
+  });
+
+  onMount(() => {
     void ensureEngineLoaded();
   });
 </script>
 
-<div class="flex h-full flex-col sm:flex-row">
+<div class="flex h-full min-h-0 flex-col sm:flex-row">
   <!-- Sidebar: session list -->
   <div
     class="h-52 w-full border-b border-line flex flex-col shrink-0 sm:h-auto sm:w-64 sm:border-b-0 sm:border-r"
@@ -99,7 +116,7 @@
   </div>
 
   <!-- Main: chat thread -->
-  <div class="flex-1 flex flex-col min-w-0">
+  <div class="flex min-h-0 min-w-0 flex-1 flex-col">
     <div class="border-b border-line bg-surface px-3 py-2 sm:px-4">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <div class="min-w-0">
@@ -128,7 +145,17 @@
       </div>
       {#if showContextPicker}
         <div class="mt-3">
-          <ContextPicker bind:value={contextPlan} />
+          <ContextPicker
+            bind:value={contextPlan}
+            lockedPatientId={scope === 'patient' ? (patientId ?? undefined) : undefined}
+            sourceLabels={{
+              overview: $t('chat.contextSourceOverview'),
+              diagnoses: $t('chat.contextSourceDiagnoses'),
+              medications: $t('chat.contextSourceMedications'),
+              sessions: $t('chat.contextSourceSessions'),
+              files: $t('chat.contextSourceFiles'),
+            }}
+          />
         </div>
       {/if}
     </div>

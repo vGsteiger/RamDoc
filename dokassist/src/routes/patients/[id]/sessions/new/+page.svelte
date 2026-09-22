@@ -92,7 +92,7 @@
 
   <form onsubmit={handleSubmit} class="space-y-6">
     <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      <div class="col-span-2">
+      <div class="col-span-1 sm:col-span-2">
         <label for="session-type" class="block text-body font-medium text-fg-muted mb-1">
           {$t('sessions.sessionType')} *
         </label>

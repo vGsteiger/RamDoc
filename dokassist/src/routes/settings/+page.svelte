@@ -47,6 +47,12 @@
   import { language } from '$lib/stores/language';
   import { engine, loadEngineModel, loadingModelLabel } from '$lib/stores/engine';
   import {
+    refreshRouterDiagnostics,
+    router,
+    setRouterOverride,
+    unloadRouter,
+  } from '$lib/stores/router';
+  import {
     reportGenerationSettings,
     type ReportGenerationPreset,
   } from '$lib/stores/report-generation';
@@ -149,6 +155,7 @@
 
     // Load installed models and task assignments
     await loadInstalledModels();
+    await refreshRouterDiagnostics();
   });
 
   async function loadInstalledModels() {
@@ -865,6 +872,42 @@
       <p class="text-caption text-fg-muted mt-2">
         {$t('settings.inferenceProfileDescription')}
       </p>
+    </div>
+
+    <div class="bg-surface-hover rounded-card p-4 mb-6">
+      <p class="text-heading font-medium text-fg">{$t('settings.routerModel')}</p>
+      <p class="mt-1 text-caption text-fg-muted">{$t('settings.routerModelDescription')}</p>
+      <label for="router-model" class="mt-4 block text-body font-medium text-fg mb-2">
+        {$t('settings.routerModel')}
+      </label>
+      <select
+        id="router-model"
+        class="w-full max-w-md rounded-control border border-line bg-surface-raised px-3 py-2 text-body text-fg"
+        disabled={$router.isMutating}
+        value={$router.diagnostics?.advanced_override.configured_filename ?? ''}
+        onchange={(event) => {
+          const filename = event.currentTarget.value;
+          void setRouterOverride(
+            filename
+              ? (installedModels.find((model) => model.filename === filename)?.id ?? null)
+              : null
+          );
+        }}
+      >
+        <option value="">{$t('settings.routerManaged')}</option>
+        {#each installedModels.filter((model) => model.exists_on_disk) as model (model.id)}
+          <option value={model.filename}>{model.name}</option>
+        {/each}
+      </select>
+      {#if $router.diagnostics?.fallback_reason}
+        <p class="mt-2 text-caption text-warning-fg">{$router.diagnostics.fallback_reason}</p>
+      {/if}
+      <button
+        type="button"
+        class="mt-3 min-h-10 rounded-control border border-line px-3 text-body text-fg hover:bg-surface-selected disabled:opacity-50"
+        disabled={$router.isMutating || !$router.diagnostics?.active_model_filename}
+        onclick={() => void unloadRouter()}>{$t('settings.unloadRouter')}</button
+      >
     </div>
 
     <div class="bg-surface-hover rounded-card p-4 mb-6">

@@ -61,7 +61,7 @@
     </div>
   {:else if patient}
     <div class="bg-surface-sunken border-b border-line-subtle px-4 py-4 sm:px-6 sm:py-5">
-      <h1 class="text-display font-semibold text-fg mb-1">
+      <h1 class="min-w-0 break-words text-display font-semibold text-fg mb-1">
         {patient.first_name}
         {patient.last_name}
       </h1>

@@ -110,8 +110,9 @@ export async function loadEngineModel(
 /** Ensure the durable default writing model is resident before chat work begins. */
 export async function ensureEngineLoaded(): Promise<void> {
   const status = (await refreshEngineStatus()) ?? get(store).status;
-  if (status?.is_loaded) return;
   const filename = status?.desired_model?.filename;
+  const activeFilename = status?.lifecycle.active_filename ?? status?.model_name;
+  if (status?.is_loaded && filename && activeFilename === filename) return;
   if (!filename) return;
   if (activeLoad) {
     if (activeLoad.filename === filename) return activeLoad.promise;

@@ -16,7 +16,7 @@
   } from '$lib/chat-provenance';
   import { t } from '$lib/translations';
   import { Wrench, Check } from 'lucide-svelte';
-  import { ThinkingIndicator } from '$lib/components/ui';
+  import { Button, ThinkingIndicator } from '$lib/components/ui';
   import { THINK_END, THINK_START, chatActivityStage } from '$lib/chat-activity';
 
   // Internal fields to hide from tool result display
@@ -140,6 +140,7 @@
   let isSavingDraft = $state(false);
   let savedDraft = $state(false);
   let draftError = $state('');
+  let draftVersionsLoaded = $state(false);
   let draftVersions = $state<ChatDraftVersion[]>([]);
   let draftContent = $state('');
   let claimResolutions = $state<Record<string, ClaimResolution | ''>>({});
@@ -155,9 +156,25 @@
     writeReportDraftProposal(message) ? unsupportedDraftClaims(draftContent, draftEvidence) : []
   );
   let unresolvedDraftClaims = $derived(unresolvedClaims(draftClaims, claimResolutions));
+  let removedClaimsStillPresent = $derived(
+    draftClaims.some(
+      (claim) =>
+        claim.citation &&
+        claimResolutions[claim.id] === 'removed' &&
+        draftContent.includes(claim.citation)
+    )
+  );
+  let canSaveDraft = $derived(
+    reviewedDraft &&
+      !isSavingDraft &&
+      draftVersionsLoaded &&
+      !draftError &&
+      unresolvedDraftClaims.length === 0 &&
+      !removedClaimsStillPresent
+  );
 
   async function saveReviewedDraft(proposal: CreateReport) {
-    if (!reviewedDraft || isSavingDraft || savedDraft || unresolvedDraftClaims.length > 0) return;
+    if (!canSaveDraft || savedDraft) return;
     isSavingDraft = true;
     draftError = '';
     try {
@@ -187,11 +204,13 @@
       const loaded = await listChatDraftVersions(message.id);
       draftVersions = Array.isArray(loaded) ? loaded : [];
       draftContent = draftVersions.at(-1)?.content ?? proposal.content;
+      draftVersionsLoaded = true;
     } catch (error) {
       // An initial version is persisted with the tool result. A failed read
       // must not turn the original proposal into a silently-saveable draft.
       draftContent = proposal.content;
       draftError = error instanceof Error ? error.message : String(error);
+      draftVersionsLoaded = false;
     }
   }
 
@@ -247,14 +266,14 @@
 {#if message.role === 'user'}
   <div class="flex justify-end mb-3">
     <div
-      class="max-w-[75%] bg-accent text-on-accent rounded-card px-4 py-2 text-body whitespace-pre-wrap"
+      class="min-w-0 max-w-[75%] break-words bg-accent text-on-accent rounded-card px-4 py-2 text-body whitespace-pre-wrap"
     >
       {message.content}
     </div>
   </div>
 {:else if message.role === 'assistant'}
   <div class="flex justify-start mb-3">
-    <div class="max-w-[80%] space-y-2">
+    <div class="min-w-0 max-w-[80%] break-words space-y-2">
       {#if thinkContent()}
         <details class="bg-surface-hover border border-line rounded-card px-3 py-2">
           <summary class="text-caption text-fg-subtle uppercase tracking-wide cursor-pointer">
@@ -304,7 +323,7 @@
   </div>
 {:else if message.role === 'tool_call'}
   <div class="flex justify-start mb-2">
-    <div class="max-w-[80%]">
+    <div class="min-w-0 max-w-[80%] break-words">
       <button
         onclick={() => (toolCallCollapsed = !toolCallCollapsed)}
         aria-label={toolCallCollapsed ? $t('chat.showToolCall') : $t('chat.hideToolCall')}
@@ -327,7 +346,7 @@
   {@const parsed = parseToolResult(message.content)}
   {@const reportDraft = writeReportDraftProposal(message)}
   <div class="flex justify-start mb-3">
-    <div class="max-w-[80%]">
+    <div class="min-w-0 max-w-[80%] break-words">
       <button
         onclick={() => (toolResultCollapsed = !toolResultCollapsed)}
         aria-label={toolResultCollapsed ? $t('chat.showToolResult') : $t('chat.hideToolResult')}
@@ -389,15 +408,15 @@
             ></textarea>
           </details>
           <div class="flex flex-wrap items-center gap-2">
-            <button
+            <Button
               onclick={saveManualRevision}
               disabled={isSavingRevision ||
                 savedDraft ||
                 draftContent === latestDraftVersion?.content}
-              class="h-8 rounded-control border border-line px-3 text-caption text-fg disabled:opacity-50"
+              size="md"
               >{isSavingRevision
                 ? $t('chat.savingDraftRevision')
-                : $t('chat.saveDraftRevision')}</button
+                : $t('chat.saveDraftRevision')}</Button
             >
             <span class="text-caption text-fg-muted"
               >{$t('chat.draftVersionCount').replace('{count}', String(draftVersions.length))}</span
@@ -465,14 +484,19 @@
             </label>
             {#if draftError}
               <p class="text-caption text-danger-fg">{draftError}</p>
+              <Button variant="secondary" size="md" onclick={loadDraftVersions}>
+                {$t('common.retry')}
+              </Button>
             {/if}
-            <button
+            <Button
               onclick={() => saveReviewedDraft(reportDraft)}
-              disabled={!reviewedDraft || isSavingDraft || unresolvedDraftClaims.length > 0}
-              class="h-8 px-3 bg-accent text-on-accent rounded-control disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={!canSaveDraft}
+              loading={isSavingDraft}
+              variant="primary"
+              size="md"
             >
               {isSavingDraft ? $t('chat.savingReportDraft') : $t('chat.saveReviewedReportDraft')}
-            </button>
+            </Button>
           {/if}
         </div>
       {/if}

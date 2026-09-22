@@ -291,10 +291,11 @@ pub fn run_agent_loop(
     });
 
     let mut tool_calls_made: Vec<ExecutedToolCall> = Vec::new();
-    let probe_engine = router_engine.unwrap_or(engine);
+    let mut probe_engine = router_engine.unwrap_or(engine);
+    let mut using_dedicated_router = router_engine.is_some();
     let mut router_probe_count = 0_u64;
     let mut router_probe_duration_ms = 0_u64;
-    let summarize_threshold = engine
+    let summarize_threshold = probe_engine
         .context_size()
         .saturating_sub(probe_profile.max_tokens + chat_profile.max_tokens + 512);
 
@@ -315,7 +316,7 @@ pub fn run_agent_loop(
         // so Extra high effort cannot hide a tool call inside <think>.
         let mut probe_output = String::new();
         let probe_started = std::time::Instant::now();
-        probe_engine.generate_streaming_session_with_sampler(
+        let probe_result = probe_engine.generate_streaming_session_with_sampler(
             &inference_session,
             &probe_system,
             &prompt,
@@ -325,7 +326,18 @@ pub fn run_agent_loop(
                 probe_output.push_str(token);
                 !probe_output.contains("</tool_call>")
             },
-        )?;
+        );
+        if let Err(error) = probe_result {
+            if using_dedicated_router {
+                log::warn!(
+                    "Dedicated tool router probe failed; retrying with writing engine: {error}"
+                );
+                probe_engine = engine;
+                using_dedicated_router = false;
+                continue;
+            }
+            return Err(error);
+        }
         router_probe_count = router_probe_count.saturating_add(1);
         router_probe_duration_ms = router_probe_duration_ms.saturating_add(
             probe_started

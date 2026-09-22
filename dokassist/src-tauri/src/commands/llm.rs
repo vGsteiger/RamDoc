@@ -321,6 +321,7 @@ async fn load_model_after_lifecycle_start(
 pub async fn ensure_router_engine(state: &AppState) -> Result<Option<Arc<LlmEngine>>, AppError> {
     let plan = resolve_router_plan(state)?;
     let Some(selected) = plan.selected_model else {
+        unload_router_if_resident(state).await?;
         return Ok(None);
     };
 
@@ -336,6 +337,7 @@ pub async fn ensure_router_engine(state: &AppState) -> Result<Option<Arc<LlmEngi
             .as_ref()
             .is_some_and(|model| model.id == selected.id)
     {
+        unload_router_if_resident(state).await?;
         return Ok(None);
     }
 
@@ -366,6 +368,23 @@ pub async fn ensure_router_engine(state: &AppState) -> Result<Option<Arc<LlmEngi
             AppError::Llm("Router finished loading without becoming resident".to_string())
         })
         .map(Some)
+}
+
+async fn unload_router_if_resident(state: &AppState) -> Result<(), AppError> {
+    let resident = state
+        .router_llm
+        .lock()
+        .map_err(|_| AppError::Llm("Router engine mutex poisoned".to_string()))?
+        .is_some();
+    if resident
+        || matches!(
+            state.router_lifecycle().phase,
+            crate::llm::EngineLifecyclePhase::Ready
+        )
+    {
+        unload_router_engine(state).await?;
+    }
+    Ok(())
 }
 
 async fn load_router_after_lifecycle_start(
@@ -428,6 +447,10 @@ async fn load_router_after_lifecycle_start(
 
 #[tauri::command]
 pub async fn unload_router_model(state: State<'_, AppState>) -> Result<(), AppError> {
+    unload_router_engine(&state).await
+}
+
+async fn unload_router_engine(state: &AppState) -> Result<(), AppError> {
     state.begin_router_unload()?;
     let _swap_lease = state.router_llm_swap.lock().await;
     let old = state
@@ -470,9 +493,7 @@ pub async fn set_router_model_override(
 
     // Invalidate the old role immediately. The next agent turn resolves the
     // durable policy and lazily loads the selected runtime.
-    if state.router_lifecycle().active_filename.is_some() {
-        unload_router_model(state).await?;
-    }
+    unload_router_if_resident(&state).await?;
     Ok(())
 }
 

@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { listPatients, type Patient } from '$lib/api';
+  import { getPatient, globalSearch, type Patient } from '$lib/api';
   import {
     createContextPlan,
     refreshContextPlan,
@@ -21,7 +20,9 @@
     value?: ContextPlan;
     patients?: Patient[];
     labels?: Partial<ContextPickerLabels>;
+    sourceLabels?: Partial<Record<ContextSourceKind, string>>;
     disabled?: boolean;
+    lockedPatientId?: string;
     onplanchange?: (plan: ContextPlan) => void;
   }
 
@@ -29,7 +30,9 @@
     value = $bindable(createContextPlan()),
     patients: initialPatients = undefined,
     labels: labelOverrides = {},
+    sourceLabels = {},
     disabled = false,
+    lockedPatientId = undefined,
     onplanchange,
   }: Props = $props();
 
@@ -38,15 +41,7 @@
   let loadingPatients = $state(false);
   let refreshVersion = 0;
   let labels = $derived({ ...DEFAULT_CONTEXT_PICKER_LABELS, ...labelOverrides });
-  let matches = $derived(
-    patients.filter((patient) => {
-      const needle = query.trim().toLowerCase();
-      if (!needle) return true;
-      return `${patient.first_name} ${patient.last_name} ${patient.ahv_number ?? ''}`
-        .toLowerCase()
-        .includes(needle);
-    })
-  );
+  let matches = $derived(patients);
 
   $effect(() => {
     if (initialPatients !== undefined) {
@@ -55,14 +50,27 @@
     }
   });
 
-  onMount(async () => {
+  $effect(() => {
+    const needle = query.trim();
     if (initialPatients !== undefined) return;
-    loadingPatients = true;
-    try {
-      patients = await listPatients(100);
-    } finally {
+    if (!needle) {
+      patients = [];
       loadingPatients = false;
+      return;
     }
+    const timeout = setTimeout(async () => {
+      loadingPatients = true;
+      try {
+        const results = await globalSearch(needle, 50);
+        const ids = results
+          .filter((result) => result.result_type === 'patient')
+          .map((result) => result.entity_id);
+        patients = await Promise.all(ids.map((id) => getPatient(id)));
+      } finally {
+        loadingPatients = false;
+      }
+    }, 200);
+    return () => clearTimeout(timeout);
   });
 
   function update(plan: ContextPlan, refresh = false) {
@@ -86,12 +94,13 @@
   }
 
   function choose(patient: Patient) {
+    if (lockedPatientId && patient.id !== lockedPatientId) return;
     update(selectContextPatient(value, patient), true);
     query = '';
   }
 
   function sourceLabel(kind: ContextSourceKind) {
-    return kind[0].toUpperCase() + kind.slice(1);
+    return sourceLabels[kind] ?? kind[0].toUpperCase() + kind.slice(1);
   }
 </script>
 
@@ -104,14 +113,14 @@
       <h2 id="context-picker-title" class="text-heading text-fg">{labels.title}</h2>
       <p class="mt-1 text-caption text-fg-muted">{labels.comparisonModeHint}</p>
     </div>
-    <button
-      type="button"
-      class="min-h-10 rounded-control border border-line px-3 text-body text-fg hover:bg-surface-hover disabled:opacity-50"
-      aria-pressed={value.comparisonMode}
-      {disabled}
-      onclick={() => update(setComparisonMode(value, !value.comparisonMode))}
-      >{labels.comparisonMode}</button
-    >
+    {#if !lockedPatientId}<button
+        type="button"
+        class="min-h-10 rounded-control border border-line px-3 text-body text-fg hover:bg-surface-hover disabled:opacity-50"
+        aria-pressed={value.comparisonMode}
+        {disabled}
+        onclick={() => update(setComparisonMode(value, !value.comparisonMode))}
+        >{labels.comparisonMode}</button
+      >{/if}
   </div>
 
   <div class="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.8fr)]">
@@ -141,7 +150,7 @@
               class="flex min-h-10 w-full items-center justify-between gap-3 px-3 text-left text-body text-fg hover:bg-surface-hover disabled:opacity-50"
               role="option"
               aria-selected={value.selectedPatients.some((item) => item.id === patient.id)}
-              {disabled}
+              disabled={disabled || (!!lockedPatientId && patient.id !== lockedPatientId)}
               onclick={() => choose(patient)}
             >
               <span class="truncate">{patient.first_name} {patient.last_name}</span>
@@ -160,8 +169,8 @@
         {#each value.selectedPatients as patient (patient.id)}
           <button
             type="button"
-            class="min-h-9 rounded-full border border-accent-line bg-accent-subtle px-3 text-label text-accent-fg hover:bg-surface-selected disabled:opacity-50"
-            {disabled}
+            class="min-h-9 max-w-full truncate rounded-full border border-accent-line bg-accent-subtle px-3 text-label text-accent-fg hover:bg-surface-selected disabled:opacity-50"
+            disabled={disabled || patient.id === lockedPatientId}
             onclick={() => update(removeContextPatient(value, patient.id), true)}
             aria-label={`${labels.clearPatients}: ${patient.first_name} ${patient.last_name}`}
             >{patient.first_name} {patient.last_name} ×</button
@@ -208,7 +217,6 @@
   >
     <span>{labels.included}: {value.planning.included.length}</span>
     <span>{labels.retrieved}: {value.planning.retrieved}</span>
-    <span>{labels.summarized}: {value.planning.summarized}</span>
     {#if value.planning.isRefreshing}<span>{labels.loading}</span>{/if}
   </div>
 </section>

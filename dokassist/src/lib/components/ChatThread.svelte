@@ -53,7 +53,9 @@
   let unlistenError: UnlistenFn | null = null;
   /** True until `run_agent_turn` settles, including the post-loop persist emit. */
   let turnInFlight = $state(false);
-  let requestContextPreamble = $derived(contextPlan ? serializeContextPreamble(contextPlan) : null);
+  let requestContextPreamble = $derived(
+    scope === 'global' && contextPlan ? serializeContextPreamble(contextPlan) : null
+  );
 
   function isThisSession(payload: { session_id?: string } | null | undefined): boolean {
     return payload?.session_id === sessionId;
@@ -70,6 +72,13 @@
   function applyInitialMessage() {
     if (initialMessage && !inputText && messages.length === 0) inputText = initialMessage;
   }
+
+  $effect(() => {
+    initialMessage;
+    messages.length;
+    inputText;
+    applyInitialMessage();
+  });
 
   function scrollToBottom() {
     messagesEndEl?.scrollIntoView({ behavior: 'smooth' });
@@ -212,7 +221,7 @@
   });
 </script>
 
-<div class="flex flex-col h-full">
+<div class="flex min-h-0 flex-1 flex-col">
   {#if isLoadingModel && $engine.loadingStartedAt}
     <div class="bg-warning-subtle border-b border-warning-line px-4 py-3">
       <ThinkingIndicator
@@ -239,7 +248,7 @@
   {/if}
 
   <!-- Message list -->
-  <div class="flex-1 overflow-y-auto px-4 py-4 space-y-1">
+  <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4 space-y-1">
     {#each messages as message, index (message.id)}
       <ChatMessage
         {message}

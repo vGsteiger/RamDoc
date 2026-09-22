@@ -229,6 +229,14 @@ impl AppState {
         if let Ok(mut g) = self.router_llm.lock() {
             *g = None;
         }
+        if let Ok(mut lifecycle) = self.llm_lifecycle.lock() {
+            *lifecycle = EngineLifecycleStatus::default();
+        }
+        if let Ok(mut lifecycle) = self.router_lifecycle.lock() {
+            *lifecycle = EngineLifecycleStatus::default();
+        }
+        self.llm_lifecycle_changed.notify_waiters();
+        self.router_lifecycle_changed.notify_waiters();
     }
 
     pub fn llm_lifecycle(&self) -> EngineLifecycleStatus {

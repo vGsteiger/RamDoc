@@ -169,7 +169,7 @@ export function serializeContextPreamble(plan: ContextPlan): string | null {
     '[Visible context plan for this request — not a durable session setting]',
     `Patients: ${patients}`,
     `Requested sources: ${sources || 'none'}`,
-    `Planning metadata: included=${plan.planning.included.length}; retrieved=${plan.planning.retrieved}; summarized=${plan.planning.summarized}.`,
+    `Planning metadata: included=${plan.planning.included.length}; retrieved=${plan.planning.retrieved}.`,
     'Use this plan only for this request. State clearly when a requested source is unavailable.',
   ].join('\n');
 }
