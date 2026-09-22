@@ -47,7 +47,7 @@ core-foundation-sys = "0.8"
 aes-gcm = "0.11"
 aes-gcm-siv = { version = "0.11", default-features = false, features = ["aes", "alloc"] }
 ring = "0.17"
-argon2 = "0.5"
+argon2 = "0.6"
 bip39 = "2"
 zeroize = { version = "1", features = ["derive"] }
 rand = "0.10"
