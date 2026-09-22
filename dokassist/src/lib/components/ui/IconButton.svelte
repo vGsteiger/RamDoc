@@ -28,7 +28,7 @@
 
   let classes = $derived(
     [
-      'inline-flex h-7 w-7 items-center justify-center rounded-control',
+      'inline-flex h-10 w-10 items-center justify-center rounded-control',
       'transition-colors duration-150 ease-standard',
       'disabled:pointer-events-none disabled:opacity-50',
       tones[tone],

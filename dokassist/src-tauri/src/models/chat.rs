@@ -35,6 +35,32 @@ pub struct CreateChatMessage {
     pub tool_result_for: Option<String>,
 }
 
+/// An immutable revision of an unsaved chat draft.  Saving a report is a
+/// separate, explicit clinician action; this table only preserves revisions.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatDraftVersion {
+    pub id: String,
+    pub tool_result_message_id: String,
+    pub version_number: i64,
+    pub content: String,
+    pub origin: String,
+    pub claim_resolutions_json: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreateChatDraftVersion {
+    pub tool_result_message_id: String,
+    pub content: String,
+    pub origin: String,
+    #[serde(default = "default_claim_resolutions")]
+    pub claim_resolutions_json: String,
+}
+
+fn default_claim_resolutions() -> String {
+    "[]".to_string()
+}
+
 fn row_to_session(row: &Row) -> Result<ChatSession, rusqlite::Error> {
     Ok(ChatSession {
         id: row.get(0)?,
@@ -56,6 +82,18 @@ fn row_to_message(row: &Row) -> Result<ChatMessageRow, rusqlite::Error> {
         tool_args_json: row.get(5)?,
         tool_result_for: row.get(6)?,
         created_at: row.get(7)?,
+    })
+}
+
+fn row_to_draft_version(row: &Row) -> Result<ChatDraftVersion, rusqlite::Error> {
+    Ok(ChatDraftVersion {
+        id: row.get(0)?,
+        tool_result_message_id: row.get(1)?,
+        version_number: row.get(2)?,
+        content: row.get(3)?,
+        origin: row.get(4)?,
+        claim_resolutions_json: row.get(5)?,
+        created_at: row.get(6)?,
     })
 }
 
@@ -199,6 +237,71 @@ pub fn list_chat_messages(
     Ok(msgs)
 }
 
+pub fn get_chat_message(conn: &Connection, id: &str) -> Result<ChatMessageRow, AppError> {
+    conn.query_row(
+        "SELECT id, session_id, role, content, tool_name, tool_args_json, tool_result_for, created_at
+         FROM chat_messages WHERE id = ?",
+        params![id],
+        row_to_message,
+    )
+    .map_err(|e| match e {
+        rusqlite::Error::QueryReturnedNoRows => {
+            AppError::NotFound(format!("Chat message not found: {id}"))
+        }
+        other => AppError::from(other),
+    })
+}
+
+pub fn append_chat_draft_version(
+    conn: &Connection,
+    input: &CreateChatDraftVersion,
+) -> Result<ChatDraftVersion, AppError> {
+    if !matches!(input.origin.as_str(), "ai" | "manual") {
+        return Err(AppError::Validation(
+            "Invalid draft version origin".to_string(),
+        ));
+    }
+    // Store valid JSON so resolution records retain a stable, typed shape.
+    serde_json::from_str::<serde_json::Value>(&input.claim_resolutions_json).map_err(|_| {
+        AppError::Validation("claim_resolutions_json must be valid JSON".to_string())
+    })?;
+    let id = Uuid::now_v7().to_string();
+    conn.execute(
+        "INSERT INTO chat_draft_versions
+         (id, tool_result_message_id, version_number, content, origin, claim_resolutions_json)
+         SELECT ?, ?, COALESCE(MAX(version_number), 0) + 1, ?, ?, ?
+         FROM chat_draft_versions WHERE tool_result_message_id = ?",
+        params![
+            id,
+            input.tool_result_message_id,
+            input.content,
+            input.origin,
+            input.claim_resolutions_json,
+            input.tool_result_message_id,
+        ],
+    )?;
+    conn.query_row(
+        "SELECT id, tool_result_message_id, version_number, content, origin, claim_resolutions_json, created_at
+         FROM chat_draft_versions WHERE id = ?",
+        params![id],
+        row_to_draft_version,
+    )
+    .map_err(AppError::from)
+}
+
+pub fn list_chat_draft_versions(
+    conn: &Connection,
+    tool_result_message_id: &str,
+) -> Result<Vec<ChatDraftVersion>, AppError> {
+    let mut stmt = conn.prepare(
+        "SELECT id, tool_result_message_id, version_number, content, origin, claim_resolutions_json, created_at
+         FROM chat_draft_versions WHERE tool_result_message_id = ? ORDER BY version_number ASC",
+    )?;
+    let rows = stmt.query_map(params![tool_result_message_id], row_to_draft_version)?;
+    let versions = rows.collect::<Result<Vec<_>, _>>()?;
+    Ok(versions)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -272,6 +375,52 @@ mod tests {
         assert_eq!(msgs.len(), 2);
         assert_eq!(msgs[0].role, "user");
         assert_eq!(msgs[1].role, "assistant");
+    }
+
+    #[test]
+    fn test_draft_versions_are_ordered_and_reversible() {
+        let (_dir, pool) = open_test_db();
+        let conn = pool.conn().unwrap();
+        let session = create_chat_session(&conn, "global", None, "T").unwrap();
+        let tool_result = append_chat_message(
+            &conn,
+            &CreateChatMessage {
+                session_id: session.id,
+                role: "tool_result".to_string(),
+                content: "{}".to_string(),
+                tool_name: Some("write_report".to_string()),
+                tool_args_json: None,
+                tool_result_for: None,
+            },
+        )
+        .unwrap();
+        let first = append_chat_draft_version(
+            &conn,
+            &CreateChatDraftVersion {
+                tool_result_message_id: tool_result.id.clone(),
+                content: "AI draft".to_string(),
+                origin: "ai".to_string(),
+                claim_resolutions_json: "[]".to_string(),
+            },
+        )
+        .unwrap();
+        let second = append_chat_draft_version(
+            &conn,
+            &CreateChatDraftVersion {
+                tool_result_message_id: tool_result.id.clone(),
+                content: "Clinician revision".to_string(),
+                origin: "manual".to_string(),
+                claim_resolutions_json:
+                    r#"[{"id":"missing-typed-source","resolution":"uncertain"}]"#.to_string(),
+            },
+        )
+        .unwrap();
+        let versions = list_chat_draft_versions(&conn, &tool_result.id).unwrap();
+        assert_eq!(versions.len(), 2);
+        assert_eq!(versions[0].id, first.id);
+        assert_eq!(versions[0].version_number, 1);
+        assert_eq!(versions[1].id, second.id);
+        assert_eq!(versions[1].content, "Clinician revision");
     }
 
     #[test]

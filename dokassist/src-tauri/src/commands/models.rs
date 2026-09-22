@@ -1,6 +1,6 @@
 use crate::error::AppError;
 use crate::llm::{download, quantization, ModelChoice};
-use crate::models::model::{self, Model, TaskModel, TaskType};
+use crate::models::model::{self, Model};
 use crate::state::{llm_lock_poisoned, AppState};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
@@ -257,6 +257,21 @@ pub async fn download_and_register_model(
 /// Delete a model (removes file and database record)
 #[tauri::command]
 pub async fn delete_model(state: State<'_, AppState>, model_id: String) -> Result<(), AppError> {
+    // Share the swap coordinator with loading so a status snapshot cannot
+    // delete a file while it is becoming resident.
+    let _swap_lease = state.llm_swap.lock().await;
+    let _router_swap_lease = state.router_llm_swap.lock().await;
+    if matches!(
+        state.llm_lifecycle().phase,
+        crate::llm::EngineLifecyclePhase::Loading | crate::llm::EngineLifecyclePhase::Unloading
+    ) || matches!(
+        state.router_lifecycle().phase,
+        crate::llm::EngineLifecyclePhase::Loading | crate::llm::EngineLifecyclePhase::Unloading
+    ) {
+        return Err(AppError::Validation(
+            "Cannot delete a model while a runtime lifecycle is changing".to_string(),
+        ));
+    }
     let db = state.get_db()?;
 
     // Use a block so conn (MutexGuard, not Send) is dropped before any await points
@@ -267,6 +282,13 @@ pub async fn delete_model(state: State<'_, AppState>, model_id: String) -> Resul
         let is_loaded = {
             let llm = state.llm.lock().map_err(|_| llm_lock_poisoned())?;
             llm.as_ref()
+                .and_then(|engine| engine.status().downloaded_filename)
+                .as_ref()
+                == Some(&model.filename)
+        } || {
+            let router_llm = state.router_llm.lock().map_err(|_| llm_lock_poisoned())?;
+            router_llm
+                .as_ref()
                 .and_then(|engine| engine.status().downloaded_filename)
                 .as_ref()
                 == Some(&model.filename)
@@ -309,6 +331,19 @@ pub async fn set_default_model(
     let db = state.get_db()?;
     let conn = db.conn()?;
 
+    let selected = model::get_model(&conn, &model_id)?;
+    if !state
+        .data_dir
+        .join("models")
+        .join(&selected.filename)
+        .is_file()
+    {
+        return Err(AppError::Validation(format!(
+            "Cannot use '{}' as the writing model because its file is missing",
+            selected.name
+        )));
+    }
+
     model::set_default_model(&conn, &model_id)?;
 
     Ok(())
@@ -320,80 +355,6 @@ pub async fn get_default_model(state: State<'_, AppState>) -> Result<Option<Mode
     let db = state.get_db()?;
     let conn = db.conn()?;
 
-    model::get_default_model(&conn)
-}
-
-/// Set the model for a specific task type
-#[tauri::command]
-pub async fn set_task_model(
-    state: State<'_, AppState>,
-    task_type: String,
-    model_id: String,
-) -> Result<(), AppError> {
-    let db = state.get_db()?;
-    let conn = db.conn()?;
-
-    let task = TaskType::from_str(&task_type)?;
-    model::set_task_model(&conn, task, &model_id)?;
-
-    Ok(())
-}
-
-/// Get the model assigned to a specific task type
-#[tauri::command]
-pub async fn get_task_model(
-    state: State<'_, AppState>,
-    task_type: String,
-) -> Result<Option<Model>, AppError> {
-    let db = state.get_db()?;
-    let conn = db.conn()?;
-
-    let task = TaskType::from_str(&task_type)?;
-    model::get_task_model(&conn, task)
-}
-
-/// List all task model assignments
-#[tauri::command]
-pub async fn list_task_models(state: State<'_, AppState>) -> Result<Vec<TaskModel>, AppError> {
-    let db = state.get_db()?;
-    let conn = db.conn()?;
-
-    model::list_task_models(&conn)
-}
-
-/// Clear the model assignment for a specific task type
-#[tauri::command]
-pub async fn clear_task_model(
-    state: State<'_, AppState>,
-    task_type: String,
-) -> Result<(), AppError> {
-    let db = state.get_db()?;
-    let conn = db.conn()?;
-
-    let task = TaskType::from_str(&task_type)?;
-    model::clear_task_model(&conn, task)?;
-
-    Ok(())
-}
-
-/// Get the appropriate model for a given task type
-/// Falls back to default model if no task-specific model is set
-#[tauri::command]
-pub async fn get_model_for_task(
-    state: State<'_, AppState>,
-    task_type: String,
-) -> Result<Option<Model>, AppError> {
-    let db = state.get_db()?;
-    let conn = db.conn()?;
-
-    let task = TaskType::from_str(&task_type)?;
-
-    // Try to get task-specific model
-    if let Some(model) = model::get_task_model(&conn, task)? {
-        return Ok(Some(model));
-    }
-
-    // Fall back to default model
     model::get_default_model(&conn)
 }
 
@@ -444,10 +405,18 @@ pub async fn list_available_models(
     let mut result: Vec<AvailableModel> = available_models
         .into_iter()
         .map(|mut am| {
-            // Check if this model is downloaded
+            // A registry row alone is not a usable download. Keep the picker
+            // able to repair a model whose file was removed externally.
             if let Some(installed) = installed_models.iter().find(|m| m.filename == am.filename) {
-                am.is_downloaded = true;
-                am.model_id = Some(installed.id.clone());
+                if state
+                    .data_dir
+                    .join("models")
+                    .join(&installed.filename)
+                    .is_file()
+                {
+                    am.is_downloaded = true;
+                    am.model_id = Some(installed.id.clone());
+                }
             }
             am
         })

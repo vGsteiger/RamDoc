@@ -159,7 +159,8 @@
 <div class="bg-surface-raised rounded-card border border-line">
   <button
     onclick={() => (isExpanded = !isExpanded)}
-    class="flex items-center justify-between w-full p-4 hover:bg-surface-hover transition-colors rounded-t-card"
+    class="flex min-h-11 items-center justify-between w-full p-4 hover:bg-surface-hover transition-colors rounded-t-card"
+    aria-expanded={isExpanded}
   >
     <h3 class="text-heading font-semibold text-fg">{$t('patientHistory.title')}</h3>
     {#if isExpanded}
@@ -179,7 +180,7 @@
             <button
               onclick={() => handleSuggestedQuery(suggested)}
               disabled={isQuerying}
-              class="h-7 px-2.5 text-body bg-surface-hover text-fg-muted rounded-full hover:bg-surface-selected transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              class="min-h-9 px-3 text-body bg-surface-hover text-fg-muted rounded-full hover:bg-surface-selected transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {suggested}
             </button>
@@ -188,7 +189,7 @@
       </div>
 
       <!-- Query input -->
-      <div class="flex gap-2">
+      <div class="flex flex-col gap-2 sm:flex-row">
         <textarea
           bind:value={question}
           onkeydown={handleKeydown}
@@ -200,7 +201,7 @@
         <button
           onclick={handleQuery}
           disabled={isQuerying || !question.trim()}
-          class="h-8 px-3 bg-accent text-on-accent rounded-control hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 self-start"
+          class="min-h-10 px-3.5 bg-accent text-on-accent rounded-control hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 self-start"
         >
           {#if isQuerying}
             <span>{$t('patientHistory.querying')}</span>

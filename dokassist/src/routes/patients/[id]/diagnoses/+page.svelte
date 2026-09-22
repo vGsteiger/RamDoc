@@ -149,7 +149,7 @@
   }
 </script>
 
-<div class="p-8 max-w-4xl mx-auto">
+<div class="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
   <div class="flex justify-between items-center mb-6">
     <h1 class="text-display font-semibold text-fg">{$t('diagnoses.title')}</h1>
     <button
@@ -189,7 +189,7 @@
           {/if}
         </div>
 
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label for="diagnosed-date" class="block text-body font-medium text-fg-muted mb-1">
               {$t('diagnoses.diagnosedOn')} *

@@ -8,7 +8,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard};
 use zeroize::Zeroize;
 
-pub const LATEST_SCHEMA_VERSION: i32 = 15;
+pub const LATEST_SCHEMA_VERSION: i32 = 16;
 
 trait CheckpointStore: Send + Sync {
     fn read(&self) -> Result<Option<ChainCheckpoint>, AppError>;
@@ -395,6 +395,13 @@ fn run_migrations(conn: &Connection, audit_key: &[u8; MAC_SIZE]) -> Result<bool,
         log::info!("Running migration 015: Evidence provenance");
         conn.execute_batch(include_str!("migrations/015_evidence_provenance.sql"))?;
         conn.execute("PRAGMA user_version = 15;", [])?;
+    }
+
+    // Migration 16: Durable, reversible versions for chat-generated drafts.
+    if version < 16 {
+        log::info!("Running migration 016: Chat draft versions");
+        conn.execute_batch(include_str!("migrations/016_chat_draft_versions.sql"))?;
+        conn.execute("PRAGMA user_version = 16;", [])?;
     }
 
     log::info!("Database migrations complete");

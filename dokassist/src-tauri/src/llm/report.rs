@@ -118,6 +118,37 @@ pub fn generate_report_streaming_with_sampler(
     thinking_effort: ThinkingEffort,
     sampler: Option<SamplerConfig>,
 ) -> Result<String, AppError> {
+    generate_report_streaming_with_sampler_and_stream_id(
+        app,
+        engine,
+        report_type,
+        patient_context,
+        session_notes,
+        additional_context,
+        instructions,
+        system_prompt,
+        thinking_effort,
+        sampler,
+        None,
+    )
+}
+
+/// Emits request-correlated companion events for UI callers. Legacy report
+/// events are retained so specialised existing surfaces remain compatible.
+#[allow(clippy::too_many_arguments)]
+pub fn generate_report_streaming_with_sampler_and_stream_id(
+    app: &tauri::AppHandle,
+    engine: &LlmEngine,
+    report_type: ReportType,
+    patient_context: &str,
+    session_notes: &str,
+    additional_context: Option<&str>,
+    instructions: Option<&str>,
+    system_prompt: &str,
+    thinking_effort: ThinkingEffort,
+    sampler: Option<SamplerConfig>,
+    stream_id: Option<&str>,
+) -> Result<String, AppError> {
     let summary_opt = if needs_summarization(
         engine,
         system_prompt,
@@ -126,6 +157,12 @@ pub fn generate_report_streaming_with_sampler(
         thinking_effort.max_tokens(),
     )? {
         let _ = app.emit("report-summarizing", ());
+        if let Some(stream_id) = stream_id {
+            let _ = app.emit(
+                "report-summarizing-session",
+                serde_json::json!({"generation_id": stream_id}),
+            );
+        }
         Some(run_summarization(
             engine,
             system_prompt,
@@ -157,6 +194,12 @@ pub fn generate_report_streaming_with_sampler(
         sampler,
         &|token| {
             let _ = app.emit("report-chunk", token);
+            if let Some(stream_id) = stream_id {
+                let _ = app.emit(
+                    "report-chunk-session",
+                    serde_json::json!({"generation_id": stream_id, "token": token}),
+                );
+            }
         },
     )
 }

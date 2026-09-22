@@ -39,6 +39,10 @@
   <input type="email" bind:value class={classes} aria-invalid={invalid || undefined} {...rest} />
 {:else if type === 'search'}
   <input type="search" bind:value class={classes} aria-invalid={invalid || undefined} {...rest} />
+{:else if type === 'tel'}
+  <input type="tel" bind:value class={classes} aria-invalid={invalid || undefined} {...rest} />
+{:else if type === 'url'}
+  <input type="url" bind:value class={classes} aria-invalid={invalid || undefined} {...rest} />
 {:else}
   <input type="text" bind:value class={classes} aria-invalid={invalid || undefined} {...rest} />
 {/if}

@@ -137,16 +137,72 @@ export interface LlmEngineStatus {
   last_generation_stats: GenerationStats | null;
   inference_config: InferenceDiagnostics | null;
   context_cache: ContextCacheTelemetry;
+  desired_model: DesiredModelStatus | null;
+  lifecycle: EngineLifecycleStatus;
+}
+
+export interface DesiredModelStatus {
+  id: string;
+  name: string;
+  filename: string;
+  exists_on_disk: boolean;
+}
+
+export type EngineLifecyclePhase = 'idle' | 'loading' | 'ready' | 'unloading' | 'error';
+
+export interface EngineLifecycleStatus {
+  phase: EngineLifecyclePhase;
+  requested_filename: string | null;
+  active_filename: string | null;
+  error: string | null;
+}
+
+export type RouterMode = 'managed' | 'advanced_override';
+export type RouterSelectionSource =
+  'smallest_compatible_installed' | 'expert_override' | 'unavailable';
+export type RouterResidency =
+  | 'unloaded'
+  | 'dual_resident'
+  | 'writing_fallback_memory'
+  | 'unavailable'
+  | 'writing_fallback_error';
+
+export interface RouterBenchmarkDiagnostics {
+  probe_count: number;
+  dedicated_probe_count: number;
+  writing_fallback_count: number;
+  last_probe_duration_ms: number | null;
+}
+
+export interface RouterDiagnostics {
+  role: 'tool_router';
+  mode: RouterMode;
+  selection_source: RouterSelectionSource;
+  managed_model_filename: string | null;
+  selected_model_filename: string | null;
+  active_model_filename: string | null;
+  resident_engine_count: number;
+  lifecycle: EngineLifecycleStatus;
+  residency: RouterResidency;
+  dual_residency_safe: boolean;
+  total_ram_bytes: number;
+  dual_residency_weight_budget_bytes: number;
+  estimated_resident_weight_bytes: number;
+  fallback_reason: string | null;
+  benchmark: RouterBenchmarkDiagnostics;
+  advanced_override: {
+    available: boolean;
+    configured_filename: string | null;
+    requires_separate_engine: boolean;
+    limitation: string;
+  };
 }
 
 export type InferenceProfile = 'conservative' | 'f16-32k' | 'q8-32k' | 'q4-32k';
 export type ThinkingEffort = 'low' | 'medium' | 'high' | 'extra_high';
 export type FlashAttentionMode = 'enabled' | 'auto';
 export type InferenceFallbackCode =
-  | 'native_context_cap'
-  | 'flash_auto'
-  | 'kv_f16'
-  | 'kv_f16_flash_auto';
+  'native_context_cap' | 'flash_auto' | 'kv_f16' | 'kv_f16_flash_auto';
 
 export interface InferenceDiagnostics {
   profile: InferenceProfile;
@@ -189,17 +245,38 @@ export async function getRecommendedModel(): Promise<ModelChoice> {
   return await invoke<ModelChoice>('get_recommended_model');
 }
 
-export async function downloadModel(model: ModelChoice): Promise<void> {
-  return await invoke<void>('download_model', { model });
-}
-
 export async function loadModel(
   modelFilename: string,
-  inferenceProfile?: InferenceProfile,
+  inferenceProfile?: InferenceProfile
 ): Promise<void> {
   const args: { modelFilename: string; inferenceProfile?: InferenceProfile } = { modelFilename };
   if (inferenceProfile) args.inferenceProfile = inferenceProfile;
   return await invoke<void>('load_model', args);
+}
+
+/** Load the configured default writing model, if it is not already resident. */
+export async function ensureWritingModelLoaded(): Promise<LlmEngineStatus> {
+  return await invoke<LlmEngineStatus>('ensure_writing_model_loaded');
+}
+
+/** Explicitly release the resident writing model from application state. */
+export async function unloadModel(): Promise<void> {
+  return await invoke<void>('unload_model');
+}
+
+/** Report selected router role, lifecycle, memory admission and probe telemetry. */
+export async function getRouterDiagnostics(): Promise<RouterDiagnostics> {
+  return await invoke<RouterDiagnostics>('get_router_diagnostics');
+}
+
+/** Explicitly release the optional dedicated tool router. */
+export async function unloadRouterModel(): Promise<void> {
+  return await invoke<void>('unload_router_model');
+}
+
+/** Persist an expert router override, or pass null to restore managed selection. */
+export async function setRouterModelOverride(modelId: string | null): Promise<void> {
+  return await invoke<void>('set_router_model_override', { modelId });
 }
 
 // === Model Management ===
@@ -258,13 +335,6 @@ export interface PromotedModelPreview {
   worst_category_regression: number;
 }
 
-export interface TaskModel {
-  task_type: string;
-  model_id: string;
-  created_at: string;
-  updated_at: string;
-}
-
 export async function listModels(): Promise<ModelInfo[]> {
   return await invoke<ModelInfo[]>('list_models');
 }
@@ -307,26 +377,6 @@ export async function setDefaultModel(modelId: string): Promise<void> {
 
 export async function getDefaultModel(): Promise<Model | null> {
   return await invoke<Model | null>('get_default_model');
-}
-
-export async function setTaskModel(taskType: string, modelId: string): Promise<void> {
-  return await invoke<void>('set_task_model', { taskType, modelId });
-}
-
-export async function getTaskModel(taskType: string): Promise<Model | null> {
-  return await invoke<Model | null>('get_task_model', { taskType });
-}
-
-export async function listTaskModels(): Promise<TaskModel[]> {
-  return await invoke<TaskModel[]>('list_task_models');
-}
-
-export async function clearTaskModel(taskType: string): Promise<void> {
-  return await invoke<void>('clear_task_model', { taskType });
-}
-
-export async function getModelForTask(taskType: string): Promise<Model | null> {
-  return await invoke<Model | null>('get_model_for_task', { taskType });
 }
 
 export interface AvailableModel {
@@ -762,22 +812,20 @@ export interface UpdateTreatmentPlan {
   status?: string;
 }
 
-export async function createTreatmentPlan(
-  input: CreateTreatmentPlan,
-): Promise<TreatmentPlan> {
-  return await invoke<TreatmentPlan>("create_treatment_plan", { input });
+export async function createTreatmentPlan(input: CreateTreatmentPlan): Promise<TreatmentPlan> {
+  return await invoke<TreatmentPlan>('create_treatment_plan', { input });
 }
 
 export async function getTreatmentPlan(id: string): Promise<TreatmentPlan> {
-  return await invoke<TreatmentPlan>("get_treatment_plan", { id });
+  return await invoke<TreatmentPlan>('get_treatment_plan', { id });
 }
 
 export async function listTreatmentPlansForPatient(
   patientId: string,
   limit?: number,
-  offset?: number,
+  offset?: number
 ): Promise<TreatmentPlan[]> {
-  return await invoke<TreatmentPlan[]>("list_treatment_plans_for_patient", {
+  return await invoke<TreatmentPlan[]>('list_treatment_plans_for_patient', {
     patientId,
     limit,
     offset,
@@ -786,13 +834,13 @@ export async function listTreatmentPlansForPatient(
 
 export async function updateTreatmentPlan(
   id: string,
-  input: UpdateTreatmentPlan,
+  input: UpdateTreatmentPlan
 ): Promise<TreatmentPlan> {
-  return await invoke<TreatmentPlan>("update_treatment_plan", { id, input });
+  return await invoke<TreatmentPlan>('update_treatment_plan', { id, input });
 }
 
 export async function deleteTreatmentPlan(id: string): Promise<void> {
-  return await invoke<void>("delete_treatment_plan", { id });
+  return await invoke<void>('delete_treatment_plan', { id });
 }
 
 // === Treatment Goal Types ===
@@ -823,22 +871,20 @@ export interface UpdateTreatmentGoal {
   sort_order?: number;
 }
 
-export async function createTreatmentGoal(
-  input: CreateTreatmentGoal,
-): Promise<TreatmentGoal> {
-  return await invoke<TreatmentGoal>("create_treatment_goal", { input });
+export async function createTreatmentGoal(input: CreateTreatmentGoal): Promise<TreatmentGoal> {
+  return await invoke<TreatmentGoal>('create_treatment_goal', { input });
 }
 
 export async function getTreatmentGoal(id: string): Promise<TreatmentGoal> {
-  return await invoke<TreatmentGoal>("get_treatment_goal", { id });
+  return await invoke<TreatmentGoal>('get_treatment_goal', { id });
 }
 
 export async function listTreatmentGoalsForPlan(
   planId: string,
   limit?: number,
-  offset?: number,
+  offset?: number
 ): Promise<TreatmentGoal[]> {
-  return await invoke<TreatmentGoal[]>("list_treatment_goals_for_plan", {
+  return await invoke<TreatmentGoal[]>('list_treatment_goals_for_plan', {
     planId,
     limit,
     offset,
@@ -847,13 +893,13 @@ export async function listTreatmentGoalsForPlan(
 
 export async function updateTreatmentGoal(
   id: string,
-  input: UpdateTreatmentGoal,
+  input: UpdateTreatmentGoal
 ): Promise<TreatmentGoal> {
-  return await invoke<TreatmentGoal>("update_treatment_goal", { id, input });
+  return await invoke<TreatmentGoal>('update_treatment_goal', { id, input });
 }
 
 export async function deleteTreatmentGoal(id: string): Promise<void> {
-  return await invoke<void>("delete_treatment_goal", { id });
+  return await invoke<void>('delete_treatment_goal', { id });
 }
 
 // === Treatment Intervention Types ===
@@ -882,17 +928,15 @@ export interface UpdateTreatmentIntervention {
 }
 
 export async function createTreatmentIntervention(
-  input: CreateTreatmentIntervention,
+  input: CreateTreatmentIntervention
 ): Promise<TreatmentIntervention> {
-  return await invoke<TreatmentIntervention>("create_treatment_intervention", {
+  return await invoke<TreatmentIntervention>('create_treatment_intervention', {
     input,
   });
 }
 
-export async function getTreatmentIntervention(
-  id: string,
-): Promise<TreatmentIntervention> {
-  return await invoke<TreatmentIntervention>("get_treatment_intervention", {
+export async function getTreatmentIntervention(id: string): Promise<TreatmentIntervention> {
+  return await invoke<TreatmentIntervention>('get_treatment_intervention', {
     id,
   });
 }
@@ -900,30 +944,27 @@ export async function getTreatmentIntervention(
 export async function listTreatmentInterventionsForPlan(
   planId: string,
   limit?: number,
-  offset?: number,
+  offset?: number
 ): Promise<TreatmentIntervention[]> {
-  return await invoke<TreatmentIntervention[]>(
-    "list_treatment_interventions_for_plan",
-    {
-      planId,
-      limit,
-      offset,
-    },
-  );
+  return await invoke<TreatmentIntervention[]>('list_treatment_interventions_for_plan', {
+    planId,
+    limit,
+    offset,
+  });
 }
 
 export async function updateTreatmentIntervention(
   id: string,
-  input: UpdateTreatmentIntervention,
+  input: UpdateTreatmentIntervention
 ): Promise<TreatmentIntervention> {
-  return await invoke<TreatmentIntervention>("update_treatment_intervention", {
+  return await invoke<TreatmentIntervention>('update_treatment_intervention', {
     id,
     input,
   });
 }
 
 export async function deleteTreatmentIntervention(id: string): Promise<void> {
-  return await invoke<void>("delete_treatment_intervention", { id });
+  return await invoke<void>('delete_treatment_intervention', { id });
 }
 
 // === Outcome Score Types ===
@@ -958,22 +999,20 @@ export interface UpdateOutcomeScore {
   notes?: string;
 }
 
-export async function createOutcomeScore(
-  input: CreateOutcomeScore,
-): Promise<OutcomeScore> {
-  return await invoke<OutcomeScore>("create_outcome_score", { input });
+export async function createOutcomeScore(input: CreateOutcomeScore): Promise<OutcomeScore> {
+  return await invoke<OutcomeScore>('create_outcome_score', { input });
 }
 
 export async function getOutcomeScore(id: string): Promise<OutcomeScore> {
-  return await invoke<OutcomeScore>("get_outcome_score", { id });
+  return await invoke<OutcomeScore>('get_outcome_score', { id });
 }
 
 export async function listScoresForSession(
   sessionId: string,
   limit?: number,
-  offset?: number,
+  offset?: number
 ): Promise<OutcomeScore[]> {
-  return await invoke<OutcomeScore[]>("list_scores_for_session", {
+  return await invoke<OutcomeScore[]>('list_scores_for_session', {
     sessionId,
     limit,
     offset,
@@ -983,9 +1022,9 @@ export async function listScoresForSession(
 export async function listScoresByScale(
   scaleType: string,
   limit?: number,
-  offset?: number,
+  offset?: number
 ): Promise<OutcomeScore[]> {
-  return await invoke<OutcomeScore[]>("list_scores_by_scale", {
+  return await invoke<OutcomeScore[]>('list_scores_by_scale', {
     scaleType,
     limit,
     offset,
@@ -995,9 +1034,9 @@ export async function listScoresByScale(
 export async function listScoresForPatient(
   patientId: string,
   limit?: number,
-  offset?: number,
+  offset?: number
 ): Promise<OutcomeScore[]> {
-  return await invoke<OutcomeScore[]>("list_scores_for_patient", {
+  return await invoke<OutcomeScore[]>('list_scores_for_patient', {
     patientId,
     limit,
     offset,
@@ -1006,13 +1045,13 @@ export async function listScoresForPatient(
 
 export async function updateOutcomeScore(
   id: string,
-  input: UpdateOutcomeScore,
+  input: UpdateOutcomeScore
 ): Promise<OutcomeScore> {
-  return await invoke<OutcomeScore>("update_outcome_score", { id, input });
+  return await invoke<OutcomeScore>('update_outcome_score', { id, input });
 }
 
 export async function deleteOutcomeScore(id: string): Promise<void> {
-  return await invoke<void>("delete_outcome_score", { id });
+  return await invoke<void>('delete_outcome_score', { id });
 }
 
 // === Report Types ===
@@ -1353,7 +1392,7 @@ export async function exportReportToDocx(reportId: string): Promise<number[]> {
 }
 
 export async function exportPatientPdf(patientId: string): Promise<number[]> {
-  return await invoke<number[]>("export_patient_pdf", { patientId });
+  return await invoke<number[]>('export_patient_pdf', { patientId });
 }
 
 // ---------------------------------------------------------------------------
@@ -1576,27 +1615,23 @@ export interface BackupInfo {
  * Returns the encrypted backup archive as a byte array.
  */
 export async function createVaultBackup(): Promise<number[]> {
-  return await invoke<number[]>("create_vault_backup");
+  return await invoke<number[]>('create_vault_backup');
 }
 
 /**
  * Restore a full-vault backup from an encrypted archive.
  * WARNING: This replaces ALL current data with the backup contents.
  */
-export async function restoreVaultBackup(
-  encryptedBackup: number[],
-): Promise<BackupInfo> {
-  return await invoke<BackupInfo>("restore_vault_backup", { encryptedBackup });
+export async function restoreVaultBackup(encryptedBackup: number[]): Promise<BackupInfo> {
+  return await invoke<BackupInfo>('restore_vault_backup', { encryptedBackup });
 }
 
 /**
  * Validate a backup archive without restoring it.
  * Returns metadata about the backup if validation succeeds.
  */
-export async function validateBackupArchive(
-  encryptedBackup: number[],
-): Promise<BackupInfo> {
-  return await invoke<BackupInfo>("validate_backup_archive", {
+export async function validateBackupArchive(encryptedBackup: number[]): Promise<BackupInfo> {
+  return await invoke<BackupInfo>('validate_backup_archive', {
     encryptedBackup,
   });
 }
@@ -1622,6 +1657,24 @@ export interface ChatMessageRow {
   tool_args_json: string | null;
   tool_result_for: string | null;
   created_at: string;
+}
+
+/** A reversible revision of an unsaved report proposal from a chat tool call. */
+export interface ChatDraftVersion {
+  id: string;
+  tool_result_message_id: string;
+  version_number: number;
+  content: string;
+  origin: 'ai' | 'manual';
+  claim_resolutions_json: string;
+  created_at: string;
+}
+
+export interface CreateChatDraftVersion {
+  tool_result_message_id: string;
+  content: string;
+  origin: 'ai' | 'manual';
+  claim_resolutions_json?: string;
 }
 
 export interface AgentToolCall {
@@ -1679,6 +1732,18 @@ export async function deleteChatSession(sessionId: string): Promise<void> {
 
 export async function getChatMessages(sessionId: string): Promise<ChatMessageRow[]> {
   return await invoke<ChatMessageRow[]>('get_chat_messages', { sessionId });
+}
+
+export async function listChatDraftVersions(
+  toolResultMessageId: string
+): Promise<ChatDraftVersion[]> {
+  return await invoke<ChatDraftVersion[]>('list_chat_draft_versions', { toolResultMessageId });
+}
+
+export async function appendChatDraftVersion(
+  input: CreateChatDraftVersion
+): Promise<ChatDraftVersion> {
+  return await invoke<ChatDraftVersion>('append_chat_draft_version', { input });
 }
 
 export async function renameChatSession(sessionId: string, title: string): Promise<ChatSession> {
@@ -1822,7 +1887,7 @@ export interface DashboardData {
 }
 
 export async function getDashboardData(): Promise<DashboardData> {
-  return await invoke<DashboardData>("get_dashboard_data");
+  return await invoke<DashboardData>('get_dashboard_data');
 }
 
 // ---------------------------------------------------------------------------

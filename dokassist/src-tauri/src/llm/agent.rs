@@ -33,11 +33,22 @@ pub enum AgentScope {
 }
 
 /// A single tool call parsed from the LLM output.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ToolCallRequest {
     pub name: String,
     #[serde(default)]
     pub args: serde_json::Value,
+}
+
+/// The router's typed interpretation of a probe completion.
+///
+/// Keeping this decision separate from the text parser gives a future
+/// grammar-constrained/tool-router implementation one narrow replacement
+/// point.  It deliberately does not change tool dispatch or scope checks.
+#[derive(Debug, Clone, PartialEq)]
+enum ToolDecision {
+    Call(ToolCallRequest),
+    Answer,
 }
 
 /// Record of a tool call that was actually executed.
@@ -53,6 +64,10 @@ pub struct ExecutedToolCall {
 pub struct AgentLoopResult {
     pub final_answer: String,
     pub tool_calls_made: Vec<ExecutedToolCall>,
+    /// Router benchmark telemetry is reported by the command after the
+    /// blocking turn, never embedded in patient-facing chat history.
+    pub router_probe_count: u64,
+    pub router_probe_duration_ms: u64,
 }
 
 pub struct AgentTurnInput {
@@ -170,6 +185,12 @@ fn parse_tool_call(output: &str) -> Option<ToolCallRequest> {
     serde_json::from_str(json).ok()
 }
 
+fn route_tool_decision(output: &str) -> ToolDecision {
+    parse_tool_call(output)
+        .map(ToolDecision::Call)
+        .unwrap_or(ToolDecision::Answer)
+}
+
 /// Summarize the middle of the history to keep prompt size manageable.
 ///
 /// Keeps the first message (original user request) and the last two messages
@@ -242,6 +263,7 @@ fn summarize_history(
 pub fn run_agent_loop(
     app: &tauri::AppHandle,
     engine: &Arc<LlmEngine>,
+    router_engine: Option<&Arc<LlmEngine>>,
     pool: &DbPool,
     input: AgentTurnInput,
 ) -> Result<AgentLoopResult, AppError> {
@@ -269,7 +291,11 @@ pub fn run_agent_loop(
     });
 
     let mut tool_calls_made: Vec<ExecutedToolCall> = Vec::new();
-    let summarize_threshold = engine
+    let mut probe_engine = router_engine.unwrap_or(engine);
+    let mut using_dedicated_router = router_engine.is_some();
+    let mut router_probe_count = 0_u64;
+    let mut router_probe_duration_ms = 0_u64;
+    let summarize_threshold = probe_engine
         .context_size()
         .saturating_sub(probe_profile.max_tokens + chat_profile.max_tokens + 512);
 
@@ -284,12 +310,13 @@ pub fn run_agent_loop(
             history = summarize_history(engine, &system_prompt, history);
         }
 
-        let prompt = engine.format_chat_history(&probe_system, &history)?;
+        let prompt = probe_engine.format_chat_history(&probe_system, &history)?;
 
         // Probe: collect output to check for tool call. Thinking is forced off
         // so Extra high effort cannot hide a tool call inside <think>.
         let mut probe_output = String::new();
-        engine.generate_streaming_session_with_sampler(
+        let probe_started = std::time::Instant::now();
+        let probe_result = probe_engine.generate_streaming_session_with_sampler(
             &inference_session,
             &probe_system,
             &prompt,
@@ -299,11 +326,29 @@ pub fn run_agent_loop(
                 probe_output.push_str(token);
                 !probe_output.contains("</tool_call>")
             },
-        )?;
+        );
+        if let Err(error) = probe_result {
+            if using_dedicated_router {
+                log::warn!(
+                    "Dedicated tool router probe failed; retrying with writing engine: {error}"
+                );
+                probe_engine = engine;
+                using_dedicated_router = false;
+                continue;
+            }
+            return Err(error);
+        }
+        router_probe_count = router_probe_count.saturating_add(1);
+        router_probe_duration_ms = router_probe_duration_ms.saturating_add(
+            probe_started
+                .elapsed()
+                .as_millis()
+                .min(u128::from(u64::MAX)) as u64,
+        );
 
         let probe_trimmed = probe_output.trim();
 
-        if let Some(call) = parse_tool_call(probe_trimmed) {
+        if let ToolDecision::Call(call) = route_tool_decision(probe_trimmed) {
             log::info!(
                 "Agent iteration {}: calling tool '{}'",
                 iteration,
@@ -380,21 +425,21 @@ pub fn run_agent_loop(
                 chat_profile,
                 Some(&inference_session),
                 &|token| {
+                    // Keep the legacy event for existing specialised surfaces,
+                    // and provide the session-bound event for the main chat.
                     let _ = app.emit("agent-chunk", token);
+                    let _ = app.emit(
+                        "agent-chunk-session",
+                        serde_json::json!({"session_id": session_id, "token": token}),
+                    );
                 },
             )?;
-
-            let _ = app.emit(
-                "agent-done",
-                serde_json::json!({
-                    "final_answer": final_answer,
-                    "session_id": session_id,
-                }),
-            );
 
             return Ok(AgentLoopResult {
                 final_answer,
                 tool_calls_made,
+                router_probe_count,
+                router_probe_duration_ms,
             });
         }
     }
@@ -410,18 +455,17 @@ pub fn run_agent_loop(
         Some(&inference_session),
         &|token| {
             let _ = app.emit("agent-chunk", token);
+            let _ = app.emit(
+                "agent-chunk-session",
+                serde_json::json!({"session_id": session_id, "token": token}),
+            );
         },
     )?;
-    let _ = app.emit(
-        "agent-done",
-        serde_json::json!({
-            "final_answer": final_answer,
-            "session_id": session_id,
-        }),
-    );
     Ok(AgentLoopResult {
         final_answer,
         tool_calls_made,
+        router_probe_count,
+        router_probe_duration_ms,
     })
 }
 
@@ -463,5 +507,17 @@ mod tests {
         let call = parse_tool_call(output).unwrap();
         assert_eq!(call.name, "get_patient");
         assert_eq!(call.args["patient_id"], "p1");
+    }
+
+    #[test]
+    fn tool_router_keeps_a_non_tool_probe_as_an_answer() {
+        assert_eq!(route_tool_decision("Direkte Antwort"), ToolDecision::Answer);
+    }
+
+    #[test]
+    fn tool_router_returns_a_typed_call() {
+        let decision =
+            route_tool_decision(r#"<tool_call>{"name":"list_patients","args":{}}</tool_call>"#);
+        assert!(matches!(decision, ToolDecision::Call(call) if call.name == "list_patients"));
     }
 }

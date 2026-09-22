@@ -1,10 +1,11 @@
 use crate::error::AppError;
 use crate::llm::harness::SamplerConfig;
 use crate::llm::{
-    self, download, embed::EmbedEngine, evidence, quantization, EngineStatus, LetterType,
+    self, embed::EmbedEngine, evidence, quantization, DesiredModelStatus, EngineStatus, LetterType,
     LlmEngine, ModelChoice, ReportType, ThinkingEffort, SYSTEM_PROMPT_DE, SYSTEM_PROMPT_FR,
 };
-use crate::state::{llm_lock_poisoned, AppState, AuthState};
+use crate::models::model;
+use crate::state::{llm_lock_poisoned, AppState, AuthState, LlmLoadDisposition};
 use serde::Serialize;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
@@ -59,30 +60,129 @@ fn check_auth(state: &AppState) -> Result<(), AppError> {
 /// Return the current engine status (safe to call before a model is loaded).
 #[tauri::command]
 pub async fn get_engine_status(state: State<'_, AppState>) -> Result<EngineStatus, AppError> {
+    let desired_model = resolve_desired_model(&state);
+    let lifecycle = state.llm_lifecycle();
     let llm = state.llm.lock().map_err(|_| llm_lock_poisoned())?;
     match &*llm {
-        Some(engine) => Ok(engine.status()),
+        Some(engine) => {
+            let mut status = engine.status();
+            status.desired_model = desired_model;
+            status.lifecycle = lifecycle;
+            Ok(status)
+        }
         None => {
             let recommended = LlmEngine::recommended_model();
-            let model_path = state.data_dir.join("models").join(&recommended.filename);
-            let is_downloaded = model_path.exists();
+            let desired_filename = desired_model
+                .as_ref()
+                .filter(|model| model.exists_on_disk)
+                .map(|model| model.filename.clone());
+            let fallback_path = state.data_dir.join("models").join(&recommended.filename);
+            let downloaded_filename =
+                desired_filename.or_else(|| fallback_path.exists().then_some(recommended.filename));
             Ok(EngineStatus {
                 is_loaded: false,
                 model_name: None,
                 model_path: None,
                 total_ram_bytes: LlmEngine::total_ram(),
-                is_downloaded,
-                downloaded_filename: if is_downloaded {
-                    Some(recommended.filename)
-                } else {
-                    None
-                },
+                is_downloaded: downloaded_filename.is_some(),
+                downloaded_filename,
                 last_generation_stats: None,
                 inference_config: None,
                 context_cache: Default::default(),
+                desired_model,
+                lifecycle: if matches!(lifecycle.phase, crate::llm::EngineLifecyclePhase::Ready) {
+                    // Lock/reset/window-close clear the engine independently
+                    // of an explicit user unload. Status remains truthful
+                    // without changing those security-owned transitions.
+                    crate::llm::EngineLifecycleStatus::default()
+                } else {
+                    lifecycle
+                },
             })
         }
     }
+}
+
+fn resolve_desired_model(state: &AppState) -> Option<DesiredModelStatus> {
+    let db = state.get_db().ok()?;
+    let conn = db.conn().ok()?;
+    let model = model::get_default_model(&conn).ok()??;
+    let exists_on_disk = state
+        .data_dir
+        .join("models")
+        .join(&model.filename)
+        .is_file();
+    Some(DesiredModelStatus {
+        id: model.id,
+        name: model.name,
+        filename: model.filename,
+        exists_on_disk,
+    })
+}
+
+#[derive(Clone)]
+struct RouterPlan {
+    managed_model: Option<model::Model>,
+    configured_override: Option<model::Model>,
+    selected_model: Option<model::Model>,
+    selection_source: llm::router::RouterSelectionSource,
+}
+
+/// Resolve the durable optional override first. Without one, the managed
+/// policy chooses the smallest *installed and compatible* allow-listed model,
+/// rather than an arbitrary registry row or the writing default.
+fn resolve_router_plan(state: &AppState) -> Result<RouterPlan, AppError> {
+    let db = state.get_db()?;
+    let conn = db.conn()?;
+    let configured_override = model::get_router_override(&conn)?;
+    let models_dir = state.data_dir.join("models");
+
+    let managed_model = model::list_models(&conn)?
+        .into_iter()
+        .filter(|candidate| models_dir.join(&candidate.filename).is_file())
+        .filter(|candidate| {
+            llm::download::find_model(&candidate.filename)
+                .map(|entry| {
+                    entry.min_ram_gb.saturating_mul(1024 * 1024 * 1024) <= LlmEngine::total_ram()
+                })
+                .unwrap_or(false)
+        })
+        .min_by_key(|candidate| candidate.size_bytes);
+
+    let (selected_model, selection_source) = match configured_override.as_ref() {
+        Some(candidate) if models_dir.join(&candidate.filename).is_file() => (
+            Some(candidate.clone()),
+            llm::router::RouterSelectionSource::ExpertOverride,
+        ),
+        Some(_) => (None, llm::router::RouterSelectionSource::Unavailable),
+        None => match managed_model.as_ref() {
+            Some(candidate) => (
+                Some(candidate.clone()),
+                llm::router::RouterSelectionSource::SmallestCompatibleInstalled,
+            ),
+            None => (None, llm::router::RouterSelectionSource::Unavailable),
+        },
+    };
+
+    Ok(RouterPlan {
+        managed_model,
+        configured_override,
+        selected_model,
+        selection_source,
+    })
+}
+
+fn model_weight_bytes(candidate: Option<&model::Model>) -> u64 {
+    candidate
+        .and_then(|model| u64::try_from(model.size_bytes).ok())
+        .unwrap_or_default()
+}
+
+fn active_writing_model(state: &AppState) -> Option<model::Model> {
+    let filename = state.llm_lifecycle().active_filename?;
+    let db = state.get_db().ok()?;
+    let conn = db.conn().ok()?;
+    model::get_model_by_filename(&conn, &filename).ok()
 }
 
 /// Return the model tier recommended for this machine's RAM.
@@ -97,26 +197,6 @@ pub async fn get_default_system_prompt() -> Result<String, AppError> {
     Ok(SYSTEM_PROMPT_DE.to_string())
 }
 
-/// Download a GGUF model from HuggingFace to ~/DokAssist/models/.
-/// Streams progress via `"model-download-progress"` (f64) and `"model-download-done"` events.
-#[tauri::command]
-pub async fn download_model(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    model: ModelChoice,
-) -> Result<(), AppError> {
-    // Validate filename to prevent path traversal
-    validate_model_filename(&model.filename)?;
-
-    let dest_dir = state.data_dir.join("models");
-    tokio::fs::create_dir_all(&dest_dir).await?;
-
-    let dest_path = dest_dir.join(&model.filename);
-    let url = download::model_url(&model.filename)?;
-    download::download_model_with_progress(&app, &url, &dest_path, &model.filename).await?;
-    Ok(())
-}
-
 /// Load a GGUF model from ~/DokAssist/models/ into memory (Metal-accelerated).
 /// Uses spawn_blocking because model loading is a long blocking C-FFI operation.
 #[tauri::command]
@@ -128,12 +208,80 @@ pub async fn load_model(
     // Validate filename to prevent path traversal
     validate_model_filename(&model_filename)?;
 
-    let model_path = state.data_dir.join("models").join(&model_filename);
+    load_model_request(&state, model_filename, inference_profile).await
+}
+
+/// Ensure the configured writing model is resident. The durable registry
+/// default is the sole automatic model-selection policy; task-specific rows
+/// are intentionally not consulted because they never selected an engine.
+#[tauri::command]
+pub async fn ensure_writing_model_loaded(
+    state: State<'_, AppState>,
+) -> Result<EngineStatus, AppError> {
+    let desired = resolve_desired_model(&state).ok_or_else(|| {
+        AppError::Validation(
+            "Choose an installed default writing model before starting a chat".to_string(),
+        )
+    })?;
+    if !desired.exists_on_disk {
+        return Err(AppError::Validation(format!(
+            "The configured writing model '{}' is missing from disk",
+            desired.filename
+        )));
+    }
+    load_model_request(&state, desired.filename, None).await?;
+    get_engine_status(state).await
+}
+
+/// Explicitly release the resident writing model. Existing inference leases
+/// keep their Arc until they finish; this command only prevents new work from
+/// acquiring the engine and releases the state-owned allocation.
+#[tauri::command]
+pub async fn unload_model(state: State<'_, AppState>) -> Result<(), AppError> {
+    state.begin_llm_unload()?;
+    let _swap_lease = state.llm_swap.lock().await;
+    let old_engine = state.llm.lock().map_err(|_| llm_lock_poisoned())?.take();
+    drop(old_engine);
+    state.mark_llm_unloaded();
+    Ok(())
+}
+
+async fn load_model_request(
+    state: &AppState,
+    model_filename: String,
+    inference_profile: Option<String>,
+) -> Result<(), AppError> {
+    let generation = state.runtime_generation();
+    match state.begin_llm_load(&model_filename)? {
+        LlmLoadDisposition::Join => return state.wait_for_llm_load(&model_filename).await,
+        LlmLoadDisposition::AlreadyReady => return Ok(()),
+        LlmLoadDisposition::Start => {}
+    }
+
+    let result =
+        load_model_after_lifecycle_start(state, &model_filename, inference_profile, generation)
+            .await;
+    if state.runtime_generation() == generation {
+        match &result {
+            Ok(()) => state.mark_llm_ready(model_filename),
+            Err(error) => state.mark_llm_load_failed(model_filename, error.to_string()),
+        }
+    }
+    result
+}
+
+async fn load_model_after_lifecycle_start(
+    state: &AppState,
+    model_filename: &str,
+    inference_profile: Option<String>,
+    generation: u64,
+) -> Result<(), AppError> {
+    let model_path = state.data_dir.join("models").join(model_filename);
     let verification_path = model_path.clone();
     tokio::task::spawn_blocking(move || quantization::verify_promoted_model(&verification_path))
         .await
         .map_err(|error| AppError::Llm(format!("promotion verification task failed: {error}")))??;
-    let model_name = model_filename.clone();
+    let model_name = model_filename.to_string();
     // "governed" is the safe default. Named profiles remain available as
     // explicit research overrides and are checked against the same budget.
     let inference_profile = inference_profile.unwrap_or_else(|| "governed".to_string());
@@ -169,8 +317,293 @@ pub async fn load_model(
     .await
     .map_err(|e| AppError::Llm(format!("spawn_blocking error: {e}")))??;
 
-    *state.llm.lock().map_err(|_| llm_lock_poisoned())? = Some(Arc::new(engine));
+    check_auth(state)?;
+    let mut slot = state.llm.lock().map_err(|_| llm_lock_poisoned())?;
+    if state.runtime_generation() != generation {
+        return Err(AppError::AuthRequired);
+    }
+    *slot = Some(Arc::new(engine));
     Ok(())
+}
+
+/// Return an optional dedicated router engine. A memory admission failure is
+/// not a chat failure: callers must use the writing engine for the probe and
+/// diagnostics records that explicitly.
+pub async fn ensure_router_engine(state: &AppState) -> Result<Option<Arc<LlmEngine>>, AppError> {
+    let plan = resolve_router_plan(state)?;
+    let Some(selected) = plan.selected_model else {
+        unload_router_if_resident(state).await?;
+        return Ok(None);
+    };
+
+    let writing = active_writing_model(state);
+    let writing_weight = model_weight_bytes(writing.as_ref());
+    let router_weight = model_weight_bytes(Some(&selected));
+    let dual_safe =
+        llm::router::dual_residency_is_safe(LlmEngine::total_ram(), writing_weight, router_weight);
+    // A second instance of the writing engine cannot improve routing and
+    // wastes the exact capacity the admission policy protects.
+    if !dual_safe
+        || writing
+            .as_ref()
+            .is_some_and(|model| model.id == selected.id)
+    {
+        unload_router_if_resident(state).await?;
+        return Ok(None);
+    }
+
+    match state.begin_router_load(&selected.filename)? {
+        LlmLoadDisposition::Join => {
+            state.wait_for_router_load(&selected.filename).await?;
+        }
+        LlmLoadDisposition::AlreadyReady => {}
+        LlmLoadDisposition::Start => {
+            let generation = state.runtime_generation();
+            let result = load_router_after_lifecycle_start(state, &selected, generation).await;
+            if state.runtime_generation() == generation {
+                match &result {
+                    Ok(()) => state.mark_router_ready(selected.filename.clone()),
+                    Err(error) => {
+                        state.mark_router_load_failed(selected.filename.clone(), error.to_string())
+                    }
+                }
+            }
+            result?;
+        }
+    }
+
+    state
+        .router_llm
+        .lock()
+        .map_err(|_| AppError::Llm("Router engine mutex poisoned".to_string()))?
+        .as_ref()
+        .map(Arc::clone)
+        .ok_or_else(|| {
+            AppError::Llm("Router finished loading without becoming resident".to_string())
+        })
+        .map(Some)
+}
+
+async fn unload_router_if_resident(state: &AppState) -> Result<(), AppError> {
+    let resident = state
+        .router_llm
+        .lock()
+        .map_err(|_| AppError::Llm("Router engine mutex poisoned".to_string()))?
+        .is_some();
+    if resident
+        || matches!(
+            state.router_lifecycle().phase,
+            crate::llm::EngineLifecyclePhase::Ready
+        )
+    {
+        unload_router_engine(state).await?;
+    }
+    Ok(())
+}
+
+async fn load_router_after_lifecycle_start(
+    state: &AppState,
+    selected: &model::Model,
+    generation: u64,
+) -> Result<(), AppError> {
+    let model_path = state.data_dir.join("models").join(&selected.filename);
+    let verification_path = model_path.clone();
+    tokio::task::spawn_blocking(move || quantization::verify_promoted_model(&verification_path))
+        .await
+        .map_err(|error| {
+            AppError::Llm(format!(
+                "router promotion verification task failed: {error}"
+            ))
+        })??;
+
+    let _swap_lease = state.router_llm_swap.lock().await;
+    let previous = state
+        .router_llm
+        .lock()
+        .map_err(|_| AppError::Llm("Router engine mutex poisoned".to_string()))?
+        .take();
+    if let Some(previous) = previous {
+        let drain = async {
+            while Arc::strong_count(&previous) > 1 {
+                tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+            }
+        };
+        if tokio::time::timeout(std::time::Duration::from_secs(120), drain)
+            .await
+            .is_err()
+        {
+            *state
+                .router_llm
+                .lock()
+                .map_err(|_| AppError::Llm("Router engine mutex poisoned".to_string()))? =
+                Some(previous);
+            return Err(AppError::Llm(
+                "Timed out waiting for active router inference leases before swap".to_string(),
+            ));
+        }
+        drop(previous);
+    }
+
+    let model_name = selected.filename.clone();
+    let engine = tokio::task::spawn_blocking(move || {
+        // Tool probes are short; governed remains the same conservative
+        // profile used for the writing runtime and enforces its own budget.
+        LlmEngine::load_with_profile(model_path, model_name, "governed")
+    })
+    .await
+    .map_err(|error| AppError::Llm(format!("router spawn_blocking error: {error}")))??;
+    check_auth(state)?;
+    let mut slot = state
+        .router_llm
+        .lock()
+        .map_err(|_| AppError::Llm("Router engine mutex poisoned".to_string()))?;
+    if state.runtime_generation() != generation {
+        return Err(AppError::AuthRequired);
+    }
+    *slot = Some(Arc::new(engine));
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn unload_router_model(state: State<'_, AppState>) -> Result<(), AppError> {
+    unload_router_engine(&state).await
+}
+
+async fn unload_router_engine(state: &AppState) -> Result<(), AppError> {
+    state.begin_router_unload()?;
+    let _swap_lease = state.router_llm_swap.lock().await;
+    let old = state
+        .router_llm
+        .lock()
+        .map_err(|_| AppError::Llm("Router engine mutex poisoned".to_string()))?
+        .take();
+    drop(old);
+    state.mark_router_unloaded();
+    Ok(())
+}
+
+/// Update the durable expert override. Clearing it restores the managed
+/// smallest-compatible policy. Overrides must reference a downloaded registry
+/// model, never a caller-supplied path.
+#[tauri::command]
+pub async fn set_router_model_override(
+    state: State<'_, AppState>,
+    model_id: Option<String>,
+) -> Result<(), AppError> {
+    {
+        let db = state.get_db()?;
+        let conn = db.conn()?;
+        if let Some(model_id) = model_id.as_deref() {
+            let candidate = model::get_model(&conn, model_id)?;
+            if !state
+                .data_dir
+                .join("models")
+                .join(&candidate.filename)
+                .is_file()
+            {
+                return Err(AppError::Validation(format!(
+                    "Router override '{}' is missing from disk",
+                    candidate.filename
+                )));
+            }
+        }
+        model::set_router_override(&conn, model_id.as_deref())?;
+    }
+
+    // Invalidate the old role immediately. The next agent turn resolves the
+    // durable policy and lazily loads the selected runtime.
+    unload_router_if_resident(&state).await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_router_diagnostics(
+    state: State<'_, AppState>,
+) -> Result<llm::router::RouterDiagnostics, AppError> {
+    let plan = resolve_router_plan(&state)?;
+    let writing = active_writing_model(&state);
+    let writing_weight = model_weight_bytes(writing.as_ref());
+    let router_weight = model_weight_bytes(plan.selected_model.as_ref());
+    let total_ram_bytes = LlmEngine::total_ram();
+    let dual_safe = plan.selected_model.as_ref().is_some_and(|selected| {
+        llm::router::dual_residency_is_safe(
+            total_ram_bytes,
+            writing_weight,
+            model_weight_bytes(Some(selected)),
+        ) && writing
+            .as_ref()
+            .is_none_or(|active| active.id != selected.id)
+    });
+    let router_resident = state
+        .router_llm
+        .lock()
+        .map_err(|_| AppError::Llm("Router engine mutex poisoned".to_string()))?
+        .is_some();
+    let lifecycle = state.router_lifecycle();
+    // Lock/reset clears model slots at the application ML boundary. Do not
+    // expose a stale Ready transition as a still-resident router afterwards.
+    let lifecycle =
+        if !router_resident && matches!(lifecycle.phase, crate::llm::EngineLifecyclePhase::Ready) {
+            crate::llm::EngineLifecycleStatus::default()
+        } else {
+            lifecycle
+        };
+    let active_model_filename = lifecycle.active_filename.clone();
+    let selected_model_filename = plan
+        .selected_model
+        .as_ref()
+        .map(|model| model.filename.clone());
+    let residency = if active_model_filename.is_some() {
+        llm::router::RouterResidency::DualResident
+    } else if plan.selected_model.is_none() {
+        llm::router::RouterResidency::Unavailable
+    } else if matches!(lifecycle.phase, crate::llm::EngineLifecyclePhase::Error) {
+        llm::router::RouterResidency::WritingFallbackError
+    } else if !dual_safe {
+        llm::router::RouterResidency::WritingFallbackMemory
+    } else {
+        llm::router::RouterResidency::Unloaded
+    };
+    let fallback_reason = match residency {
+        llm::router::RouterResidency::WritingFallbackMemory => Some(
+            "A separate router would exceed the conservative dual-residency weight budget; probes use the writing engine.".to_string(),
+        ),
+        llm::router::RouterResidency::Unavailable => Some(
+            "No compatible downloaded router model is available.".to_string(),
+        ),
+        llm::router::RouterResidency::WritingFallbackError => lifecycle.error.clone(),
+        _ => None,
+    };
+    let writing_resident = state.llm.lock().map_err(|_| llm_lock_poisoned())?.is_some();
+    let mode = match plan.selection_source {
+        llm::router::RouterSelectionSource::ExpertOverride => {
+            llm::router::RouterMode::AdvancedOverride
+        }
+        _ => llm::router::RouterMode::Managed,
+    };
+    Ok(llm::router::RouterDiagnostics {
+        role: "tool_router".to_string(),
+        mode,
+        selection_source: plan.selection_source,
+        managed_model_filename: plan.managed_model.as_ref().map(|model| model.filename.clone()),
+        selected_model_filename,
+        active_model_filename,
+        resident_engine_count: u8::from(writing_resident) + u8::from(router_resident),
+        lifecycle,
+        residency,
+        dual_residency_safe: dual_safe,
+        total_ram_bytes,
+        dual_residency_weight_budget_bytes: llm::router::dual_residency_weight_budget(total_ram_bytes),
+        estimated_resident_weight_bytes: writing_weight.saturating_add(router_weight),
+        fallback_reason,
+        benchmark: state.router_benchmark(),
+        advanced_override: llm::router::AdvancedRouterOverrideMetadata {
+            available: true,
+            configured_filename: plan.configured_override.as_ref().map(|model| model.filename.clone()),
+            requires_separate_engine: true,
+            limitation: "The override is used only for tool probes when the conservative dual-residency budget admits a second engine; final prose always uses the writing engine.".to_string(),
+        },
+    })
 }
 
 /// Extract structured metadata from a document using the loaded LLM.
@@ -223,6 +656,7 @@ pub async fn generate_report(
     system_prompt: Option<String>,
     thinking_effort: Option<ThinkingEffort>,
     sampler: Option<SamplerConfig>,
+    generation_id: Option<String>,
 ) -> Result<String, AppError> {
     // Check authentication before processing patient data
     check_auth(&state)?;
@@ -253,8 +687,10 @@ pub async fn generate_report(
 
     // Run the potentially long-running report generation on a blocking thread.
     let app_clone = app.clone();
+    let generation_id = generation_id.unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
+    let generation_id_for_task = generation_id.clone();
     let report = tokio::task::spawn_blocking(move || {
-        llm::generate_report_streaming_with_sampler(
+        llm::generate_report_streaming_with_sampler_and_stream_id(
             &app_clone,
             &engine,
             rt,
@@ -265,12 +701,17 @@ pub async fn generate_report(
             &prompt,
             thinking_effort.unwrap_or_default(),
             sampler,
+            Some(&generation_id_for_task),
         )
     })
     .await
     .map_err(|e| AppError::Llm(format!("spawn_blocking error: {e}")))??;
 
     let _ = app.emit("report-done", ());
+    let _ = app.emit(
+        "report-done-session",
+        serde_json::json!({"generation_id": generation_id}),
+    );
     Ok(report)
 }
 

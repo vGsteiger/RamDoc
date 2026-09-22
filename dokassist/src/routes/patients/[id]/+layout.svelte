@@ -20,6 +20,11 @@
     { path: `/patients/${patientId}/sessions`, labelKey: 'patients.sessions', exact: false },
     { path: `/patients/${patientId}/medications`, labelKey: 'patients.medications', exact: false },
     { path: `/patients/${patientId}/diagnoses`, labelKey: 'patients.diagnoses', exact: false },
+    {
+      path: `/patients/${patientId}/treatment-plans`,
+      labelKey: 'treatmentPlans.title',
+      exact: false,
+    },
     { path: `/patients/${patientId}/files`, labelKey: 'patients.files', exact: false },
     { path: `/patients/${patientId}/reports`, labelKey: 'patients.reports', exact: false },
     { path: `/patients/${patientId}/email`, labelKey: 'patients.email', exact: false },
@@ -55,8 +60,8 @@
       </div>
     </div>
   {:else if patient}
-    <div class="bg-surface-sunken border-b border-line-subtle p-6">
-      <h1 class="text-display font-semibold text-fg mb-2">
+    <div class="bg-surface-sunken border-b border-line-subtle px-4 py-4 sm:px-6 sm:py-5">
+      <h1 class="min-w-0 break-words text-display font-semibold text-fg mb-1">
         {patient.first_name}
         {patient.last_name}
       </h1>
@@ -68,12 +73,22 @@
       {/if}
     </div>
 
-    <div class="bg-surface-sunken border-b border-line-subtle">
-      <nav class="flex gap-1 px-6">
+    <div class="overflow-x-auto bg-surface-sunken border-b border-line-subtle">
+      <nav
+        class="flex min-w-max gap-1 px-3 sm:px-6"
+        aria-label={$t('patients.workspaceNavigation')}
+      >
         {#each tabs as tab}
           <a
             href={tab.path}
-            class="px-4 py-3 font-medium transition-colors {(
+            aria-current={(
+              tab.exact
+                ? currentPath === tab.path
+                : currentPath === tab.path || currentPath.startsWith(tab.path + '/')
+            )
+              ? 'page'
+              : undefined}
+            class="shrink-0 px-3 py-3 text-body font-medium transition-colors sm:px-4 {(
               tab.exact
                 ? currentPath === tab.path
                 : currentPath === tab.path || currentPath.startsWith(tab.path + '/')

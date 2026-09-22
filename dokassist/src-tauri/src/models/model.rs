@@ -2,6 +2,11 @@ use crate::error::AppError;
 use rusqlite::{params, Connection, Row};
 use serde::{Deserialize, Serialize};
 
+/// Existing model-registry assignment namespace for the optional dedicated
+/// tool router. Keeping this in the registry makes the expert preference
+/// durable without creating a second settings/security storage path.
+const ROUTER_ASSIGNMENT: &str = "tool_router";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Model {
     pub id: String,
@@ -12,44 +17,6 @@ pub struct Model {
     pub downloaded_at: String,
     pub last_used: Option<String>,
     pub is_default: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TaskModel {
-    pub task_type: String,
-    pub model_id: String,
-    pub created_at: String,
-    pub updated_at: String,
-}
-
-/// Task types that can have specific models assigned
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum TaskType {
-    Summary,
-    Letter,
-    Report,
-    Default,
-}
-
-impl TaskType {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            TaskType::Summary => "summary",
-            TaskType::Letter => "letter",
-            TaskType::Report => "report",
-            TaskType::Default => "default",
-        }
-    }
-
-    pub fn from_str(s: &str) -> Result<Self, AppError> {
-        match s {
-            "summary" => Ok(TaskType::Summary),
-            "letter" => Ok(TaskType::Letter),
-            "report" => Ok(TaskType::Report),
-            "default" => Ok(TaskType::Default),
-            _ => Err(AppError::Validation(format!("Unknown task type: {}", s))),
-        }
-    }
 }
 
 impl Model {
@@ -63,17 +30,6 @@ impl Model {
             downloaded_at: row.get(5)?,
             last_used: row.get(6)?,
             is_default: row.get::<_, i32>(7)? != 0,
-        })
-    }
-}
-
-impl TaskModel {
-    fn from_row(row: &Row) -> Result<Self, rusqlite::Error> {
-        Ok(Self {
-            task_type: row.get(0)?,
-            model_id: row.get(1)?,
-            created_at: row.get(2)?,
-            updated_at: row.get(3)?,
         })
     }
 }
@@ -189,65 +145,39 @@ pub fn update_model_last_used(conn: &Connection, id: &str) -> Result<(), AppErro
     Ok(())
 }
 
-/// Set the model for a specific task type
-pub fn set_task_model(
-    conn: &Connection,
-    task_type: TaskType,
-    model_id: &str,
-) -> Result<(), AppError> {
-    // Verify the model exists
-    get_model(conn, model_id)?;
-
-    let task_str = task_type.as_str();
-
-    // Upsert the task model assignment
-    conn.execute(
-        "INSERT INTO task_models (task_type, model_id) VALUES (?, ?)
-         ON CONFLICT(task_type) DO UPDATE SET model_id = ?, updated_at = datetime('now')",
-        params![task_str, model_id, model_id],
-    )?;
-
-    Ok(())
-}
-
-/// Get the model assigned to a specific task type
-pub fn get_task_model(conn: &Connection, task_type: TaskType) -> Result<Option<Model>, AppError> {
-    let task_str = task_type.as_str();
-
+/// Return the expert router override, if one has been configured.
+pub fn get_router_override(conn: &Connection) -> Result<Option<Model>, AppError> {
     match conn.query_row(
         "SELECT m.id, m.name, m.filename, m.sha256, m.size_bytes, m.downloaded_at, m.last_used, m.is_default
-         FROM models m
-         JOIN task_models tm ON m.id = tm.model_id
+         FROM task_models tm JOIN models m ON m.id = tm.model_id
          WHERE tm.task_type = ?",
-        params![task_str],
+        params![ROUTER_ASSIGNMENT],
         Model::from_row,
     ) {
         Ok(model) => Ok(Some(model)),
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-        Err(e) => Err(AppError::Database(e)),
+        Err(error) => Err(AppError::Database(error)),
     }
 }
 
-/// Get all task model assignments
-pub fn list_task_models(conn: &Connection) -> Result<Vec<TaskModel>, AppError> {
-    let mut stmt = conn.prepare(
-        "SELECT task_type, model_id, created_at, updated_at
-         FROM task_models ORDER BY task_type",
-    )?;
-
-    let task_models = stmt
-        .query_map([], TaskModel::from_row)?
-        .collect::<Result<Vec<_>, _>>()?;
-
-    Ok(task_models)
-}
-
-/// Clear the model assignment for a specific task type
-pub fn clear_task_model(conn: &Connection, task_type: TaskType) -> Result<(), AppError> {
-    let task_str = task_type.as_str();
-    conn.execute(
-        "DELETE FROM task_models WHERE task_type = ?",
-        params![task_str],
-    )?;
+/// Persist (or clear) the expert tool-router assignment. The foreign key and
+/// explicit lookup ensure an override cannot point at an arbitrary filename.
+pub fn set_router_override(conn: &Connection, model_id: Option<&str>) -> Result<(), AppError> {
+    match model_id {
+        Some(model_id) => {
+            get_model(conn, model_id)?;
+            conn.execute(
+                "INSERT INTO task_models (task_type, model_id) VALUES (?, ?)
+                 ON CONFLICT(task_type) DO UPDATE SET model_id = excluded.model_id",
+                params![ROUTER_ASSIGNMENT, model_id],
+            )?;
+        }
+        None => {
+            conn.execute(
+                "DELETE FROM task_models WHERE task_type = ?",
+                params![ROUTER_ASSIGNMENT],
+            )?;
+        }
+    }
     Ok(())
 }

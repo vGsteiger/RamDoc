@@ -254,7 +254,7 @@
     />
   </Field>
 
-  <div class="grid grid-cols-2 gap-4">
+  <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
     <Field label={$t('medications.startDate')} for="start-date" required>
       <Input id="start-date" type="date" bind:value={startDate} required />
     </Field>

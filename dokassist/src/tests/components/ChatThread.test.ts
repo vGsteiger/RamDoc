@@ -5,6 +5,8 @@ import { listen } from '@tauri-apps/api/event';
 import ChatThread from '../../lib/components/ChatThread.svelte';
 import type { ChatMessageRow, LlmEngineStatus } from '$lib/api';
 import { resetEngineState } from '$lib/stores/engine';
+import { createContextPlan, selectContextPatient } from '$lib/components/context-picker';
+import type { Patient } from '$lib/api';
 
 vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn(),
@@ -29,6 +31,13 @@ const EMPTY_CONTEXT_CACHE = {
   max_contexts: 0,
 };
 
+const IDLE_LIFECYCLE = {
+  phase: 'idle' as const,
+  requested_filename: null,
+  active_filename: null,
+  error: null,
+};
+
 const ENGINE_LOADED = {
   is_loaded: true,
   model_name: 'Phi-4 Mini',
@@ -39,6 +48,8 @@ const ENGINE_LOADED = {
   last_generation_stats: null,
   inference_config: null,
   context_cache: EMPTY_CONTEXT_CACHE,
+  desired_model: null,
+  lifecycle: { ...IDLE_LIFECYCLE, phase: 'ready', active_filename: 'phi4.gguf' },
 } satisfies LlmEngineStatus;
 
 const ENGINE_NOT_LOADED = {
@@ -51,6 +62,8 @@ const ENGINE_NOT_LOADED = {
   last_generation_stats: null,
   inference_config: null,
   context_cache: EMPTY_CONTEXT_CACHE,
+  desired_model: null,
+  lifecycle: IDLE_LIFECYCLE,
 } satisfies LlmEngineStatus;
 
 const USER_MSG: ChatMessageRow = {
@@ -73,6 +86,24 @@ const ASSISTANT_MSG: ChatMessageRow = {
   tool_args_json: null,
   tool_result_for: null,
   created_at: '2026-01-01T00:00:01Z',
+};
+
+const CONTEXT_PATIENT: Patient = {
+  id: 'patient-1',
+  first_name: 'Ada',
+  last_name: 'Lovelace',
+  date_of_birth: '1815-12-10',
+  gender: null,
+  ahv_number: null,
+  address: null,
+  phone: null,
+  email: null,
+  insurance: null,
+  gp_name: null,
+  gp_address: null,
+  notes: null,
+  created_at: '',
+  updated_at: '',
 };
 
 beforeEach(() => {
@@ -151,6 +182,32 @@ describe('ChatThread', () => {
         thinkingEffort: 'medium',
       })
     );
+  });
+
+  it('serializes an explicit context plan into the request instead of claiming durable session context', async () => {
+    mockInvoke
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce(ENGINE_LOADED)
+      .mockResolvedValueOnce({ session_id: 'sess1', final_answer: '', tool_calls_made: [] });
+    const contextPlan = selectContextPatient(createContextPlan(), CONTEXT_PATIENT);
+    render(ChatThread, { props: { sessionId: 'sess1', scope: 'global', contextPlan } });
+    await waitFor(() => expect(screen.getByRole('textbox')).not.toBeDisabled());
+
+    const textarea = screen.getByRole<HTMLTextAreaElement>('textbox');
+    textarea.value = 'Summarize the current treatment';
+    await fireEvent.input(textarea);
+    await fireEvent.click(screen.getByRole('button', { name: /Send/i }));
+
+    await waitFor(() =>
+      expect(mockInvoke).toHaveBeenCalledWith(
+        'run_agent_turn',
+        expect.objectContaining({
+          sessionId: 'sess1',
+          userMessage: expect.stringContaining('[Visible context plan for this request'),
+        })
+      )
+    );
+    expect(screen.getByText(/not saved as a durable session setting/i)).toBeInTheDocument();
   });
 
   it('optimistic user message appears immediately after submit', async () => {
@@ -291,6 +348,34 @@ describe('ChatThread', () => {
 
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Thinking'));
     expect(screen.queryByText(/Looking up medications/i)).not.toBeInTheDocument();
+  });
+
+  it('only renders correlated chunks for its own session', async () => {
+    const handlers: Record<string, (e: { payload: unknown }) => void> = {};
+    mockListen.mockImplementation((event, handler) => {
+      handlers[event] = handler as (e: { payload: unknown }) => void;
+      return Promise.resolve(() => {});
+    });
+    mockInvoke.mockImplementation((cmd) => {
+      if (cmd === 'get_chat_messages') return Promise.resolve([]);
+      if (cmd === 'get_engine_status') return Promise.resolve(ENGINE_LOADED);
+      if (cmd === 'run_agent_turn') return new Promise(() => {});
+      return Promise.resolve(null);
+    });
+    render(ChatThread, { props: { sessionId: 'sess1', scope: 'global' } });
+    await waitFor(() => expect(screen.getByRole('textbox')).not.toBeDisabled());
+
+    const textarea = screen.getByRole<HTMLTextAreaElement>('textbox');
+    textarea.value = 'Question';
+    await fireEvent.input(textarea);
+    await fireEvent.click(screen.getByRole('button', { name: /Send/i }));
+
+    await waitFor(() => expect(handlers['agent-chunk-session']).toBeDefined());
+    handlers['agent-chunk-session']({ payload: { session_id: 'other-sess', token: 'Wrong' } });
+    expect(screen.queryByText('Wrong')).not.toBeInTheDocument();
+
+    handlers['agent-chunk-session']({ payload: { session_id: 'sess1', token: 'Right' } });
+    await waitFor(() => expect(screen.getByText('Right')).toBeInTheDocument());
   });
 
   it('does not let a stale agent-done start a second overlapping turn', async () => {

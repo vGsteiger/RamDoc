@@ -12,14 +12,26 @@
   import { AlertTriangle, Wrench } from 'lucide-svelte';
   import { t } from '$lib/translations';
   import { chatToolActivityLabel } from '$lib/chat-activity';
+  import { serializeContextPreamble, type ContextPlan } from './context-picker';
+  import { evidenceForTurn, provenanceForAnswer } from '$lib/chat-provenance';
 
   interface Props {
     sessionId: string;
     scope: 'global' | 'patient';
     patientId?: string;
+    /** A route-supplied, editable starter prompt; it is never auto-submitted. */
+    initialMessage?: string;
+    /** Explicit, request-scoped context; it is not presented as durable session state. */
+    contextPlan?: ContextPlan;
   }
 
-  let { sessionId, scope: _scope, patientId: _patientId }: Props = $props();
+  let {
+    sessionId,
+    scope,
+    patientId: _patientId,
+    initialMessage = '',
+    contextPlan = undefined,
+  }: Props = $props();
 
   let messages = $state<ChatMessageRow[]>([]);
   let streamingContent = $state('');
@@ -41,6 +53,9 @@
   let unlistenError: UnlistenFn | null = null;
   /** True until `run_agent_turn` settles, including the post-loop persist emit. */
   let turnInFlight = $state(false);
+  let requestContextPreamble = $derived(
+    scope === 'global' && contextPlan ? serializeContextPreamble(contextPlan) : null
+  );
 
   function isThisSession(payload: { session_id?: string } | null | undefined): boolean {
     return payload?.session_id === sessionId;
@@ -53,6 +68,17 @@
       console.error('Failed to load messages:', e);
     }
   }
+
+  function applyInitialMessage() {
+    if (initialMessage && !inputText && messages.length === 0) inputText = initialMessage;
+  }
+
+  $effect(() => {
+    initialMessage;
+    messages.length;
+    inputText;
+    applyInitialMessage();
+  });
 
   function scrollToBottom() {
     messagesEndEl?.scrollIntoView({ behavior: 'smooth' });
@@ -86,7 +112,11 @@
     scrollToBottom();
 
     try {
-      await runAgentTurn(sessionId, text, get(thinkingEffort));
+      await runAgentTurn(
+        sessionId,
+        requestContextPreamble ? `${requestContextPreamble}\n\n[User request]\n${text}` : text,
+        get(thinkingEffort)
+      );
       // agent-done triggers re-fetch via event listener
     } catch (e: unknown) {
       isStreaming = false;
@@ -117,14 +147,19 @@
   onMount(async () => {
     await loadMessages();
     await refreshEngineStatus();
+    applyInitialMessage();
     scrollToBottom();
 
-    unlistenChunk = await listen<string>('agent-chunk', (event) => {
-      activeToolName = null;
-      pendingTool = null;
-      streamingContent += event.payload;
-      scrollToBottom();
-    });
+    unlistenChunk = await listen<{ session_id: string; token: string }>(
+      'agent-chunk-session',
+      (event) => {
+        if (!isThisSession(event.payload)) return;
+        activeToolName = null;
+        pendingTool = null;
+        streamingContent += event.payload.token;
+        scrollToBottom();
+      }
+    );
 
     unlistenDone = await listen<{ final_answer: string; session_id: string }>(
       'agent-done',
@@ -163,14 +198,18 @@
       scrollToBottom();
     });
 
-    unlistenError = await listen<{ message: string }>('agent-error', (event) => {
-      isStreaming = false;
-      streamingContent = '';
-      activityStartedAt = null;
-      activeToolName = null;
-      pendingTool = null;
-      errorMessage = event.payload.message;
-    });
+    unlistenError = await listen<{ session_id: string; message: string }>(
+      'agent-error-session',
+      (event) => {
+        if (!isThisSession(event.payload)) return;
+        isStreaming = false;
+        streamingContent = '';
+        activityStartedAt = null;
+        activeToolName = null;
+        pendingTool = null;
+        errorMessage = event.payload.message;
+      }
+    );
   });
 
   onDestroy(() => {
@@ -182,7 +221,7 @@
   });
 </script>
 
-<div class="flex flex-col h-full">
+<div class="flex min-h-0 flex-1 flex-col">
   {#if isLoadingModel && $engine.loadingStartedAt}
     <div class="bg-warning-subtle border-b border-warning-line px-4 py-3">
       <ThinkingIndicator
@@ -209,9 +248,15 @@
   {/if}
 
   <!-- Message list -->
-  <div class="flex-1 overflow-y-auto px-4 py-4 space-y-1">
-    {#each messages as message (message.id)}
-      <ChatMessage {message} />
+  <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4 space-y-1">
+    {#each messages as message, index (message.id)}
+      <ChatMessage
+        {message}
+        provenance={message.role === 'assistant'
+          ? provenanceForAnswer(messages, index, scope === 'patient')
+          : undefined}
+        draftEvidence={message.role === 'tool_result' ? evidenceForTurn(messages, index) : []}
+      />
     {/each}
 
     {#if pendingTool}
@@ -260,6 +305,13 @@
 
   <!-- Input area -->
   <div class="border-t border-line p-4 space-y-2">
+    {#if contextPlan?.selectedPatients.length}
+      <div
+        class="rounded-control border border-accent-line bg-accent-subtle px-3 py-2 text-caption text-accent-fg"
+      >
+        {$t('chat.contextWillBeAttached')}
+      </div>
+    {/if}
     <div class="flex gap-2">
       <textarea
         bind:value={inputText}

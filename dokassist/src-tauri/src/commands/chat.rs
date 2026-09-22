@@ -3,7 +3,9 @@ use crate::llm::agent::{run_agent_loop, AgentScope, AgentTurnInput};
 use crate::llm::context_cache::InferenceSession;
 use crate::llm::engine::AgentMessage;
 use crate::llm::ThinkingEffort;
-use crate::models::chat::{self, ChatMessageRow, ChatSession, CreateChatMessage};
+use crate::models::chat::{
+    self, ChatDraftVersion, ChatMessageRow, ChatSession, CreateChatDraftVersion, CreateChatMessage,
+};
 use crate::models::patient;
 use crate::state::{llm_lock_poisoned, AppState, AuthState};
 use serde::{Deserialize, Serialize};
@@ -29,6 +31,56 @@ fn require_unlocked(state: &AppState) -> Result<(), AppError> {
     Ok(())
 }
 
+/// The only chat artifact eligible for durable revisions is a report proposal
+/// produced by the validated `write_report` tool.  Do not infer this from
+/// assistant text: tool-result rows are the typed, persisted boundary.
+fn report_proposal(message: &ChatMessageRow) -> Result<(String, String), AppError> {
+    if message.role != "tool_result" || message.tool_name.as_deref() != Some("write_report") {
+        return Err(AppError::Validation(
+            "Draft revisions require a report tool result".to_string(),
+        ));
+    }
+    let value: serde_json::Value = serde_json::from_str(&message.content)
+        .map_err(|_| AppError::Validation("Invalid report tool result".to_string()))?;
+    let proposal = value
+        .get("proposal")
+        .and_then(serde_json::Value::as_object)
+        .filter(|_| {
+            value.get("status").and_then(serde_json::Value::as_str)
+                == Some("pending_clinician_confirmation")
+        })
+        .filter(|_| {
+            value.get("action").and_then(serde_json::Value::as_str) == Some("create_report")
+        })
+        .ok_or_else(|| AppError::Validation("Missing report proposal".to_string()))?;
+    let patient_id = proposal
+        .get("patient_id")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| AppError::Validation("Missing report proposal patient".to_string()))?;
+    let content = proposal
+        .get("content")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| AppError::Validation("Missing report proposal content".to_string()))?;
+    Ok((patient_id.to_string(), content.to_string()))
+}
+
+fn validate_draft_message_scope(
+    conn: &rusqlite::Connection,
+    tool_result_message_id: &str,
+) -> Result<ChatMessageRow, AppError> {
+    let message = chat::get_chat_message(conn, tool_result_message_id)?;
+    let (proposal_patient_id, _) = report_proposal(&message)?;
+    let session = chat::get_chat_session(conn, &message.session_id)?;
+    // Keep the existing patient-session boundary intact even for revision-only
+    // writes. A global session retains its existing capabilities.
+    if session.scope == "patient" && session.patient_id.as_deref() != Some(&proposal_patient_id) {
+        return Err(AppError::Validation(
+            "Patient scope: draft proposal belongs to a different patient".to_string(),
+        ));
+    }
+    Ok(message)
+}
+
 /// Main command: persist user message, run agent loop, persist results.
 #[tauri::command]
 pub async fn run_agent_turn(
@@ -47,6 +99,21 @@ pub async fn run_agent_turn(
             .ok_or_else(|| AppError::Llm("Model not loaded".to_string()))
             .map(Arc::clone)?
     };
+
+    // The router is an optional independent runtime. Its failure or memory
+    // admission denial must not turn a normal chat into an error: the agent
+    // uses the writing engine for tool probes in that explicitly observable
+    // fallback state.
+    let router_engine = match crate::commands::llm::ensure_router_engine(&state).await {
+        Ok(engine) => engine,
+        Err(error) => {
+            log::warn!(
+                "Dedicated tool router unavailable; using writing engine for probes: {error}"
+            );
+            None
+        }
+    };
+    let dedicated_router = router_engine.is_some();
 
     let pool = state.get_db()?;
 
@@ -126,6 +193,7 @@ pub async fn run_agent_turn(
         run_agent_loop(
             &app_clone,
             &engine,
+            router_engine.as_ref(),
             &pool,
             AgentTurnInput {
                 inference_session,
@@ -138,7 +206,29 @@ pub async fn run_agent_turn(
         )
     })
     .await
-    .map_err(|e| AppError::Llm(format!("spawn_blocking error: {e}")))??;
+    .map_err(|e| AppError::Llm(format!("spawn_blocking error: {e}")));
+
+    let result = match result {
+        Ok(Ok(result)) => result,
+        Ok(Err(error)) | Err(error) => {
+            let message = error.to_string();
+            let _ = app.emit(
+                "agent-error-session",
+                serde_json::json!({"session_id": session_id, "message": message}),
+            );
+            return Err(error);
+        }
+    };
+
+    if let Some(average_ms) = result
+        .router_probe_duration_ms
+        .checked_div(result.router_probe_count)
+    {
+        let per_probe = std::time::Duration::from_millis(average_ms);
+        for _ in 0..result.router_probe_count {
+            state.record_router_probe(dedicated_router, per_probe);
+        }
+    }
 
     // Persist tool calls and assistant answer
     {
@@ -158,7 +248,7 @@ pub async fn run_agent_turn(
                 },
             )?;
             // tool_result message
-            chat::append_chat_message(
+            let result_message = chat::append_chat_message(
                 &conn,
                 &CreateChatMessage {
                     session_id: session_id_clone.clone(),
@@ -169,6 +259,20 @@ pub async fn run_agent_turn(
                     tool_result_for: Some(tc_msg.id.clone()),
                 },
             )?;
+            // `write_report` has already returned a confirmation-gated
+            // proposal. Preserve its AI-produced initial version while it is
+            // still an unsaved artifact, rather than creating a report row.
+            if let Ok((_, content)) = report_proposal(&result_message) {
+                chat::append_chat_draft_version(
+                    &conn,
+                    &CreateChatDraftVersion {
+                        tool_result_message_id: result_message.id,
+                        content,
+                        origin: "ai".to_string(),
+                        claim_resolutions_json: "[]".to_string(),
+                    },
+                )?;
+            }
         }
         // Persist final assistant message
         chat::append_chat_message(
@@ -260,6 +364,30 @@ pub async fn get_chat_messages(
     let pool = state.get_db()?;
     let conn = pool.conn()?;
     chat::list_chat_messages(&conn, &session_id)
+}
+
+#[tauri::command]
+pub async fn list_chat_draft_versions(
+    state: State<'_, AppState>,
+    tool_result_message_id: String,
+) -> Result<Vec<ChatDraftVersion>, AppError> {
+    require_unlocked(&state)?;
+    let pool = state.get_db()?;
+    let conn = pool.conn()?;
+    validate_draft_message_scope(&conn, &tool_result_message_id)?;
+    chat::list_chat_draft_versions(&conn, &tool_result_message_id)
+}
+
+#[tauri::command]
+pub async fn append_chat_draft_version(
+    state: State<'_, AppState>,
+    input: CreateChatDraftVersion,
+) -> Result<ChatDraftVersion, AppError> {
+    require_unlocked(&state)?;
+    let pool = state.get_db()?;
+    let conn = pool.conn()?;
+    validate_draft_message_scope(&conn, &input.tool_result_message_id)?;
+    chat::append_chat_draft_version(&conn, &input)
 }
 
 #[tauri::command]

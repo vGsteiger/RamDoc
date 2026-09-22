@@ -29,8 +29,12 @@ import {
   getEmbedStatus,
   initializeEmbedEngine,
   getRecommendedModel,
-  downloadModel,
   loadModel,
+  ensureWritingModelLoaded,
+  unloadModel,
+  getRouterDiagnostics,
+  unloadRouterModel,
+  setRouterModelOverride,
   createSession,
   getSession,
   listAllSessions,
@@ -114,11 +118,6 @@ import {
   deleteModel,
   setDefaultModel,
   getDefaultModel,
-  setTaskModel,
-  getTaskModel,
-  listTaskModels,
-  clearTaskModel,
-  getModelForTask,
   createLetter,
   getLetter,
   listLetters,
@@ -185,34 +184,6 @@ describe('getRecommendedModel', () => {
     const result = await getRecommendedModel();
     expect(mockInvoke).toHaveBeenCalledWith('get_recommended_model');
     expect(result).toEqual(model);
-  });
-});
-
-describe('downloadModel', () => {
-  it('calls download_model with the model payload', async () => {
-    const model: ModelChoice = {
-      name: 'Phi-4 Mini Q4_K_M',
-      filename: 'Phi-4-mini-instruct-Q4_K_M.gguf',
-      size_bytes: 3 * 1024 ** 3,
-      reason: 'Unter 16 GB RAM: Phi-4 Mini für minimale Ressourcen',
-    };
-    mockInvoke.mockResolvedValueOnce(undefined);
-    await downloadModel(model);
-    expect(mockInvoke).toHaveBeenCalledWith('download_model', { model });
-  });
-
-  it('propagates invoke errors', async () => {
-    const model: ModelChoice = {
-      name: 'Phi-4 Mini Q4_K_M',
-      filename: 'Phi-4-mini-instruct-Q4_K_M.gguf',
-      size_bytes: 3 * 1024 ** 3,
-      reason: '',
-    };
-    mockInvoke.mockRejectedValueOnce({
-      code: 'VALIDATION_ERROR',
-      message: 'Unknown model filename',
-    });
-    await expect(downloadModel(model)).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
 });
 
@@ -1719,114 +1690,39 @@ describe('getDefaultModel', () => {
   });
 });
 
-describe('setTaskModel', () => {
-  it('calls set_task_model with taskType and modelId', async () => {
+describe('writing model lifecycle API', () => {
+  it('asks the backend to load the durable writing-model selection', async () => {
+    mockInvoke.mockResolvedValueOnce({ is_loaded: true });
+    await ensureWritingModelLoaded();
+    expect(mockInvoke).toHaveBeenCalledWith('ensure_writing_model_loaded');
+  });
+
+  it('explicitly unloads the writing model', async () => {
     mockInvoke.mockResolvedValueOnce(undefined);
-    await setTaskModel('summary', 'model1');
-    expect(mockInvoke).toHaveBeenCalledWith('set_task_model', {
-      taskType: 'summary',
-      modelId: 'model1',
+    await unloadModel();
+    expect(mockInvoke).toHaveBeenCalledWith('unload_model');
+  });
+
+  it('reads managed tool-router diagnostics', async () => {
+    mockInvoke.mockResolvedValueOnce({ role: 'tool_router', mode: 'managed' });
+    await getRouterDiagnostics();
+    expect(mockInvoke).toHaveBeenCalledWith('get_router_diagnostics');
+  });
+
+  it('persists and clears the expert router override', async () => {
+    mockInvoke.mockResolvedValueOnce(undefined).mockResolvedValueOnce(undefined);
+    await setRouterModelOverride('router-model');
+    await setRouterModelOverride(null);
+    expect(mockInvoke).toHaveBeenNthCalledWith(1, 'set_router_model_override', {
+      modelId: 'router-model',
     });
-  });
-});
-
-describe('getTaskModel', () => {
-  it('calls get_task_model with taskType and returns the assigned model', async () => {
-    const model = {
-      id: 'model1',
-      name: 'Phi-4 Mini Q4_K_M',
-      filename: 'Phi-4-mini-instruct-Q4_K_M.gguf',
-      sha256: 'abc123',
-      size_bytes: 3000000000,
-      downloaded_at: '2025-01-01T00:00:00Z',
-      last_used: null,
-      is_default: false,
-    };
-    mockInvoke.mockResolvedValueOnce(model);
-    const result = await getTaskModel('summary');
-    expect(mockInvoke).toHaveBeenCalledWith('get_task_model', { taskType: 'summary' });
-    expect(result).toEqual(model);
+    expect(mockInvoke).toHaveBeenNthCalledWith(2, 'set_router_model_override', { modelId: null });
   });
 
-  it('returns null when no model is assigned to the task', async () => {
-    mockInvoke.mockResolvedValueOnce(null);
-    const result = await getTaskModel('letter');
-    expect(mockInvoke).toHaveBeenCalledWith('get_task_model', { taskType: 'letter' });
-    expect(result).toBeNull();
-  });
-});
-
-describe('listTaskModels', () => {
-  it('calls list_task_models and returns all task-model assignments', async () => {
-    const taskModels = [
-      {
-        task_type: 'summary',
-        model_id: 'model1',
-        created_at: '2025-01-01T00:00:00Z',
-        updated_at: '2025-01-01T00:00:00Z',
-      },
-      {
-        task_type: 'report',
-        model_id: 'model2',
-        created_at: '2025-01-02T00:00:00Z',
-        updated_at: '2025-01-02T00:00:00Z',
-      },
-    ];
-    mockInvoke.mockResolvedValueOnce(taskModels);
-    const result = await listTaskModels();
-    expect(mockInvoke).toHaveBeenCalledWith('list_task_models');
-    expect(result).toEqual(taskModels);
-  });
-});
-
-describe('clearTaskModel', () => {
-  it('calls clear_task_model with taskType', async () => {
+  it('explicitly unloads the dedicated router runtime', async () => {
     mockInvoke.mockResolvedValueOnce(undefined);
-    await clearTaskModel('summary');
-    expect(mockInvoke).toHaveBeenCalledWith('clear_task_model', { taskType: 'summary' });
-  });
-});
-
-describe('getModelForTask', () => {
-  it('calls get_model_for_task with taskType and returns task-specific model', async () => {
-    const model = {
-      id: 'model1',
-      name: 'Phi-4 Mini Q4_K_M',
-      filename: 'Phi-4-mini-instruct-Q4_K_M.gguf',
-      sha256: 'abc123',
-      size_bytes: 3000000000,
-      downloaded_at: '2025-01-01T00:00:00Z',
-      last_used: null,
-      is_default: false,
-    };
-    mockInvoke.mockResolvedValueOnce(model);
-    const result = await getModelForTask('summary');
-    expect(mockInvoke).toHaveBeenCalledWith('get_model_for_task', { taskType: 'summary' });
-    expect(result).toEqual(model);
-  });
-
-  it('returns default model when no task-specific model is set', async () => {
-    const defaultModel = {
-      id: 'model2',
-      name: 'Default Model',
-      filename: 'default.gguf',
-      sha256: 'def456',
-      size_bytes: 5000000000,
-      downloaded_at: '2025-01-01T00:00:00Z',
-      last_used: null,
-      is_default: true,
-    };
-    mockInvoke.mockResolvedValueOnce(defaultModel);
-    const result = await getModelForTask('letter');
-    expect(mockInvoke).toHaveBeenCalledWith('get_model_for_task', { taskType: 'letter' });
-    expect(result).toEqual(defaultModel);
-  });
-
-  it('returns null when no task-specific or default model exists', async () => {
-    mockInvoke.mockResolvedValueOnce(null);
-    const result = await getModelForTask('report');
-    expect(mockInvoke).toHaveBeenCalledWith('get_model_for_task', { taskType: 'report' });
-    expect(result).toBeNull();
+    await unloadRouterModel();
+    expect(mockInvoke).toHaveBeenCalledWith('unload_router_model');
   });
 });
 

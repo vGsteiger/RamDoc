@@ -14,7 +14,7 @@
         "title": "RamDoc",
         "width": 1280,
         "height": 800,
-        "minWidth": 900,
+        "minWidth": 700,
         "minHeight": 600,
         "decorations": true,
         "transparent": false

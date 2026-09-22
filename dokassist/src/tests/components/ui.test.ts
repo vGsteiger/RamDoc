@@ -5,6 +5,7 @@ import Button from '$lib/components/ui/Button.svelte';
 import Card from '$lib/components/ui/Card.svelte';
 import IconButton from '$lib/components/ui/IconButton.svelte';
 import Input from '$lib/components/ui/Input.svelte';
+import Dialog from '$lib/components/ui/Dialog.svelte';
 import Spinner from '$lib/components/ui/Spinner.svelte';
 import ThinkingIndicator from '$lib/components/ui/ThinkingIndicator.svelte';
 import ListSkeleton from '$lib/components/ui/ListSkeleton.svelte';
@@ -91,18 +92,23 @@ describe('Button', () => {
     expect(link).not.toHaveAttribute('aria-disabled');
   });
 
-  it('keeps both control sizes on the shared 28/32px rhythm', () => {
+  it('keeps shared controls large enough for reliable pointer interaction', () => {
     const { unmount } = render(Button, { size: 'sm' });
-    expect(screen.getByRole('button')).toHaveClass('h-7');
+    expect(screen.getByRole('button')).toHaveClass('min-h-9');
     unmount();
 
     render(Button, { size: 'md' });
-    expect(screen.getByRole('button')).toHaveClass('h-8');
+    expect(screen.getByRole('button')).toHaveClass('min-h-10');
   });
 
   it('emits no raw palette utilities', () => {
     render(Button, { variant: 'primary' });
     expect(screen.getByRole('button').className).not.toMatch(RAW_PALETTE);
+  });
+
+  it('preserves telephone semantics instead of falling back to text', () => {
+    render(Input, { type: 'tel' });
+    expect(screen.getByRole('textbox')).toHaveAttribute('type', 'tel');
   });
 });
 
@@ -140,6 +146,19 @@ describe('IconButton', () => {
     expect(link).toHaveClass('pointer-events-none');
     expect(link).toHaveAttribute('aria-disabled', 'true');
     expect(link).toHaveAttribute('href');
+  });
+
+  it('uses a 40px target for icon-only actions', () => {
+    render(IconButton, { label: 'More options' });
+    expect(screen.getByRole('button')).toHaveClass('h-10', 'w-10');
+  });
+});
+
+describe('Dialog', () => {
+  it('exposes an accessible modal dialog when open', () => {
+    render(Dialog, { open: true, title: 'Confirm action' });
+    expect(screen.getByRole('dialog')).toHaveAttribute('aria-modal', 'true');
+    expect(screen.getByRole('dialog')).toHaveAttribute('aria-labelledby');
   });
 });
 

@@ -367,7 +367,7 @@
   }
 </script>
 
-<div class="p-8 max-w-6xl mx-auto">
+<div class="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto">
   <div class="flex justify-between items-center mb-6">
     <h1 class="text-display font-semibold text-fg">{$t('treatmentPlans.title')}</h1>
     <button
@@ -421,7 +421,7 @@
           ></textarea>
         </div>
 
-        <div class="grid grid-cols-3 gap-4">
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div>
             <label for="start-date" class="block text-body font-medium text-fg-muted mb-1">
               {$t('treatmentPlans.startDate')} *
@@ -639,7 +639,7 @@
                           class="w-full px-3 py-2 bg-surface-sunken border border-line rounded-control text-fg focus:outline-none focus:ring-2 focus:ring-accent/30"
                         ></textarea>
                       </div>
-                      <div class="grid grid-cols-3 gap-3">
+                      <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
                         <div>
                           <label
                             for="goal-target-date"
