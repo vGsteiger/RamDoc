@@ -102,7 +102,7 @@ jobs:
 
     - name: Check for typos
       # CRIT-7: Pinned to commit SHA for supply-chain security (tag: v1.44.0)
-      uses: crate-ci/typos@d43b6c087ac471e2ea7b8af622ff15f05c0c365b
+      uses: crate-ci/typos@512fc24f32f44ab01972217aaaf3dc86ec234d53
       with:
         files: |
           ./dokassist/src-tauri/src
