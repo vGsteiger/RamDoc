@@ -1,5 +1,5 @@
 use crate::error::AppError;
-use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
+use fastembed::{EmbeddingModel, TextEmbedding, TextInitOptions};
 use std::path::Path;
 
 /// Local embedding engine backed by fastembed / ONNX Runtime.
@@ -19,7 +19,7 @@ impl EmbedEngine {
     /// Always call from a `tokio::task::spawn_blocking` context.
     pub fn new(cache_dir: &Path) -> Result<Self, AppError> {
         let model = TextEmbedding::try_new(
-            InitOptions::new(EmbeddingModel::NomicEmbedTextV15)
+            TextInitOptions::new(EmbeddingModel::NomicEmbedTextV15)
                 .with_cache_dir(cache_dir.to_path_buf())
                 .with_show_download_progress(true),
         )
