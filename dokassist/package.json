@@ -38,13 +38,13 @@
     "eslint-plugin-svelte": "^3.23.0",
     "globals": "^17.11.0",
     "jsdom": "^29.1.1",
-    "prettier": "^3.9.8",
+    "prettier": "^3.9.9",
     "prettier-plugin-svelte": "^4.1.1",
     "svelte": "^5.57.0",
     "svelte-check": "^4.6.0",
     "tailwindcss": "^4.3.3",
-    "typescript-eslint": "^8.62.1",
-    "vite": "^8.3.0",
+    "typescript-eslint": "^8.70.1",
+    "vite": "^8.3.1",
     "vitest": "^4.1.11"
   },
   "pnpm": {
@@ -54,7 +54,7 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",
-    "@tauri-apps/plugin-dialog": "^2.7.2",
+    "@tauri-apps/plugin-dialog": "^2.7.3",
     "@tauri-apps/plugin-fs": "^2.5.2",
     "@tauri-apps/plugin-updater": "^2.11.0",
     "lucide-svelte": "^1.0.1",

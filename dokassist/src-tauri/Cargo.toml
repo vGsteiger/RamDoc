@@ -69,7 +69,7 @@ dirs = "6"
 pdf-extract = "0.12"
 
 # Embeddings (PKG-semantic-search)
-fastembed = { version = "5", default-features = false, features = ["ort-download-binaries", "hf-hub"] }
+fastembed = { version = "7", default-features = false, features = ["ort-download-binaries", "hf-hub"] }
 
 # Medication reference DB integrity
 minisign-verify = "0.2"
