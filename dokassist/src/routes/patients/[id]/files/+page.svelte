@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import { listFiles, deleteFile, downloadFile, type FileRecord } from '$lib/api';
   import FileUploader from '$lib/components/FileUploader.svelte';
   import FileCard from '$lib/components/FileCard.svelte';
@@ -9,7 +9,7 @@
   import { t } from '$lib/translations';
   import { Alert, EmptyState, ListSkeleton, PageHeader } from '$lib/components/ui';
 
-  let patientId = $derived($page.params.id!);
+  let patientId = $derived(page.params.id!);
   let files = $state<FileRecord[]>([]);
   let isLoading = $state(true);
   let errorMessage = $state('');

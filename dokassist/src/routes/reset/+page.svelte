@@ -1,7 +1,7 @@
 <script lang="ts">
   import { errorText } from '$lib/translations/labels';
   import { goto } from '$app/navigation';
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import { checkAuth, resetApp } from '$lib/api';
   import { cancelResetPath } from '$lib/auth-routes';
   import { t } from '$lib/translations';
@@ -17,7 +17,7 @@
       status = await checkAuth();
     } catch {
       // Prefer the originating route over a stranded unlock screen.
-      status = $page.url.searchParams.get('from') === 'setup' ? 'first_run' : 'locked';
+      status = page.url.searchParams.get('from') === 'setup' ? 'first_run' : 'locked';
     }
     await goto(cancelResetPath(status));
   }

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import {
@@ -14,17 +14,17 @@
   import ErrorDisplay from '$lib/components/ErrorDisplay.svelte';
   import { t } from '$lib/translations';
 
-  $: patientId = $page.params.id!;
-  $: emailId = $page.params.emailId!;
+  let patientId = $derived(page.params.id!);
+  let emailId = $derived(page.params.emailId!);
 
-  let email: Email | null = null;
-  let recipientEmail = '';
-  let subject = '';
-  let body = '';
-  let error: AppError | null = null;
-  let isLoading = true;
-  let isSaving = false;
-  let isEditing = false;
+  let email: Email | null = $state(null);
+  let recipientEmail = $state('');
+  let subject = $state('');
+  let body = $state('');
+  let error: AppError | null = $state(null);
+  let isLoading = $state(true);
+  let isSaving = $state(false);
+  let isEditing = $state(false);
 
   async function loadEmail() {
     try {
@@ -207,14 +207,14 @@
         {#if isEditing}
           <div class="flex space-x-3">
             <button
-              on:click={handleSaveChanges}
+              onclick={handleSaveChanges}
               disabled={isSaving}
               class="h-8 px-3 bg-surface-selected text-fg-muted rounded-control hover:bg-surface-selected transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSaving ? $t('email.saving') : $t('email.saveChanges')}
             </button>
             <button
-              on:click={handleSendEmail}
+              onclick={handleSendEmail}
               disabled={isSaving}
               class="h-8 px-3 bg-accent text-on-accent rounded-control hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -223,7 +223,7 @@
           </div>
         {:else}
           <button
-            on:click={() => {
+            onclick={() => {
               const mailtoLink = encodeURI(
                 `mailto:${recipientEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
               );

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { t } from '$lib/translations';
@@ -9,7 +9,7 @@
   // editable in ChatThread and is deliberately not submitted automatically.
   onMount(() => {
     void goto(
-      `${resolve('/chat')}?patientId=${encodeURIComponent($page.params.id ?? '')}&intent=report`
+      `${resolve('/chat')}?patientId=${encodeURIComponent(page.params.id ?? '')}&intent=report`
     );
   });
 </script>

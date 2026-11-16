@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import { getPatient, type Patient } from '$lib/api';
   import { Hourglass } from 'lucide-svelte';
   import type { Snippet } from 'svelte';
@@ -8,12 +8,12 @@
 
   let { children }: { children: Snippet } = $props();
 
-  let patientId = $derived($page.params.id!);
+  let patientId = $derived(page.params.id!);
   let patient = $state<Patient | null>(null);
   let isLoading = $state(true);
   let errorMessage = $state('');
 
-  let currentPath = $derived($page.url.pathname);
+  let currentPath = $derived(page.url.pathname);
 
   let tabs = $derived([
     { path: `/patients/${patientId}`, labelKey: 'patients.overview', exact: true },

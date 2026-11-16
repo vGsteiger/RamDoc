@@ -2,14 +2,14 @@
   import { t } from '$lib/translations';
   import { get } from 'svelte/store';
   import { onMount } from 'svelte';
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { listSessionsForPatient, type Session } from '$lib/api';
   import SessionCard from '$lib/components/SessionCard.svelte';
   import { Alert, Button, EmptyState, PageHeader, Spinner } from '$lib/components/ui';
   import { CalendarClock, Plus } from 'lucide-svelte';
 
-  const patientId = $derived($page.params.id!);
+  const patientId = $derived(page.params.id!);
 
   let sessions = $state<Session[]>([]);
   let loading = $state(true);

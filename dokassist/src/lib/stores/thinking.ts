@@ -1,5 +1,5 @@
 import { writable } from 'svelte/store';
-import { browser } from '$app/environment';
+import { browser } from '$app/env';
 import type { ThinkingEffort } from '$lib/api';
 
 const STORAGE_KEY = 'thinking-effort';

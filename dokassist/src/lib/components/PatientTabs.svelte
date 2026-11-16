@@ -1,6 +1,6 @@
 <script lang="ts">
   import { t } from '$lib/translations';
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import {
     ClipboardList,
     CalendarDays,
@@ -31,7 +31,7 @@
     { path: `/patients/${patientId}/reports`, label: $t('patients.reports'), icon: FileText },
   ]);
 
-  let currentPath = $derived($page.url.pathname);
+  let currentPath = $derived(page.url.pathname);
 </script>
 
 <nav class="border-b border-line">

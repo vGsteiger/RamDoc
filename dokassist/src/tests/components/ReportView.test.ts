@@ -3,14 +3,14 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import { invoke } from '@tauri-apps/api/core';
 import ReportView from '../../routes/patients/[id]/reports/[reportId]/+page.svelte';
 
-vi.mock('$app/stores', async () => {
-  const { readable } = await vi.importActual<typeof import('svelte/store')>('svelte/store');
+// `$app/state` exposes `page` as a plain reactive object, not a store.
+vi.mock('$app/state', () => {
   return {
-    page: readable({
+    page: {
       params: { id: 'patient-1', reportId: 'report-1' },
       url: new URL('http://localhost/patients/patient-1/reports/report-1'),
       route: { id: null },
-    }),
+    },
   };
 });
 
