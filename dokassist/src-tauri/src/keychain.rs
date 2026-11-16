@@ -17,7 +17,7 @@ use security_framework::passwords::{delete_generic_password, get_generic_passwor
 #[cfg(target_os = "macos")]
 use security_framework_sys::access_control::kSecAttrAccessibleWhenUnlockedThisDeviceOnly;
 #[cfg(target_os = "macos")]
-use security_framework_sys::base::errSecItemNotFound;
+use security_framework_sys::base::{errSecAuthFailed, errSecItemNotFound};
 #[cfg(target_os = "macos")]
 use security_framework_sys::item::{
     kSecAttrAccount, kSecAttrService, kSecClass, kSecClassGenericPassword, kSecReturnAttributes,
@@ -30,6 +30,38 @@ use security_framework_sys::keychain_item::{SecItemAdd, SecItemCopyMatching, Sec
 extern "C" {
     // `kSecAttrAccessible` is not exported by security_framework_sys.
     static kSecAttrAccessible: core_foundation_sys::string::CFStringRef;
+}
+
+/// `errSecUserCanceled`: the user dismissed the Keychain access prompt.
+#[cfg(target_os = "macos")]
+const ERR_SEC_USER_CANCELED: i32 = -128;
+/// `errSecInteractionNotAllowed`: the keychain is locked and may not prompt.
+#[cfg(target_os = "macos")]
+const ERR_SEC_INTERACTION_NOT_ALLOWED: i32 = -25308;
+/// `errSecNoSuchKeychain`: the default (login) keychain cannot be found.
+#[cfg(target_os = "macos")]
+const ERR_SEC_NO_SUCH_KEYCHAIN: i32 = -25294;
+
+/// Map an `OSStatus` from a Keychain call to an [`AppError`].
+///
+/// Access-denial statuses get their own variant. The app is not signed with a
+/// stable Developer ID, so login-keychain item ACLs can stop trusting the binary
+/// after an update and macOS asks the user to allow access again. Denying that
+/// prompt, or a login keychain whose password no longer matches the account
+/// password, used to surface as an opaque Keychain error with no way forward.
+#[cfg(target_os = "macos")]
+fn map_status(status: i32, operation: &str) -> AppError {
+    match status {
+        s if s == errSecItemNotFound => AppError::KeychainItemMissing,
+        s if s == errSecAuthFailed
+            || s == ERR_SEC_USER_CANCELED
+            || s == ERR_SEC_INTERACTION_NOT_ALLOWED
+            || s == ERR_SEC_NO_SUCH_KEYCHAIN =>
+        {
+            AppError::KeychainAccessDenied(format!("{operation} (OSStatus {status})"))
+        }
+        _ => AppError::Keychain(format!("{operation} (OSStatus {status})")),
+    }
 }
 
 /// Store a master key in macOS Keychain with device-bound protection.
@@ -80,10 +112,7 @@ pub fn store_key(service: &str, account: &str, key: &[u8]) -> Result<(), AppErro
         return Ok(());
     }
     if update_status != errSecItemNotFound {
-        return Err(AppError::Keychain(format!(
-            "Failed to update key (OSStatus {})",
-            update_status
-        )));
+        return Err(map_status(update_status, "Failed to update key"));
     }
 
     let dict = CFDictionary::<CFString, _>::from_CFType_pairs(&[
@@ -112,13 +141,32 @@ pub fn store_key(service: &str, account: &str, key: &[u8]) -> Result<(), AppErro
 
     let status = unsafe { SecItemAdd(dict.as_concrete_TypeRef(), std::ptr::null_mut()) };
     if status != 0 {
-        return Err(AppError::Keychain(format!(
-            "Failed to store key (OSStatus {})",
-            status
-        )));
+        return Err(map_status(status, "Failed to store key"));
     }
 
     Ok(())
+}
+
+/// Store a key, replacing an existing item whose access list no longer trusts
+/// this build.
+///
+/// Only for callers that hold the authoritative key material (mnemonic
+/// recovery): deleting and re-adding recreates the item with an access list
+/// for the current binary. If the add fails after the delete, the item is
+/// missing and the next unlock routes to recovery again, which can recreate it.
+#[cfg(target_os = "macos")]
+pub fn replace_key(service: &str, account: &str, key: &[u8]) -> Result<(), AppError> {
+    match store_key(service, account, key) {
+        Err(AppError::KeychainAccessDenied(reason)) => {
+            log::warn!("Keychain update denied ({reason}); recreating item");
+            match delete_key(service, account) {
+                Ok(()) | Err(AppError::KeychainItemMissing) => {}
+                Err(err) => return Err(err),
+            }
+            store_key(service, account, key)
+        }
+        other => other,
+    }
 }
 
 /// Retrieve a master key from Keychain.
@@ -130,25 +178,14 @@ pub fn store_key(service: &str, account: &str, key: &[u8]) -> Result<(), AppErro
 pub fn retrieve_key(service: &str, account: &str) -> Result<Vec<u8>, AppError> {
     get_generic_password(service, account)
         .map(|p| p.to_vec())
-        .map_err(|e| {
-            if e.code() == errSecItemNotFound {
-                AppError::KeychainItemMissing
-            } else {
-                AppError::Keychain(format!("Failed to retrieve key: {}", e))
-            }
-        })
+        .map_err(|e| map_status(e.code(), "Failed to retrieve key"))
 }
 
 /// Delete a key from Keychain.
 #[cfg(target_os = "macos")]
 pub fn delete_key(service: &str, account: &str) -> Result<(), AppError> {
-    delete_generic_password(service, account).map_err(|e| {
-        if e.code() == errSecItemNotFound {
-            AppError::KeychainItemMissing
-        } else {
-            AppError::Keychain(format!("Failed to delete key: {}", e))
-        }
-    })
+    delete_generic_password(service, account)
+        .map_err(|e| map_status(e.code(), "Failed to delete key"))
 }
 
 /// Check if both master keys exist in the Keychain WITHOUT triggering Touch ID.
@@ -191,10 +228,7 @@ pub fn keys_exist(service: &str) -> Result<bool, AppError> {
             return Ok(false);
         }
         if status != 0 {
-            return Err(AppError::Keychain(format!(
-                "Keychain query failed (OSStatus {})",
-                status
-            )));
+            return Err(map_status(status, "Keychain query failed"));
         }
     }
     Ok(true)
@@ -203,6 +237,13 @@ pub fn keys_exist(service: &str) -> Result<bool, AppError> {
 // Non-macOS stubs
 #[cfg(not(target_os = "macos"))]
 pub fn store_key(_service: &str, _account: &str, _key: &[u8]) -> Result<(), AppError> {
+    Err(AppError::Keychain(
+        "Keychain operations are only supported on macOS".to_string(),
+    ))
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn replace_key(_service: &str, _account: &str, _key: &[u8]) -> Result<(), AppError> {
     Err(AppError::Keychain(
         "Keychain operations are only supported on macOS".to_string(),
     ))
@@ -265,6 +306,26 @@ mod tests {
         assert_eq!(key2.to_vec(), retrieved);
 
         let _ = delete_key(TEST_SERVICE, account);
+    }
+
+    #[test]
+    fn access_denial_statuses_are_distinguished_from_missing_items() {
+        assert!(matches!(
+            map_status(errSecItemNotFound, "op"),
+            AppError::KeychainItemMissing
+        ));
+        for status in [
+            errSecAuthFailed,
+            ERR_SEC_USER_CANCELED,
+            ERR_SEC_INTERACTION_NOT_ALLOWED,
+            ERR_SEC_NO_SUCH_KEYCHAIN,
+        ] {
+            assert!(
+                matches!(map_status(status, "op"), AppError::KeychainAccessDenied(_)),
+                "status {status} should map to KeychainAccessDenied"
+            );
+        }
+        assert!(matches!(map_status(-34018, "op"), AppError::Keychain(_)));
     }
 
     /// `keys_exist` for absent items must return `false` without prompting Touch ID.

@@ -320,87 +320,25 @@ fn tool_write_report(
         }
     };
 
-    let session_notes = sanitize_for_prompt(str_arg(args, "session_notes")?);
-
-    // Fetch patient + clinical data for the report
-    let p = patient::get_patient(conn, &patient_id)?;
-    let diagnoses =
-        diagnosis::list_diagnoses_for_patient(conn, &patient_id, 20, 0).unwrap_or_default();
-    let medications =
-        medication::list_medications_for_patient(conn, &patient_id, 20, 0).unwrap_or_default();
-    let sessions = session::list_sessions_for_patient(conn, &patient_id, 5, 0).unwrap_or_default();
-
-    let mut ctx = format!(
-        "Name: {} {}\nGeburtsdatum: {}\nAHV-Nummer: {}",
-        p.first_name, p.last_name, p.date_of_birth, p.ahv_number
-    );
-    if let Some(ins) = &p.insurance {
-        ctx.push_str(&format!("\nVersicherung: {}", ins));
-    }
-    if let Some(gp) = &p.gp_name {
-        ctx.push_str(&format!("\nHausarzt: {}", gp));
-    }
-
-    if !diagnoses.is_empty() {
-        ctx.push_str("\n\nDiagnosen:");
-        for d in &diagnoses {
-            ctx.push_str(&format!(
-                "\n- {} {} ({}, seit {})",
-                sanitize_for_prompt(&d.icd10_code),
-                sanitize_for_prompt(&d.description),
-                sanitize_for_prompt(&d.status),
-                sanitize_for_prompt(&d.diagnosed_date),
-            ));
-        }
-    }
-
-    let current_meds: Vec<_> = medications
-        .iter()
-        .filter(|m| m.end_date.is_none())
-        .collect();
-    if !current_meds.is_empty() {
-        ctx.push_str("\n\nAktuelle Medikamente:");
-        for m in &current_meds {
-            ctx.push_str(&format!(
-                "\n- {} {}, {}",
-                sanitize_for_prompt(&m.substance),
-                sanitize_for_prompt(&m.dosage),
-                sanitize_for_prompt(&m.frequency),
-            ));
-        }
-    }
-
-    if !sessions.is_empty() {
-        ctx.push_str("\n\nLetzte Sitzungen:");
-        for s in &sessions {
-            let mut line = format!(
-                "\n- {}: {}",
-                sanitize_for_prompt(&s.session_date),
-                sanitize_for_prompt(&s.session_type),
-            );
-            let summary = s.clinical_summary.as_deref().or(s.notes.as_deref());
-            if let Some(text) = summary {
-                let safe = sanitize_for_prompt(text);
-                let truncated: String = safe.chars().take(400).collect();
-                line.push_str(&format!(" — {}", truncated));
-            }
-            ctx.push_str(&line);
-        }
-    }
-
-    let patient_context = ctx;
+    // The tool-calling model only supplies the clinician's request and focus.
+    // The record itself is loaded here, so the report never depends on how
+    // much of it the router managed to paraphrase into a JSON argument.
+    let focus = sanitize_for_prompt(opt_str_arg(args, "session_notes").unwrap_or_default());
+    let patient_context =
+        assemble_report_context(conn, engine, &patient_id, &rt, &focus, thinking_effort)?;
 
     let content = crate::llm::generate_report_streaming_with_prompt(
         app,
         engine,
         rt,
         &patient_context,
-        &session_notes,
+        &focus,
         None,
         None,
         crate::llm::SYSTEM_PROMPT_DE,
         thinking_effort,
     )?;
+    let content = crate::llm::sanitize::polish_document_text(&content);
 
     crate::llm::sanitize::validate_report_output(&content)?;
 
@@ -415,6 +353,145 @@ fn tool_write_report(
             "session_ids": null,
         }),
     ))
+}
+
+/// Retrieval terms per report type. Retrieval is lexical when no query
+/// embedding is available, so these name the sections each report draws on.
+fn report_retrieval_query(report_type: &crate::llm::ReportType) -> &'static str {
+    use crate::llm::ReportType;
+    match report_type {
+        ReportType::Befundbericht => {
+            "Anamnese Vorgeschichte Anlass Vorstellung psychischer Befund Diagnose Beurteilung \
+             Empfehlung Therapieplan Medikation"
+        }
+        ReportType::Verlaufsbericht => {
+            "Verlauf Sitzung Therapie Veränderung Befund Medikation Verträglichkeit Nebenwirkung \
+             Ziel Fortschritt Plan"
+        }
+        ReportType::Ueberweisungsschreiben => {
+            "Überweisung Fragestellung Anamnese Befund Diagnose Verlauf Behandlung Medikation \
+             Beurteilung"
+        }
+    }
+}
+
+/// Tokens reserved beyond `evidence::PROMPT_SCAFFOLD_TOKENS` for the report
+/// instructions and quality rules, which are longer than a history question.
+const REPORT_INSTRUCTION_TOKENS: usize = 1_536;
+
+/// Build the report's patient context from the provenance-bearing evidence
+/// layer: structured facts (diagnoses, current medication, scores, plans)
+/// first, then verbatim excerpts retrieved for the report type and focus, all
+/// sized to this model's context window. Replaces a hand-built summary that
+/// kept only five sessions at 400 characters each.
+fn assemble_report_context(
+    conn: &Connection,
+    engine: &Arc<LlmEngine>,
+    patient_id: &str,
+    report_type: &crate::llm::ReportType,
+    focus: &str,
+    thinking_effort: crate::llm::ThinkingEffort,
+) -> Result<String, AppError> {
+    report_evidence(
+        conn,
+        engine.as_ref(),
+        engine.context_size(),
+        patient_id,
+        report_type,
+        focus,
+        thinking_effort,
+    )
+}
+
+/// Model-independent core of [`assemble_report_context`], testable with a
+/// heuristic token counter.
+fn report_evidence(
+    conn: &Connection,
+    counter: &dyn crate::llm::evidence::TokenCounter,
+    context_size: usize,
+    patient_id: &str,
+    report_type: &crate::llm::ReportType,
+    focus: &str,
+    thinking_effort: crate::llm::ThinkingEffort,
+) -> Result<String, AppError> {
+    use crate::llm::evidence;
+
+    // Retrieval keeps only the first dozen query terms, so the clinician's
+    // focus goes first and the generic report terms fill what is left.
+    let question = format!("{focus} {}", report_retrieval_query(report_type));
+    let budget = evidence::budget_for_context(context_size, thinking_effort.max_tokens())
+        .saturating_sub(REPORT_INSTRUCTION_TOKENS + counter.count(focus));
+
+    // Recent sessions are included verbatim regardless of retrieval, so a new
+    // development (e.g. acute suicidality) cannot be missed because it shares
+    // no terms with the query. They take at most a quarter of the budget.
+    let recent = recent_session_baseline(conn, counter, patient_id, budget / 4)?;
+    let budget = budget.saturating_sub(counter.count(&recent));
+
+    let request =
+        evidence::EvidenceRequest::new(patient_id, question.trim()).with_token_budget(budget);
+    let assembled = evidence::assemble_patient_evidence(conn, &request, counter)?;
+    log::info!(
+        "write_report evidence: {} units, {} omitted, budget {budget} tokens",
+        assembled.manifest.entries.len(),
+        assembled.manifest.omitted.len()
+    );
+    Ok(if recent.is_empty() {
+        assembled.evidence
+    } else {
+        format!("{recent}\n{}", assembled.evidence)
+    })
+}
+
+/// Sessions always shown in full, newest first.
+const RECENT_SESSION_BASELINE: u32 = 3;
+
+/// The latest sessions verbatim, newest first, within `budget` tokens. A
+/// session that does not fit whole is left out rather than cut mid-sentence.
+fn recent_session_baseline(
+    conn: &Connection,
+    counter: &dyn crate::llm::evidence::TokenCounter,
+    patient_id: &str,
+    budget: usize,
+) -> Result<String, AppError> {
+    let sessions =
+        session::list_sessions_for_patient(conn, patient_id, RECENT_SESSION_BASELINE, 0)?;
+    let mut block = String::from("--- LETZTE SITZUNGEN (vollständig, neueste zuerst) ---\n");
+    let header_tokens = counter.count(&block);
+    let mut spent = header_tokens;
+    let mut included = 0;
+    for s in &sessions {
+        let mut entry = format!(
+            "{} ({}):",
+            sanitize_for_prompt(&s.session_date),
+            sanitize_for_prompt(&s.session_type)
+        );
+        if let Some(notes) = s.notes.as_deref().filter(|n| !n.trim().is_empty()) {
+            entry.push_str(&format!(
+                "\n{}",
+                crate::llm::sanitize::sanitize_for_prompt_with_limit(notes, 60_000)
+            ));
+        }
+        if let Some(summary) = s
+            .clinical_summary
+            .as_deref()
+            .filter(|n| !n.trim().is_empty())
+        {
+            entry.push_str(&format!(
+                "\nZusammenfassung: {}",
+                sanitize_for_prompt(summary)
+            ));
+        }
+        entry.push('\n');
+        let cost = counter.count(&entry);
+        if spent + cost > budget {
+            break;
+        }
+        spent += cost;
+        block.push_str(&entry);
+        included += 1;
+    }
+    Ok(if included == 0 { String::new() } else { block })
 }
 
 /// Validate YYYY-MM-DD format (same check as in tool_create_calendar_event).
@@ -746,5 +823,219 @@ mod tests {
     fn medication_lookup_requires_a_query() {
         let conn = Connection::open_in_memory().unwrap();
         assert!(lookup_medication_reference(&conn, &json!({})).is_err());
+    }
+
+    #[test]
+    fn report_context_carries_structured_facts_and_full_session_text() {
+        use crate::llm::evidence::test_support::{seed_patient, TestVault};
+        use crate::llm::evidence::HeuristicCounter;
+
+        let vault = TestVault::new();
+        let conn = vault.conn();
+        let seeded = seed_patient(&conn, "756.1234.5678.97", "Erika", "Beispiel");
+        let context = report_evidence(
+            &conn,
+            &HeuristicCounter,
+            16_384,
+            &seeded.patient_id,
+            &crate::llm::ReportType::Verlaufsbericht,
+            "Schlaf",
+            crate::llm::ThinkingEffort::Medium,
+        )
+        .unwrap();
+
+        for expected in ["F32.1", "Sertralin", "100 mg", "PHQ-9", "Schlafhygiene"] {
+            assert!(context.contains(expected), "missing {expected}");
+        }
+        // Full session text, not a 400-character excerpt of the five latest.
+        assert!(context.contains("Patientin möchte die Therapiefrequenz reduzieren"));
+    }
+
+    #[test]
+    fn report_context_respects_a_small_budget() {
+        use crate::llm::evidence::test_support::{seed_patient, TestVault};
+        use crate::llm::evidence::{HeuristicCounter, TokenCounter};
+
+        let vault = TestVault::new();
+        let conn = vault.conn();
+        let seeded = seed_patient(&conn, "756.1234.5678.97", "Erika", "Beispiel");
+        let context = report_evidence(
+            &conn,
+            &HeuristicCounter,
+            6_656,
+            &seeded.patient_id,
+            &crate::llm::ReportType::Befundbericht,
+            "",
+            crate::llm::ThinkingEffort::Medium,
+        )
+        .unwrap();
+        // 6656 - 4096 completion - 768 scaffold - 1536 instructions = 256 tokens.
+        assert!(HeuristicCounter.count(&context) <= 256);
+    }
+
+    /// Seed a patient whose record is far larger than any context window:
+    /// 300 sessions of ~1,600 characters each (~480K characters).
+    fn seed_oversized_record(conn: &Connection) -> String {
+        use crate::llm::evidence::test_support::seed_patient;
+        let seeded = seed_patient(conn, "756.1234.5678.97", "Erika", "Beispiel");
+        let paragraph = "Patientin berichtet über wechselnde Stimmung, Schlafstörungen und \
+            Grübeln am Abend. Sertralin 100 mg 1-0-0 wird gut vertragen. Keine Suizidalität. \
+            Psychoedukation zu Schlafhygiene, Verhaltensaktivierung besprochen. ";
+        for i in 0..300 {
+            let date = (chrono::Utc::now() - chrono::Duration::days(400 - i))
+                .format("%Y-%m-%d")
+                .to_string();
+            let notes = format!("Sitzung {i}. {}", paragraph.repeat(7));
+            conn.execute(
+                "INSERT INTO sessions (id, patient_id, session_date, session_type, \
+                     duration_minutes, notes) VALUES (?1, ?2, ?3, 'Verlaufsgespräch', 50, ?4)",
+                rusqlite::params![format!("bulk-{i}"), seeded.patient_id, date, notes],
+            )
+            .unwrap();
+        }
+        seeded.patient_id
+    }
+
+    /// Token count of the complete report request: system prompt with the
+    /// grounding suffix plus the user turn the report generator builds.
+    fn full_report_request_tokens(
+        counter: &dyn crate::llm::evidence::TokenCounter,
+        evidence: &str,
+        focus: &str,
+    ) -> usize {
+        let system = crate::llm::harness::GenerationTask::Report
+            .apply_to_system_prompt(crate::llm::SYSTEM_PROMPT_DE);
+        let user = super::super::prompts::report_generation_prompt(
+            crate::llm::ReportType::Ueberweisungsschreiben,
+            evidence,
+            focus,
+            None,
+            None,
+        );
+        // Chat-template turn markers add a few dozen tokens at most.
+        counter.count(&system) + counter.count(&user) + 64
+    }
+
+    #[test]
+    fn oversized_record_still_fits_the_context_with_completion_reserved() {
+        use crate::llm::evidence::test_support::TestVault;
+        use crate::llm::evidence::HeuristicCounter;
+
+        let vault = TestVault::new();
+        let conn = vault.conn();
+        let patient_id = seed_oversized_record(&conn);
+        for (context_size, effort) in [
+            (16_384, crate::llm::ThinkingEffort::Medium),
+            (16_384, crate::llm::ThinkingEffort::ExtraHigh),
+            (32_768, crate::llm::ThinkingEffort::High),
+        ] {
+            let focus = "Bitte Verlauf der Schlafstörungen hervorheben.";
+            let evidence = report_evidence(
+                &conn,
+                &HeuristicCounter,
+                context_size,
+                &patient_id,
+                &crate::llm::ReportType::Ueberweisungsschreiben,
+                focus,
+                effort,
+            )
+            .unwrap();
+            let request = full_report_request_tokens(&HeuristicCounter, &evidence, focus);
+            assert!(
+                request + effort.max_tokens() <= context_size,
+                "{request} prompt + {} completion exceeds {context_size}",
+                effort.max_tokens()
+            );
+            // The block is filled, not starved: the structured facts are present.
+            assert!(evidence.contains("F32.1") && evidence.contains("Sertralin"));
+        }
+    }
+
+    /// Same check with a real tokenizer. German clinical text tokenizes less
+    /// efficiently than the heuristic assumes for some vocabularies, so the
+    /// fixed instruction reserve must hold for the shipped models too.
+    #[test]
+    #[ignore = "requires a local GGUF model"]
+    fn oversized_record_fits_with_a_real_tokenizer() {
+        use crate::llm::evidence::test_support::TestVault;
+
+        let path = std::env::var("RAMDOC_BENCH_MODEL").expect("RAMDOC_BENCH_MODEL is required");
+        let engine = LlmEngine::load(std::path::PathBuf::from(path), "ctx-check".into()).unwrap();
+        let vault = TestVault::new();
+        let conn = vault.conn();
+        let patient_id = seed_oversized_record(&conn);
+        let context_size = engine.context_size();
+        let effort = crate::llm::ThinkingEffort::Medium;
+        let focus = "Bitte Verlauf der Schlafstörungen hervorheben.";
+        let evidence = report_evidence(
+            &conn,
+            &engine,
+            context_size,
+            &patient_id,
+            &crate::llm::ReportType::Ueberweisungsschreiben,
+            focus,
+            effort,
+        )
+        .unwrap();
+        let instructions_only = full_report_request_tokens(&engine, "", focus);
+        let request = full_report_request_tokens(&engine, &evidence, focus);
+        println!(
+            "context={context_size} instructions={instructions_only} \
+             reserved={} evidence={} request={request} completion={}",
+            crate::llm::evidence::PROMPT_SCAFFOLD_TOKENS + REPORT_INSTRUCTION_TOKENS,
+            engine.count_tokens(&evidence),
+            effort.max_tokens()
+        );
+        assert!(
+            instructions_only
+                <= crate::llm::evidence::PROMPT_SCAFFOLD_TOKENS + REPORT_INSTRUCTION_TOKENS
+        );
+        assert!(request + effort.max_tokens() <= context_size);
+    }
+
+    #[test]
+    fn recent_session_is_included_even_without_matching_terms() {
+        use crate::llm::evidence::test_support::{seed_patient, TestVault};
+        use crate::llm::evidence::HeuristicCounter;
+
+        let vault = TestVault::new();
+        let conn = vault.conn();
+        let seeded = seed_patient(&conn, "756.1234.5678.97", "Erika", "Beispiel");
+        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        conn.execute(
+            "INSERT INTO sessions (id, patient_id, session_date, session_type, duration_minutes, \
+                 notes) VALUES ('acute', ?1, ?2, 'Krisenintervention', 30, ?3)",
+            rusqlite::params![
+                seeded.patient_id,
+                today,
+                "Zunehmende Hoffnungslosigkeit, äussert konkrete Pläne. Notfallplan erstellt."
+            ],
+        )
+        .unwrap();
+        let context = report_evidence(
+            &conn,
+            &HeuristicCounter,
+            16_384,
+            &seeded.patient_id,
+            &crate::llm::ReportType::Befundbericht,
+            "",
+            crate::llm::ThinkingEffort::Medium,
+        )
+        .unwrap();
+        assert!(context.starts_with("--- LETZTE SITZUNGEN"));
+        assert!(context.contains("äussert konkrete Pläne"));
+    }
+
+    #[test]
+    fn clinician_focus_leads_the_retrieval_query() {
+        // question_terms keeps 12 terms; the generic terms alone are 11.
+        let focus = "Lithiumspiegel Nierenfunktion";
+        let question = format!(
+            "{focus} {}",
+            report_retrieval_query(&crate::llm::ReportType::Befundbericht)
+        );
+        let terms = crate::llm::evidence::retrieve::question_terms(&question);
+        assert!(terms.contains(&"lithiumspiegel".to_string()));
+        assert!(terms.contains(&"nierenfunktion".to_string()));
     }
 }
