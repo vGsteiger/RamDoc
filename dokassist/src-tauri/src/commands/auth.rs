@@ -120,8 +120,41 @@ pub async fn initialize_app(state: State<'_, AppState>) -> Result<Vec<String>, A
 /// Biometric authentication is performed via `LocalAuthentication` (LAContext)
 /// before accessing the Keychain.  Returns `AppError::BiometricCancelled`
 /// when the user dismisses the Touch ID / login-password sheet.
+///
+/// Returns `AppError::AuditCheckpointMismatch` when the audit chain verifies but
+/// its Keychain checkpoint does not; the session stays `Locked` and the UI can
+/// offer `unlock_app_accepting_audit_checkpoint`.
 #[tauri::command]
 pub async fn unlock_app(state: State<'_, AppState>) -> Result<bool, AppError> {
+    unlock_with(
+        &state,
+        "Unlock DokAssist to access patient data",
+        AppState::init_db,
+    )
+}
+
+/// Unlock after the user has been shown an audit checkpoint mismatch and
+/// chosen to continue.
+///
+/// Requires a fresh Touch ID / login-password confirmation. The mismatch is
+/// appended to the audit log as a `checkpoint_reanchored` entry before the new
+/// checkpoint is written, so the discrepancy remains visible in the chain. A
+/// chain that does not itself verify is still rejected.
+#[tauri::command]
+pub async fn unlock_app_accepting_audit_checkpoint(
+    state: State<'_, AppState>,
+) -> Result<bool, AppError> {
+    unlock_with(
+        &state,
+        "Confirm the audit log discrepancy and unlock DokAssist",
+        AppState::init_db_acknowledged_reanchor,
+    )
+}
+
+/// Opens the database with the unlocked master keys under a checkpoint policy.
+type OpenDb = fn(&AppState, &[u8; 32], &[u8; 32]) -> Result<(), AppError>;
+
+fn unlock_with(state: &AppState, reason: &str, open_db: OpenDb) -> Result<bool, AppError> {
     // Check auth state before showing Touch ID (avoids prompting if already unlocked).
     {
         let auth = state.auth.lock().map_err(|_| lock_poisoned())?;
@@ -132,7 +165,7 @@ pub async fn unlock_app(state: State<'_, AppState>) -> Result<bool, AppError> {
 
     // Show Touch ID / device-password sheet.  This blocks the Tokio worker thread
     // until the user responds; the auth lock is NOT held during this call.
-    crate::touch_id::authenticate("Unlock DokAssist to access patient data")?;
+    crate::touch_id::authenticate(reason)?;
 
     // --- Retrieve keys while holding the auth lock ---
     let (db_key, fs_key) = {
@@ -185,7 +218,7 @@ pub async fn unlock_app(state: State<'_, AppState>) -> Result<bool, AppError> {
 
     // Initialize database *before* committing auth state (HIGH-5: TOCTOU fix).
     // If init_db fails, auth state remains Locked — no inconsistent state.
-    state.init_db(&db_key, &fs_key)?;
+    open_db(state, &db_key, &fs_key)?;
 
     // Only transition to Unlocked after DB init succeeds
     let mut auth = state.auth.lock().map_err(|_| lock_poisoned())?;
@@ -229,9 +262,11 @@ pub async fn recover_app(state: State<'_, AppState>, words: Vec<String>) -> Resu
     let vault_path = state.data_dir.join(RECOVERY_FILENAME);
     let (db_key, fs_key) = recovery::recover_from_mnemonic(&words, &vault_path)?;
 
-    // Store recovered keys in Keychain
-    keychain::store_key(KEYCHAIN_SERVICE, DB_KEY_ACCOUNT, &db_key)?;
-    keychain::store_key(KEYCHAIN_SERVICE, FS_KEY_ACCOUNT, &fs_key)?;
+    // Store recovered keys in Keychain. `replace_key` recreates items whose
+    // access list stopped trusting this build (e.g. after an update), which
+    // would otherwise make the recovery phrase unusable too.
+    keychain::replace_key(KEYCHAIN_SERVICE, DB_KEY_ACCOUNT, &db_key)?;
+    keychain::replace_key(KEYCHAIN_SERVICE, FS_KEY_ACCOUNT, &fs_key)?;
 
     // Initialize database *before* committing auth state (HIGH-5: TOCTOU fix)
     state.init_db_reanchor(&db_key, &fs_key)?;

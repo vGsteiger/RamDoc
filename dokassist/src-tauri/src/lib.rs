@@ -59,6 +59,7 @@ pub fn run() {
             commands::auth::check_auth,
             commands::auth::initialize_app,
             commands::auth::unlock_app,
+            commands::auth::unlock_app_accepting_audit_checkpoint,
             commands::auth::recover_app,
             commands::auth::lock_app,
             commands::auth::reset_app,

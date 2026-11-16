@@ -64,8 +64,83 @@ impl CheckpointStore for KeychainCheckpointStore {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CheckpointMode {
+    /// Refuse to open when the Keychain checkpoint is missing or does not occur
+    /// in the verified chain.
     Strict,
+    /// Mnemonic recovery or backup restore: establish a new checkpoint.
     Reanchor,
+    /// The user has seen a checkpoint mismatch at unlock and re-authenticated to
+    /// accept it: establish a new checkpoint. Behaves like `Strict` when there is
+    /// nothing to accept.
+    AcknowledgedReanchor,
+}
+
+enum CheckpointStatus {
+    /// The stored checkpoint (if any) occurs in the verified chain.
+    Anchored(Option<ChainCheckpoint>),
+    /// The stored checkpoint is missing, conflicting, or not in the chain.
+    Discrepancy(String),
+}
+
+/// Compare the stored checkpoint against the verified chain.
+///
+/// Only integrity findings count as a discrepancy. Keychain access failures are
+/// propagated so they are never mistaken for tampering and never re-anchor.
+fn checkpoint_status(
+    conn: &Connection,
+    store: &dyn CheckpointStore,
+    migrated_audit_chain: bool,
+) -> Result<CheckpointStatus, AppError> {
+    match store.read() {
+        Ok(Some(checkpoint)) => match audit::verify_checkpoint(conn, &checkpoint) {
+            Ok(()) => Ok(CheckpointStatus::Anchored(Some(checkpoint))),
+            Err(AppError::AuditIntegrity(message)) => Ok(CheckpointStatus::Discrepancy(message)),
+            Err(err) => Err(err),
+        },
+        // The chain was created by this open's migration; there is no prior
+        // anchor to compare against.
+        Ok(None) if migrated_audit_chain => Ok(CheckpointStatus::Anchored(None)),
+        Ok(None) => Ok(CheckpointStatus::Discrepancy(
+            "Keychain audit checkpoint is missing".to_string(),
+        )),
+        Err(AppError::AuditIntegrity(message)) => Ok(CheckpointStatus::Discrepancy(message)),
+        Err(err) => Err(err),
+    }
+}
+
+/// Append a permanent record of the discrepancy, then anchor the new head.
+///
+/// The entry is written before the Keychain is touched: if the process dies in
+/// between, the old checkpoint still mismatches and the next unlock asks again.
+fn record_and_reanchor(
+    conn: &Connection,
+    audit_key: &[u8; MAC_SIZE],
+    store: &dyn CheckpointStore,
+    head: &ChainCheckpoint,
+    discrepancy: Option<&str>,
+    authorization: &str,
+) -> Result<ChainCheckpoint, AppError> {
+    let head = match discrepancy {
+        Some(discrepancy) => {
+            let details = format!(
+                "{discrepancy}; database audit head was sequence {}; new checkpoint established by {authorization}",
+                head.sequence
+            );
+            log::warn!("Re-anchoring audit checkpoint: {details}");
+            audit::log(
+                conn,
+                audit::AuditAction::CheckpointReanchored,
+                "audit_log",
+                None,
+                Some(&details),
+            )?;
+            audit::verify_chain(conn, audit_key)?
+        }
+        None => head.clone(),
+    };
+    store.reset()?;
+    store.write(&head)?;
+    Ok(head)
 }
 
 struct DbInner {
@@ -249,30 +324,52 @@ fn init_db_internal(
     // Run migrations, then reinstall trusted triggers before verification.
     let migrated_audit_chain = run_migrations(&conn, &audit_key)?;
     audit::install_integrity_triggers(&conn)?;
-    let head = audit::verify_chain(&conn, &audit_key)?;
+    let mut head = audit::verify_chain(&conn, &audit_key)?;
 
     if let Some(store) = &checkpoint_store {
-        match checkpoint_mode {
+        head = match checkpoint_mode {
             CheckpointMode::Reanchor => {
-                store.reset()?;
-                store.write(&head)?;
+                // A Keychain read failure must not block an authorized recovery;
+                // it only means the previous anchor cannot be described.
+                let discrepancy =
+                    match checkpoint_status(&conn, store.as_ref(), migrated_audit_chain) {
+                        Ok(CheckpointStatus::Anchored(_)) => None,
+                        Ok(CheckpointStatus::Discrepancy(message)) => Some(message),
+                        Err(err) => Some(format!("previous checkpoint unreadable: {err}")),
+                    };
+                record_and_reanchor(
+                    &conn,
+                    &audit_key,
+                    store.as_ref(),
+                    &head,
+                    discrepancy.as_deref(),
+                    "recovery phrase or backup restore",
+                )?
             }
-            CheckpointMode::Strict => match store.read()? {
-                Some(checkpoint) => {
-                    audit::verify_checkpoint(&conn, &checkpoint)?;
-                    if checkpoint != head {
-                        store.write(&head)?;
+            CheckpointMode::Strict | CheckpointMode::AcknowledgedReanchor => {
+                match checkpoint_status(&conn, store.as_ref(), migrated_audit_chain)? {
+                    CheckpointStatus::Anchored(stored) => {
+                        if stored.as_ref() != Some(&head) {
+                            store.write(&head)?;
+                        }
+                        head
                     }
+                    CheckpointStatus::Discrepancy(message)
+                        if checkpoint_mode == CheckpointMode::Strict =>
+                    {
+                        return Err(AppError::AuditCheckpointMismatch(message));
+                    }
+                    CheckpointStatus::Discrepancy(message) => record_and_reanchor(
+                        &conn,
+                        &audit_key,
+                        store.as_ref(),
+                        &head,
+                        Some(&message),
+                        "user confirmation at unlock",
+                    )?,
                 }
-                None if migrated_audit_chain => store.write(&head)?,
-                None => {
-                    return Err(AppError::AuditIntegrity(
-                        "Keychain audit checkpoint is missing; recovery is required to establish a new trust anchor"
-                            .to_string(),
-                    ));
-                }
-            },
-        }
+            }
+        };
     }
 
     Ok(DbPool {
@@ -596,13 +693,242 @@ mod tests {
 
         assert!(matches!(
             init_with_memory_checkpoint(&db_path, &key, Arc::clone(&store), CheckpointMode::Strict,),
-            Err(AppError::AuditIntegrity(_))
+            Err(AppError::AuditCheckpointMismatch(_))
         ));
 
         // An explicitly authorized recovery/restore may establish a new baseline,
-        // but only after the remaining HMAC chain verifies.
-        init_with_memory_checkpoint(&db_path, &key, Arc::clone(&store), CheckpointMode::Reanchor)
+        // but only after the remaining HMAC chain verifies. The discrepancy it
+        // re-anchored over is appended as sequence 2.
+        let pool = init_with_memory_checkpoint(
+            &db_path,
+            &key,
+            Arc::clone(&store),
+            CheckpointMode::Reanchor,
+        )
+        .unwrap();
+        assert_eq!(store.current().unwrap().sequence, 2);
+        let (action, details) = last_audit_entry(&pool);
+        assert_eq!(action, "checkpoint_reanchored");
+        assert!(details.contains("recovery phrase or backup restore"));
+    }
+
+    /// Builds a database whose audit head (sequence 1) is behind a Keychain
+    /// checkpoint at sequence 2, as after restoring an older copy of the file.
+    fn database_older_than_checkpoint(
+        dir: &tempfile::TempDir,
+    ) -> (std::path::PathBuf, [u8; 32], Arc<MemoryCheckpointStore>) {
+        let db_path = dir.path().join("test.db");
+        let snapshot = dir.path().join("snapshot.db");
+        let key = crate::crypto::generate_key();
+        let store = Arc::new(MemoryCheckpointStore::default());
+        {
+            let pool = init_with_memory_checkpoint(
+                &db_path,
+                &key,
+                Arc::clone(&store),
+                CheckpointMode::Strict,
+            )
             .unwrap();
+            let conn = pool.conn().unwrap();
+            audit::log(
+                &conn,
+                audit::AuditAction::Create,
+                "patient",
+                Some("p-1"),
+                None,
+            )
+            .unwrap();
+        }
+        std::fs::copy(&db_path, &snapshot).unwrap();
+        {
+            let pool = init_with_memory_checkpoint(
+                &db_path,
+                &key,
+                Arc::clone(&store),
+                CheckpointMode::Strict,
+            )
+            .unwrap();
+            let conn = pool.conn().unwrap();
+            audit::log(
+                &conn,
+                audit::AuditAction::View,
+                "patient",
+                Some("p-1"),
+                None,
+            )
+            .unwrap();
+        }
+        assert_eq!(store.current().unwrap().sequence, 2);
+        std::fs::copy(&snapshot, &db_path).unwrap();
+        (db_path, key, store)
+    }
+
+    fn last_audit_entry(pool: &DbPool) -> (String, String) {
+        pool.conn()
+            .unwrap()
+            .query_row(
+                "SELECT action, COALESCE(details, '') FROM audit_log ORDER BY sequence DESC LIMIT 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap()
+    }
+
+    #[test]
+    fn restored_older_database_reports_mismatch_then_unlocks_after_acknowledgement() {
+        let dir = tempdir().unwrap();
+        let (db_path, key, store) = database_older_than_checkpoint(&dir);
+
+        assert!(matches!(
+            init_with_memory_checkpoint(&db_path, &key, Arc::clone(&store), CheckpointMode::Strict),
+            Err(AppError::AuditCheckpointMismatch(_))
+        ));
+        // The refused open must not move the anchor.
+        assert_eq!(store.current().unwrap().sequence, 2);
+
+        let pool = init_with_memory_checkpoint(
+            &db_path,
+            &key,
+            Arc::clone(&store),
+            CheckpointMode::AcknowledgedReanchor,
+        )
+        .unwrap();
+        let (action, details) = last_audit_entry(&pool);
+        assert_eq!(action, "checkpoint_reanchored");
+        assert!(details.contains("checkpoint sequence 2"), "{details}");
+        assert!(details.contains("audit head was sequence 1"), "{details}");
+        assert!(details.contains("user confirmation"), "{details}");
+        assert_eq!(store.current().unwrap().sequence, 2);
+        drop(pool);
+
+        // The new anchor is the chain head including the recorded discrepancy,
+        // so the next ordinary unlock succeeds.
+        init_with_memory_checkpoint(&db_path, &key, Arc::clone(&store), CheckpointMode::Strict)
+            .unwrap();
+    }
+
+    #[test]
+    fn missing_checkpoint_on_existing_chain_can_be_acknowledged() {
+        let dir = tempdir().unwrap();
+        let db_path = dir.path().join("test.db");
+        let key = crate::crypto::generate_key();
+        let store = Arc::new(MemoryCheckpointStore::default());
+        init_with_memory_checkpoint(&db_path, &key, Arc::clone(&store), CheckpointMode::Strict)
+            .unwrap();
+        store.reset().unwrap();
+
+        assert!(matches!(
+            init_with_memory_checkpoint(&db_path, &key, Arc::clone(&store), CheckpointMode::Strict),
+            Err(AppError::AuditCheckpointMismatch(_))
+        ));
+        let pool = init_with_memory_checkpoint(
+            &db_path,
+            &key,
+            Arc::clone(&store),
+            CheckpointMode::AcknowledgedReanchor,
+        )
+        .unwrap();
+        let (action, details) = last_audit_entry(&pool);
+        assert_eq!(action, "checkpoint_reanchored");
+        assert!(details.contains("missing"), "{details}");
         assert_eq!(store.current().unwrap().sequence, 1);
+    }
+
+    #[test]
+    fn acknowledgement_without_a_mismatch_records_nothing() {
+        let dir = tempdir().unwrap();
+        let db_path = dir.path().join("test.db");
+        let key = crate::crypto::generate_key();
+        let store = Arc::new(MemoryCheckpointStore::default());
+        init_with_memory_checkpoint(&db_path, &key, Arc::clone(&store), CheckpointMode::Strict)
+            .unwrap();
+
+        let pool = init_with_memory_checkpoint(
+            &db_path,
+            &key,
+            Arc::clone(&store),
+            CheckpointMode::AcknowledgedReanchor,
+        )
+        .unwrap();
+        let count: i64 = pool
+            .conn()
+            .unwrap()
+            .query_row("SELECT count(*) FROM audit_log", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 0);
+        assert_eq!(store.current().unwrap().sequence, 0);
+    }
+
+    #[test]
+    fn acknowledgement_cannot_accept_a_chain_that_does_not_verify() {
+        let dir = tempdir().unwrap();
+        let (db_path, key, store) = database_older_than_checkpoint(&dir);
+        {
+            let pool = init_db(&db_path, &key).unwrap();
+            let conn = pool.conn().unwrap();
+            conn.execute_batch("DROP TRIGGER audit_log_no_update;")
+                .unwrap();
+            conn.execute(
+                "UPDATE audit_log SET entity_id = 'forged' WHERE sequence = 1",
+                [],
+            )
+            .unwrap();
+        }
+
+        assert!(matches!(
+            init_with_memory_checkpoint(
+                &db_path,
+                &key,
+                Arc::clone(&store),
+                CheckpointMode::AcknowledgedReanchor,
+            ),
+            Err(AppError::AuditIntegrity(_))
+        ));
+        assert_eq!(store.current().unwrap().sequence, 2);
+    }
+
+    /// A store whose reads fail the way a denied Keychain prompt does.
+    struct DeniedCheckpointStore;
+
+    impl CheckpointStore for DeniedCheckpointStore {
+        fn read(&self) -> Result<Option<ChainCheckpoint>, AppError> {
+            Err(AppError::KeychainAccessDenied("denied".to_string()))
+        }
+
+        fn write(&self, _checkpoint: &ChainCheckpoint) -> Result<(), AppError> {
+            panic!("a denied read must never lead to a checkpoint write");
+        }
+
+        fn reset(&self) -> Result<(), AppError> {
+            panic!("a denied read must never lead to a checkpoint reset");
+        }
+    }
+
+    #[test]
+    fn keychain_access_denial_is_not_treated_as_a_checkpoint_mismatch() {
+        let dir = tempdir().unwrap();
+        let db_path = dir.path().join("test.db");
+        let key = crate::crypto::generate_key();
+        init_with_memory_checkpoint(
+            &db_path,
+            &key,
+            Arc::new(MemoryCheckpointStore::default()),
+            CheckpointMode::Strict,
+        )
+        .unwrap();
+
+        for mode in [CheckpointMode::Strict, CheckpointMode::AcknowledgedReanchor] {
+            let result = init_db_internal(
+                &db_path,
+                &key,
+                audit::derive_mac_key(&key, &key),
+                Some(Arc::new(DeniedCheckpointStore)),
+                mode,
+            );
+            assert!(
+                matches!(result, Err(AppError::KeychainAccessDenied(_))),
+                "mode {mode:?}"
+            );
+        }
     }
 }
