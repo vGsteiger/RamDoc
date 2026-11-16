@@ -1155,15 +1155,15 @@ fn recommended_model_for_ram(ram: u64) -> ModelChoice {
     let preferred_filename = if ram >= 32 * GB {
         "Qwen3.6-35B-A3B-UD-Q4_K_M.gguf"
     } else if ram >= 24 * GB {
-        "Qwen3.6-27B-Q4_K_M.gguf"
+        "Qwen3.8-27B-UD-Q4_K_M.gguf"
     } else if ram >= 18 * GB {
         "gpt-oss-20b-MXFP4.gguf"
     } else if ram >= 16 * GB {
-        "Qwen3-8B-Q4_K_M.gguf"
+        "Qwen3.5-9B-Q4_K_M.gguf"
     } else if ram >= 12 * GB {
-        "gemma-4-E4B-it-Q4_0.gguf"
+        "gemma-4-E4B_q4_0-it.gguf"
     } else {
-        "gemma-4-E2B-it-Q4_0.gguf"
+        "gemma-4-E2B_q4_0-it.gguf"
     };
     let entry = download::find_model(preferred_filename)
         .expect("recommended model must exist in the download catalog");
@@ -1270,18 +1270,23 @@ mod tests {
     fn recommendations_cover_memory_tiers() {
         const GB: u64 = 1024 * 1024 * 1024;
         let cases = [
-            (8, "gemma-4-E2B-it-Q4_0.gguf"),
-            (12, "gemma-4-E4B-it-Q4_0.gguf"),
-            (16, "Qwen3-8B-Q4_K_M.gguf"),
+            (8, "gemma-4-E2B_q4_0-it.gguf"),
+            (12, "gemma-4-E4B_q4_0-it.gguf"),
+            (16, "Qwen3.5-9B-Q4_K_M.gguf"),
             (18, "gpt-oss-20b-MXFP4.gguf"),
-            (24, "Qwen3.6-27B-Q4_K_M.gguf"),
+            (24, "Qwen3.8-27B-UD-Q4_K_M.gguf"),
             (32, "Qwen3.6-35B-A3B-UD-Q4_K_M.gguf"),
         ];
 
         for (ram_gb, expected) in cases {
             let choice = recommended_model_for_ram(ram_gb * GB);
             assert_eq!(choice.filename, expected);
-            assert!(download::find_model(&choice.filename).is_some());
+            let entry = download::find_model(&choice.filename).unwrap();
+            assert!(
+                entry.superseded_by.is_none(),
+                "recommends superseded {expected}"
+            );
+            assert!(entry.min_ram_gb <= ram_gb);
         }
     }
 
