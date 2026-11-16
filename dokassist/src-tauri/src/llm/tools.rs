@@ -808,4 +808,124 @@ mod tests {
         // 6656 - 4096 completion - 768 scaffold - 1536 instructions = 256 tokens.
         assert!(HeuristicCounter.count(&context) <= 256);
     }
+
+    /// Seed a patient whose record is far larger than any context window:
+    /// 300 sessions of ~1,600 characters each (~480K characters).
+    fn seed_oversized_record(conn: &Connection) -> String {
+        use crate::llm::evidence::test_support::seed_patient;
+        let seeded = seed_patient(conn, "756.1234.5678.97", "Erika", "Beispiel");
+        let paragraph = "Patientin berichtet über wechselnde Stimmung, Schlafstörungen und \
+            Grübeln am Abend. Sertralin 100 mg 1-0-0 wird gut vertragen. Keine Suizidalität. \
+            Psychoedukation zu Schlafhygiene, Verhaltensaktivierung besprochen. ";
+        for i in 0..300 {
+            let date = (chrono::Utc::now() - chrono::Duration::days(400 - i))
+                .format("%Y-%m-%d")
+                .to_string();
+            let notes = format!("Sitzung {i}. {}", paragraph.repeat(7));
+            conn.execute(
+                "INSERT INTO sessions (id, patient_id, session_date, session_type, \
+                     duration_minutes, notes) VALUES (?1, ?2, ?3, 'Verlaufsgespräch', 50, ?4)",
+                rusqlite::params![format!("bulk-{i}"), seeded.patient_id, date, notes],
+            )
+            .unwrap();
+        }
+        seeded.patient_id
+    }
+
+    /// Token count of the complete report request: system prompt with the
+    /// grounding suffix plus the user turn the report generator builds.
+    fn full_report_request_tokens(
+        counter: &dyn crate::llm::evidence::TokenCounter,
+        evidence: &str,
+        focus: &str,
+    ) -> usize {
+        let system = crate::llm::harness::GenerationTask::Report
+            .apply_to_system_prompt(crate::llm::SYSTEM_PROMPT_DE);
+        let user = super::super::prompts::report_generation_prompt(
+            crate::llm::ReportType::Ueberweisungsschreiben,
+            evidence,
+            focus,
+            None,
+            None,
+        );
+        // Chat-template turn markers add a few dozen tokens at most.
+        counter.count(&system) + counter.count(&user) + 64
+    }
+
+    #[test]
+    fn oversized_record_still_fits_the_context_with_completion_reserved() {
+        use crate::llm::evidence::test_support::TestVault;
+        use crate::llm::evidence::HeuristicCounter;
+
+        let vault = TestVault::new();
+        let conn = vault.conn();
+        let patient_id = seed_oversized_record(&conn);
+        for (context_size, effort) in [
+            (16_384, crate::llm::ThinkingEffort::Medium),
+            (16_384, crate::llm::ThinkingEffort::ExtraHigh),
+            (32_768, crate::llm::ThinkingEffort::High),
+        ] {
+            let focus = "Bitte Verlauf der Schlafstörungen hervorheben.";
+            let evidence = report_evidence(
+                &conn,
+                &HeuristicCounter,
+                context_size,
+                &patient_id,
+                &crate::llm::ReportType::Ueberweisungsschreiben,
+                focus,
+                effort,
+            )
+            .unwrap();
+            let request = full_report_request_tokens(&HeuristicCounter, &evidence, focus);
+            assert!(
+                request + effort.max_tokens() <= context_size,
+                "{request} prompt + {} completion exceeds {context_size}",
+                effort.max_tokens()
+            );
+            // The block is filled, not starved: the structured facts are present.
+            assert!(evidence.contains("F32.1") && evidence.contains("Sertralin"));
+        }
+    }
+
+    /// Same check with a real tokenizer. German clinical text tokenizes less
+    /// efficiently than the heuristic assumes for some vocabularies, so the
+    /// fixed instruction reserve must hold for the shipped models too.
+    #[test]
+    #[ignore = "requires a local GGUF model"]
+    fn oversized_record_fits_with_a_real_tokenizer() {
+        use crate::llm::evidence::test_support::TestVault;
+
+        let path = std::env::var("RAMDOC_BENCH_MODEL").expect("RAMDOC_BENCH_MODEL is required");
+        let engine = LlmEngine::load(std::path::PathBuf::from(path), "ctx-check".into()).unwrap();
+        let vault = TestVault::new();
+        let conn = vault.conn();
+        let patient_id = seed_oversized_record(&conn);
+        let context_size = engine.context_size();
+        let effort = crate::llm::ThinkingEffort::Medium;
+        let focus = "Bitte Verlauf der Schlafstörungen hervorheben.";
+        let evidence = report_evidence(
+            &conn,
+            &engine,
+            context_size,
+            &patient_id,
+            &crate::llm::ReportType::Ueberweisungsschreiben,
+            focus,
+            effort,
+        )
+        .unwrap();
+        let instructions_only = full_report_request_tokens(&engine, "", focus);
+        let request = full_report_request_tokens(&engine, &evidence, focus);
+        println!(
+            "context={context_size} instructions={instructions_only} \
+             reserved={} evidence={} request={request} completion={}",
+            crate::llm::evidence::PROMPT_SCAFFOLD_TOKENS + REPORT_INSTRUCTION_TOKENS,
+            engine.count_tokens(&evidence),
+            effort.max_tokens()
+        );
+        assert!(
+            instructions_only
+                <= crate::llm::evidence::PROMPT_SCAFFOLD_TOKENS + REPORT_INSTRUCTION_TOKENS
+        );
+        assert!(request + effort.max_tokens() <= context_size);
+    }
 }
