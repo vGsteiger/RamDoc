@@ -81,9 +81,9 @@ impl SamplerConfig {
         Ok(self)
     }
 
-    pub fn build(self) -> LlamaSampler {
+    pub fn build(self, n_vocab: i32) -> LlamaSampler {
         LlamaSampler::chain_simple([
-            LlamaSampler::penalties(64, self.repeat_penalty, 0.0, self.presence_penalty),
+            LlamaSampler::penalties(n_vocab, 64, self.repeat_penalty, 0.0, self.presence_penalty),
             LlamaSampler::temp(self.temperature),
             LlamaSampler::min_p(self.min_p.max(0.0), 1),
             LlamaSampler::top_k(self.top_k),
