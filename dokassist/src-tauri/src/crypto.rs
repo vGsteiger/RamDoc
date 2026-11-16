@@ -3,10 +3,7 @@ use aes_gcm::{
     aead::{Aead, KeyInit},
     Aes256Gcm, Nonce,
 };
-use aes_gcm_siv::{
-    aead::{Aead as SivAead, KeyInit as SivKeyInit, Payload},
-    Aes256GcmSiv, Nonce as SivNonce,
-};
+use aes_gcm_siv::{aead::Payload, Aes256GcmSiv, Nonce as SivNonce};
 use rand::RngExt;
 
 const NONCE_LEN: usize = 12;
