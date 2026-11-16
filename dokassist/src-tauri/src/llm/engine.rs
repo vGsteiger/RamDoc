@@ -764,6 +764,35 @@ impl LlmEngine {
         }
     }
 
+    /// Continue an already-admitted generation (e.g. after the think budget
+    /// force-closed reasoning) in the same leased context.
+    ///
+    /// Phase 1 reserved the completion headroom; the continuation prompt is
+    /// phase 1's prompt plus what it generated, so it must not reserve the full
+    /// headroom again. `max_tokens` is clamped to the space actually left, and
+    /// the call fails only if no room remains at all.
+    pub fn continue_streaming_session_with_sampler(
+        &self,
+        session: &InferenceSession,
+        system_prompt: &str,
+        prompt: &str,
+        max_tokens: usize,
+        sampler: SamplerConfig,
+        on_token: impl FnMut(&str) -> bool,
+    ) -> Result<(), AppError> {
+        let prompt_tokens = self.count_tokens(prompt);
+        let max_tokens = continuation_budget(self.context_size, prompt_tokens, max_tokens)?;
+        self.generate_streaming_cached_with_headroom(
+            session,
+            &sha256_bytes(system_prompt.as_bytes()),
+            prompt,
+            max_tokens,
+            sampler,
+            Some(max_tokens),
+            on_token,
+        )
+    }
+
     fn generate_streaming_cached(
         &self,
         session: &InferenceSession,
@@ -771,6 +800,29 @@ impl LlmEngine {
         prompt: &str,
         max_tokens: usize,
         sampler_config: SamplerConfig,
+        on_token: impl FnMut(&str) -> bool,
+    ) -> Result<(), AppError> {
+        self.generate_streaming_cached_with_headroom(
+            session,
+            system_prompt_hash,
+            prompt,
+            max_tokens,
+            sampler_config,
+            None,
+            on_token,
+        )
+    }
+
+    /// `completion_headroom` overrides the profile's reservation; `None` keeps it.
+    #[allow(clippy::too_many_arguments)]
+    fn generate_streaming_cached_with_headroom(
+        &self,
+        session: &InferenceSession,
+        system_prompt_hash: &str,
+        prompt: &str,
+        max_tokens: usize,
+        sampler_config: SamplerConfig,
+        completion_headroom: Option<usize>,
         mut on_token: impl FnMut(&str) -> bool,
     ) -> Result<(), AppError> {
         let model = self
@@ -785,7 +837,7 @@ impl LlmEngine {
             self.context_size,
             tokens.len(),
             max_tokens,
-            runtime.profile.completion_headroom,
+            completion_headroom.unwrap_or(runtime.profile.completion_headroom),
         )?;
         let mut key = self.context_key(session, system_prompt_hash, &runtime);
 
@@ -1235,6 +1287,22 @@ fn recommended_model_for_ram(ram: u64) -> ModelChoice {
     }
 }
 
+/// Completion tokens a continuation may use: the request, clamped to the room
+/// left after its prompt (keeping one slot for the final decode).
+fn continuation_budget(
+    context_size: usize,
+    prompt_tokens: usize,
+    requested: usize,
+) -> Result<usize, AppError> {
+    let available = context_size.saturating_sub(prompt_tokens + 1);
+    match requested.min(available) {
+        0 => Err(AppError::Llm(format!(
+            "No room left to continue: {prompt_tokens} prompt tokens fill the {context_size}-token context"
+        ))),
+        budget => Ok(budget),
+    }
+}
+
 fn format_gib(bytes: u64) -> String {
     format!("{:.1} GiB", bytes as f64 / (1024_f64.powi(3)))
 }
@@ -1263,7 +1331,7 @@ fn is_selectable_metal_device(backend: &str, name: &str) -> bool {
     backend.eq_ignore_ascii_case("metal") || name.to_ascii_lowercase().starts_with("mtl")
 }
 
-fn sha256_bytes(bytes: &[u8]) -> String {
+pub(crate) fn sha256_bytes(bytes: &[u8]) -> String {
     hex::encode(ring::digest::digest(&SHA256, bytes).as_ref())
 }
 
@@ -1316,6 +1384,15 @@ pub struct AgentMessage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn continuation_budget_clamps_instead_of_reserving_full_headroom() {
+        // 12K prompt + 1K reasoning in a 16K context: the 4K headroom check
+        // would reject this, but ~3K tokens of answer still fit.
+        assert_eq!(continuation_budget(16_384, 13_100, 3_072).unwrap(), 3_072);
+        assert_eq!(continuation_budget(16_384, 15_000, 3_072).unwrap(), 1_383);
+        assert!(continuation_budget(16_384, 16_384, 3_072).is_err());
+    }
 
     #[test]
     fn recommendations_cover_memory_tiers() {

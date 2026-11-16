@@ -164,33 +164,34 @@ pub fn generate_with_think_budget_from_prompt(
         )
     };
 
-    let phase1 = |on_token: &mut dyn FnMut(&str) -> bool| -> Result<(), AppError> {
-        if let Some(prompt) = formatted_prompt {
-            if let Some(session) = session {
-                engine.generate_streaming_session_with_sampler(
-                    session,
-                    system_prompt,
-                    prompt,
-                    max_tokens,
-                    profile.sampler,
-                    on_token,
-                )
-            } else {
-                engine.generate_streaming_raw_with_sampler(
-                    prompt,
-                    max_tokens,
-                    profile.sampler,
-                    on_token,
-                )
-            }
-        } else {
-            engine.generate_streaming_raw_with_sampler(
-                &single_turn_prompt()?,
-                max_tokens,
-                profile.sampler,
-                on_token,
-            )
+    // Phase 1 and any phase-2 continuation share one leased context, so the
+    // continuation reuses the cached prompt prefix instead of prefilling the
+    // whole clinical prompt again.
+    let base_prompt = match formatted_prompt {
+        Some(prompt) => prompt.to_string(),
+        None => single_turn_prompt()?,
+    };
+    let isolated_session;
+    let session = match session {
+        Some(session) => session,
+        None => {
+            isolated_session = InferenceSession::isolated(format!(
+                "think:{}",
+                super::engine::sha256_bytes(base_prompt.as_bytes())
+            ));
+            &isolated_session
         }
+    };
+
+    let phase1 = |on_token: &mut dyn FnMut(&str) -> bool| -> Result<(), AppError> {
+        engine.generate_streaming_session_with_sampler(
+            session,
+            system_prompt,
+            &base_prompt,
+            max_tokens,
+            profile.sampler,
+            on_token,
+        )
     };
 
     phase1(&mut |token| {
@@ -232,15 +233,13 @@ pub fn generate_with_think_budget_from_prompt(
         // keeps its full reasoning, and the prompt prefix is reused from the
         // context cache. The canonical output is rendered back into the
         // model's native reasoning markers first.
-        let base_prompt = match formatted_prompt {
-            Some(prompt) => prompt.to_string(),
-            None => single_turn_prompt()?,
-        };
         let continued = format!(
             "{base_prompt}{}",
             engine.chat_family().native_assistant_prefix(&output)
         );
-        engine.generate_streaming_raw_with_sampler(
+        engine.continue_streaming_session_with_sampler(
+            session,
+            system_prompt,
             &continued,
             max_tokens.saturating_sub(max_think_tokens),
             profile.sampler,
