@@ -60,17 +60,9 @@ jobs:
         toolchain: stable
         target: ${{ matrix.rust-targets }}
 
-    - name: Cache cargo build
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          dokassist/src-tauri/target
-        key: ${{ runner.os }}-tauri-${{ matrix.rust-targets }}-${{ hashFiles('dokassist/src-tauri/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-tauri-${{ matrix.rust-targets }}-${{ hashFiles('dokassist/src-tauri/Cargo.lock') }}-
-          ${{ runner.os }}-tauri-${{ matrix.rust-targets }}-
+    # No target/ cache here: release builds run from the PR-merge event, so any
+    # cache they save is scoped to that PR's ref and can never be restored by a
+    # later release; it only consumed the 10 GB repo cache quota.
 
     - name: Install frontend dependencies
       working-directory: ./dokassist
