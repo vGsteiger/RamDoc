@@ -13,7 +13,7 @@ use llama_cpp_2::context::LlamaContext;
 use llama_cpp_2::llama_backend::LlamaBackend;
 use llama_cpp_2::llama_batch::LlamaBatch;
 use llama_cpp_2::model::params::LlamaModelParams;
-use llama_cpp_2::model::{AddBos, LlamaChatMessage, LlamaChatTemplate, LlamaModel};
+use llama_cpp_2::model::{LlamaChatMessage, LlamaChatTemplate, LlamaModel};
 use llama_cpp_2::token::LlamaToken;
 use ring::digest::{Context as DigestContext, SHA256};
 use serde::{Deserialize, Serialize};
@@ -517,9 +517,7 @@ impl LlmEngine {
         )?;
 
         // 1. Tokenise
-        let tokens = model
-            .str_to_token(&prompt, AddBos::Always)
-            .map_err(|e| AppError::Llm(format!("Tokenization failed: {e}")))?;
+        let tokens = model.vocab().tokenize(prompt.as_bytes(), true, true);
 
         // 2. Context sized to the machine, with bounded prompt batches so long
         // contexts do not require an equally large temporary compute buffer.
@@ -555,7 +553,7 @@ impl LlmEngine {
         let gen_phase_start = Instant::now();
 
         // 4. Sampler chain from the clinical harness (greedy when temperature is 0).
-        let mut sampler = SamplerConfig::from_temperature(temperature).build();
+        let mut sampler = SamplerConfig::from_temperature(temperature).build(model.n_vocab());
 
         // 5. Stateful UTF-8 decoder for multi-byte tokens
         let mut utf8_dec = UTF_8.new_decoder();
@@ -568,13 +566,11 @@ impl LlmEngine {
             let token = sampler.sample(&ctx, -1);
             sampler.accept(token);
 
-            if model.is_eog_token(token) {
+            if model.vocab().is_eog(token) {
                 break;
             }
 
-            let piece = model
-                .token_to_piece(token, &mut utf8_dec, false, None)
-                .map_err(|e| AppError::Llm(format!("Token decode failed: {e}")))?;
+            let piece = decode_piece(model, token, &mut utf8_dec, false);
 
             if first_token {
                 ttft_ms = wall_start.elapsed().as_secs_f64() * 1000.0;
@@ -761,9 +757,7 @@ impl LlmEngine {
             .model
             .as_ref()
             .ok_or_else(|| AppError::Llm("Model not loaded".to_string()))?;
-        let tokens = model
-            .str_to_token(prompt, AddBos::Always)
-            .map_err(|e| AppError::Llm(format!("Tokenization failed: {e}")))?;
+        let tokens = model.vocab().tokenize(prompt.as_bytes(), true, true);
         let runtime = self.inference_runtime()?;
         validate_context_budget(
             self.context_size,
@@ -882,7 +876,7 @@ impl LlmEngine {
         let estimated_saved_ms = reused as f64 * historical_ms_per_token;
         let gen_phase_start = Instant::now();
 
-        let mut sampler = sampler_config.build();
+        let mut sampler = sampler_config.build(model.n_vocab());
         let mut utf8_dec = UTF_8.new_decoder();
         let mut ttft_ms = 0.0;
         let mut completion_tokens = 0usize;
@@ -890,12 +884,10 @@ impl LlmEngine {
         for _ in 0..max_tokens {
             let token = sampler.sample(&pool.entries[index].context, -1);
             sampler.accept(token);
-            if model.is_eog_token(token) {
+            if model.vocab().is_eog(token) {
                 break;
             }
-            let piece = model
-                .token_to_piece(token, &mut utf8_dec, false, None)
-                .map_err(|e| AppError::Llm(format!("Token decode failed: {e}")))?;
+            let piece = decode_piece(model, token, &mut utf8_dec, false);
             if completion_tokens == 0 {
                 ttft_ms = wall_start.elapsed().as_secs_f64() * 1000.0;
             }
@@ -966,9 +958,7 @@ impl LlmEngine {
             .as_ref()
             .ok_or_else(|| AppError::Llm("Model not loaded".to_string()))?;
 
-        let tokens = model
-            .str_to_token(prompt, AddBos::Always)
-            .map_err(|e| AppError::Llm(format!("Tokenization failed: {e}")))?;
+        let tokens = model.vocab().tokenize(prompt.as_bytes(), true, true);
 
         let mut ctx = self.create_context(model)?;
         let runtime = self.inference_runtime()?;
@@ -1000,7 +990,7 @@ impl LlmEngine {
         }
         let gen_phase_start = Instant::now();
 
-        let mut sampler = SamplerConfig::from_temperature(temperature).build();
+        let mut sampler = SamplerConfig::from_temperature(temperature).build(model.n_vocab());
 
         let mut utf8_dec = UTF_8.new_decoder();
 
@@ -1012,13 +1002,11 @@ impl LlmEngine {
             let token = sampler.sample(&ctx, -1);
             sampler.accept(token);
 
-            if model.is_eog_token(token) {
+            if model.vocab().is_eog(token) {
                 break;
             }
 
-            let piece = model
-                .token_to_piece(token, &mut utf8_dec, false, None)
-                .map_err(|e| AppError::Llm(format!("Token decode failed: {e}")))?;
+            let piece = decode_piece(model, token, &mut utf8_dec, false);
 
             if first_token {
                 ttft_ms = wall_start.elapsed().as_secs_f64() * 1000.0;
@@ -1113,10 +1101,7 @@ impl LlmEngine {
         let Some(model) = self.model.as_ref() else {
             return text.len() / 4;
         };
-        model
-            .str_to_token(text, AddBos::Always)
-            .map(|t| t.len())
-            .unwrap_or(text.len() / 4)
+        model.vocab().tokenize(text.as_bytes(), true, true).len()
     }
 
     /// Return the total system RAM in bytes (macOS via sysctl).
@@ -1250,6 +1235,34 @@ fn peak_rss_bytes() -> u64 {
     }
 }
 
+/// Decode one token through a stateful UTF-8 decoder so code points split
+/// across tokens are emitted once complete.
+///
+/// `decode_to_string` only writes into spare capacity, so the buffer is sized
+/// with the decoder's worst case (pending bytes plus replacement characters,
+/// which expand one invalid byte to three). Anything less could silently drop
+/// text instead of failing.
+fn decode_piece(
+    model: &LlamaModel,
+    token: LlamaToken,
+    decoder: &mut encoding_rs::Decoder,
+    special: bool,
+) -> String {
+    let bytes = model.vocab().token_to_piece(token, special, None);
+    decode_bytes(decoder, &bytes)
+}
+
+fn decode_bytes(decoder: &mut encoding_rs::Decoder, bytes: &[u8]) -> String {
+    let capacity = decoder
+        .max_utf8_buffer_length(bytes.len())
+        .unwrap_or(bytes.len().saturating_mul(3).saturating_add(16));
+    let mut piece = String::with_capacity(capacity);
+    let (result, read, _) = decoder.decode_to_string(bytes, &mut piece, false);
+    debug_assert_eq!(result, encoding_rs::CoderResult::InputEmpty);
+    debug_assert_eq!(read, bytes.len());
+    piece
+}
+
 fn new_chat_message(role: &str, content: &str) -> Result<LlamaChatMessage, AppError> {
     LlamaChatMessage::new(role.to_string(), content.to_string())
         .map_err(|e| AppError::Llm(format!("Invalid chat message: {e}")))
@@ -1265,6 +1278,16 @@ pub struct AgentMessage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn streaming_decode_keeps_split_and_invalid_bytes() {
+        let mut decoder = UTF_8.new_decoder();
+        // "ü" split across two tokens, then an invalid byte run.
+        let mut out = decode_bytes(&mut decoder, &[0x47, 0xC3]);
+        out.push_str(&decode_bytes(&mut decoder, &[0xBC, 0x74]));
+        out.push_str(&decode_bytes(&mut decoder, &[0xFF, 0xFE, 0xFD, 0x21]));
+        assert_eq!(out, "Güt\u{FFFD}\u{FFFD}\u{FFFD}!");
+    }
 
     #[test]
     fn recommendations_cover_memory_tiers() {
