@@ -236,6 +236,10 @@ pub enum AuditAction {
     Login,
     Logout,
     RecoveryUsed,
+    /// The Keychain checkpoint did not match a verified chain and a new trust
+    /// anchor was established. Recorded in the chain so the discrepancy stays
+    /// visible after re-anchoring.
+    CheckpointReanchored,
 }
 
 impl AuditAction {
@@ -251,6 +255,7 @@ impl AuditAction {
             AuditAction::Login => "login",
             AuditAction::Logout => "logout",
             AuditAction::RecoveryUsed => "recovery_used",
+            AuditAction::CheckpointReanchored => "checkpoint_reanchored",
         }
     }
 }

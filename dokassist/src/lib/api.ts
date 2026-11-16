@@ -84,6 +84,14 @@ export async function unlockApp(): Promise<boolean> {
   return await invoke<boolean>('unlock_app');
 }
 
+/**
+ * Unlock after the user accepted a reported audit checkpoint mismatch. Asks for
+ * Touch ID again and appends a permanent audit entry describing the mismatch.
+ */
+export async function unlockAppAcceptingAuditCheckpoint(): Promise<boolean> {
+  return await invoke<boolean>('unlock_app_accepting_audit_checkpoint');
+}
+
 export async function recoverApp(words: string[]): Promise<boolean> {
   return await invoke<boolean>('recover_app', { words });
 }

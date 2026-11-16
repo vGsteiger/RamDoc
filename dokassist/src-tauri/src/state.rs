@@ -130,6 +130,21 @@ impl AppState {
         self.init_db_with_mode(db_key, fs_key, crate::database::CheckpointMode::Reanchor)
     }
 
+    /// Initialize after the user re-authenticated to accept a reported audit
+    /// checkpoint mismatch. The mismatch is appended to the audit chain before
+    /// a new checkpoint is established.
+    pub fn init_db_acknowledged_reanchor(
+        &self,
+        db_key: &[u8; 32],
+        fs_key: &[u8; 32],
+    ) -> Result<(), crate::error::AppError> {
+        self.init_db_with_mode(
+            db_key,
+            fs_key,
+            crate::database::CheckpointMode::AcknowledgedReanchor,
+        )
+    }
+
     fn init_db_with_mode(
         &self,
         db_key: &[u8; 32],
