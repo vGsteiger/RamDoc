@@ -382,6 +382,11 @@ pub async fn list_available_models(
     // The download whitelist is the single source of truth for picker metadata.
     let available_models: Vec<AvailableModel> = download::MODELS
         .iter()
+        // Superseded entries are offered only to users who already have them.
+        .filter(|entry| {
+            entry.superseded_by.is_none()
+                || state.data_dir.join("models").join(entry.filename).is_file()
+        })
         .map(|entry| AvailableModel {
             name: entry.name.to_string(),
             filename: entry.filename.to_string(),

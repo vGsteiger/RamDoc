@@ -42,9 +42,205 @@ pub(crate) struct ModelEntry {
     pub license: &'static str,
     pub description: &'static str,
     pub disclaimer: Option<&'static str>,
+    /// Filename of the entry that replaces this one. Superseded entries stay
+    /// whitelisted so existing installs keep loading, routing and verifying,
+    /// but the picker only lists them once they are installed.
+    pub superseded_by: Option<&'static str>,
 }
 
 pub(crate) const MODELS: &[ModelEntry] = &[
+    // Apache-2.0; 30.7B dense; Google QAT Q4_0; minimum 32 GB unified memory.
+    ModelEntry {
+        name: "Gemma 4 31B QAT Q4_0",
+        filename: "gemma-4-31B_q4_0-it.gguf",
+        download_url: "https://huggingface.co/google/gemma-4-31B-it-qat-q4_0-gguf/resolve/main/gemma-4-31B_q4_0-it.gguf",
+        lfs_pointer_url: "https://huggingface.co/google/gemma-4-31B-it-qat-q4_0-gguf/raw/main/gemma-4-31B_q4_0-it.gguf",
+        pinned_sha256: "179cfb99212709597eae5929112cfca677e1bbf566178b479ae1da0c4772874b",
+        size_bytes: 17_651_001_568,
+        min_ram_gb: 32,
+        context_window_tokens: 262_144,
+        parameters: "30.7B dense",
+        license: "Apache-2.0",
+        description: "Largest dense Gemma 4 with Google's quantization-aware Q4_0 weights; strong multilingual writing with 256K context.",
+        disclaimer: None,
+        superseded_by: None,
+    },
+    // Apache-2.0; 29.3B dense; IBM vendor GGUF; minimum 32 GB unified memory.
+    ModelEntry {
+        name: "Granite 4.2 30B Q4_K_M",
+        filename: "granite-4.2-30b-Q4_K_M.gguf",
+        download_url: "https://huggingface.co/ibm-granite/granite-4.2-30b-GGUF/resolve/main/granite-4.2-30b-Q4_K_M.gguf",
+        lfs_pointer_url: "https://huggingface.co/ibm-granite/granite-4.2-30b-GGUF/raw/main/granite-4.2-30b-Q4_K_M.gguf",
+        pinned_sha256: "f299dace85d77ee0e24ca0b6720bd211b1f4cd1f65b9c0a2111e79692e29c9be",
+        size_bytes: 17_721_455_328,
+        min_ram_gb: 32,
+        context_window_tokens: 131_072,
+        parameters: "29.3B dense",
+        license: "Apache-2.0",
+        description: "IBM's enterprise model with officially evaluated German and French, reasoning mode and 128K context.",
+        disclaimer: None,
+        superseded_by: None,
+    },
+    // OpenMDW-1.1; 30B total / 3B active hybrid Mamba-2 MoE; minimum 32 GB unified memory.
+    ModelEntry {
+        name: "Nemotron 3.5 Lightning 30B-A3B Q4_0",
+        filename: "NVIDIA-Nemotron-3.5-Lightning-30B-A3B-Q4_0.gguf",
+        download_url: "https://huggingface.co/ggml-org/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-GGUF/resolve/main/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-Q4_0.gguf",
+        lfs_pointer_url: "https://huggingface.co/ggml-org/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-GGUF/raw/main/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-Q4_0.gguf",
+        pinned_sha256: "61f87e75974e4b535dcdf9aad056541a9514f1dfa4538b463b081d19b7a00e3c",
+        size_bytes: 18_898_091_584,
+        min_ram_gb: 32,
+        context_window_tokens: 1_048_576,
+        parameters: "30B total / 3B active",
+        license: "OpenMDW-1.1",
+        description: "Fast hybrid Mamba-MoE with very long context for large records; supports German and French.",
+        disclaimer: None,
+        superseded_by: None,
+    },
+    // Apache-2.0; 27.8B dense; minimum 24 GB unified memory.
+    ModelEntry {
+        name: "Qwen 3.8 27B Dense UD-Q4_K_M",
+        filename: "Qwen3.8-27B-UD-Q4_K_M.gguf",
+        download_url: "https://huggingface.co/unsloth/Qwen3.8-27B-GGUF/resolve/main/Qwen3.8-27B-UD-Q4_K_M.gguf",
+        lfs_pointer_url: "https://huggingface.co/unsloth/Qwen3.8-27B-GGUF/raw/main/Qwen3.8-27B-UD-Q4_K_M.gguf",
+        pinned_sha256: "1bce504dfecd84153666928a41d8a66706f0158d3a317bc5196b72819d7dc529",
+        size_bytes: 16_564_259_744,
+        min_ram_gb: 24,
+        context_window_tokens: 262_144,
+        parameters: "27.8B dense",
+        license: "Apache-2.0",
+        description: "Successor to Qwen 3.6 27B: stronger multilingual reasoning and tool use with 256K context.",
+        disclaimer: None,
+        superseded_by: None,
+    },
+    // Apache-2.0; 25.2B total / 3.8B active; Google QAT Q4_0; minimum 24 GB unified memory.
+    ModelEntry {
+        name: "Gemma 4 26B-A4B MoE QAT Q4_0",
+        filename: "gemma-4-26B_q4_0-it.gguf",
+        download_url: "https://huggingface.co/google/gemma-4-26B-A4B-it-qat-q4_0-gguf/resolve/main/gemma-4-26B_q4_0-it.gguf",
+        lfs_pointer_url: "https://huggingface.co/google/gemma-4-26B-A4B-it-qat-q4_0-gguf/raw/main/gemma-4-26B_q4_0-it.gguf",
+        pinned_sha256: "3eca3b8f6d7baf218a7dd6bba5fb59a56ee25fe2d567b6f5f589b4f697eca51d",
+        size_bytes: 14_439_363_584,
+        min_ram_gb: 24,
+        context_window_tokens: 262_144,
+        parameters: "25.2B total / 3.8B active",
+        license: "Apache-2.0",
+        description: "Google's quantization-aware Q4_0 release of the Gemma 4 MoE; better quality than post-training Q4_0 at the same size.",
+        disclaimer: None,
+        superseded_by: None,
+    },
+    // Apache-2.0; 13.5B dense; minimum 16 GB unified memory.
+    ModelEntry {
+        name: "Ministral 3 14B Q4_K_M",
+        filename: "Ministral-3-14B-Instruct-2512-Q4_K_M.gguf",
+        download_url: "https://huggingface.co/unsloth/Ministral-3-14B-Instruct-2512-GGUF/resolve/main/Ministral-3-14B-Instruct-2512-Q4_K_M.gguf",
+        lfs_pointer_url: "https://huggingface.co/unsloth/Ministral-3-14B-Instruct-2512-GGUF/raw/main/Ministral-3-14B-Instruct-2512-Q4_K_M.gguf",
+        pinned_sha256: "76ce697c065f2e40f1e8e958118b02cab38e2c10a6015f7d7908036a292dc8c8",
+        size_bytes: 8_239_067_840,
+        min_ram_gb: 16,
+        context_window_tokens: 262_144,
+        parameters: "13.5B dense",
+        license: "Apache-2.0",
+        description: "Mistral's European mid-size model with particularly strong French and 256K context.",
+        disclaimer: None,
+        superseded_by: None,
+    },
+    // Apache-2.0; 11.95B dense; Google QAT Q4_0; minimum 16 GB unified memory.
+    ModelEntry {
+        name: "Gemma 4 12B QAT Q4_0",
+        filename: "gemma-4-12b-it-qat-q4_0.gguf",
+        download_url: "https://huggingface.co/google/gemma-4-12B-it-qat-q4_0-gguf/resolve/main/gemma-4-12b-it-qat-q4_0.gguf",
+        lfs_pointer_url: "https://huggingface.co/google/gemma-4-12B-it-qat-q4_0-gguf/raw/main/gemma-4-12b-it-qat-q4_0.gguf",
+        pinned_sha256: "93567e57a8fe10b23569b9d9ec38cd005deedf71e29477c421a4b83f418a538b",
+        size_bytes: 6_975_879_296,
+        min_ram_gb: 16,
+        context_window_tokens: 262_144,
+        parameters: "12B dense",
+        license: "Apache-2.0",
+        description: "Mid-size dense Gemma 4 with quantization-aware weights and 256K context for 16 GB Macs.",
+        disclaimer: None,
+        superseded_by: None,
+    },
+    // Apache-2.0; ~9B dense; minimum 16 GB unified memory.
+    ModelEntry {
+        name: "Qwen 3.5 9B Q4_K_M",
+        filename: "Qwen3.5-9B-Q4_K_M.gguf",
+        download_url: "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_K_M.gguf",
+        lfs_pointer_url: "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/raw/main/Qwen3.5-9B-Q4_K_M.gguf",
+        pinned_sha256: "03b74727a860a56338e042c4420bb3f04b2fec5734175f4cb9fa853daf52b7e8",
+        size_bytes: 5_680_522_464,
+        min_ram_gb: 16,
+        context_window_tokens: 262_144,
+        parameters: "9B dense",
+        license: "Apache-2.0",
+        description: "Replaces Qwen3 8B: same footprint class with 256K instead of 32K context.",
+        disclaimer: None,
+        superseded_by: None,
+    },
+    // Apache-2.0; 8.8B dense; IBM vendor GGUF; minimum 16 GB unified memory.
+    ModelEntry {
+        name: "Granite 4.2 8B Q4_K_M",
+        filename: "granite-4.2-8b-Q4_K_M.gguf",
+        download_url: "https://huggingface.co/ibm-granite/granite-4.2-8b-GGUF/resolve/main/granite-4.2-8b-Q4_K_M.gguf",
+        lfs_pointer_url: "https://huggingface.co/ibm-granite/granite-4.2-8b-GGUF/raw/main/granite-4.2-8b-Q4_K_M.gguf",
+        pinned_sha256: "16a9369d0805f80b7377d25d87f937a90c05dc04ad79173a52001e42c9aab311",
+        size_bytes: 5_347_917_952,
+        min_ram_gb: 16,
+        context_window_tokens: 131_072,
+        parameters: "8.8B dense",
+        license: "Apache-2.0",
+        description: "Compact IBM model with evaluated German and French and a low-effort reasoning mode.",
+        disclaimer: None,
+        superseded_by: None,
+    },
+    // Apache-2.0; 8B stored / 4.5B effective; Google QAT Q4_0; minimum 12 GB unified memory.
+    ModelEntry {
+        name: "Gemma 4 E4B QAT Q4_0",
+        filename: "gemma-4-E4B_q4_0-it.gguf",
+        download_url: "https://huggingface.co/google/gemma-4-E4B-it-qat-q4_0-gguf/resolve/main/gemma-4-E4B_q4_0-it.gguf",
+        lfs_pointer_url: "https://huggingface.co/google/gemma-4-E4B-it-qat-q4_0-gguf/raw/main/gemma-4-E4B_q4_0-it.gguf",
+        pinned_sha256: "676c35070db6dbe52f93e9c864ee0fba4eddea94b9c875d9cb10daff453fbaee",
+        size_bytes: 5_154_941_280,
+        min_ram_gb: 12,
+        context_window_tokens: 131_072,
+        parameters: "8B stored / 4.5B effective",
+        license: "Apache-2.0",
+        description: "Quantization-aware release of the on-device Gemma 4 tier with 128K context.",
+        disclaimer: None,
+        superseded_by: None,
+    },
+    // OpenMDW-1.1; Gemma 4 E4B fine-tune; minimum 12 GB unified memory.
+    ModelEntry {
+        name: "Nemotron 3.5 Bolt E4B UD-Q4_K_XL",
+        filename: "NVIDIA-Nemotron-3.5-Bolt-E4B-UD-Q4_K_XL.gguf",
+        download_url: "https://huggingface.co/unsloth/NVIDIA-Nemotron-3.5-Bolt-E4B-GGUF/resolve/main/NVIDIA-Nemotron-3.5-Bolt-E4B-UD-Q4_K_XL.gguf",
+        lfs_pointer_url: "https://huggingface.co/unsloth/NVIDIA-Nemotron-3.5-Bolt-E4B-GGUF/raw/main/NVIDIA-Nemotron-3.5-Bolt-E4B-UD-Q4_K_XL.gguf",
+        pinned_sha256: "84ff34f5834b929043f5ae74799e8d562d4056998f6a5923ceb44831e8ad84d6",
+        size_bytes: 5_060_482_240,
+        min_ram_gb: 12,
+        context_window_tokens: 65_536,
+        parameters: "8B stored / 4.5B effective",
+        license: "OpenMDW-1.1",
+        description: "NVIDIA's reasoning-tuned Gemma 4 E4B for small Macs; 64K context.",
+        disclaimer: None,
+        superseded_by: None,
+    },
+    // Apache-2.0; 5.1B stored / 2.3B effective; Google QAT Q4_0; minimum 8 GB unified memory.
+    ModelEntry {
+        name: "Gemma 4 E2B QAT Q4_0",
+        filename: "gemma-4-E2B_q4_0-it.gguf",
+        download_url: "https://huggingface.co/google/gemma-4-E2B-it-qat-q4_0-gguf/resolve/main/gemma-4-E2B_q4_0-it.gguf",
+        lfs_pointer_url: "https://huggingface.co/google/gemma-4-E2B-it-qat-q4_0-gguf/raw/main/gemma-4-E2B_q4_0-it.gguf",
+        pinned_sha256: "fa401b55b07ee70a54c6dae3903c783a6e65064312529ea57175cb5f8dec6634",
+        size_bytes: 3_349_516_256,
+        min_ram_gb: 8,
+        context_window_tokens: 131_072,
+        parameters: "5.1B stored / 2.3B effective",
+        license: "Apache-2.0",
+        description: "Quantization-aware release of the smallest Gemma 4 for memory-constrained Macs; 128K context.",
+        disclaimer: None,
+        superseded_by: None,
+    },
     // Apache-2.0; 35B total / 3B active; minimum 32 GB unified memory.
     ModelEntry {
         name: "Qwen 3.6 35B-A3B MoE UD-Q4_K_M",
@@ -59,6 +255,7 @@ pub(crate) const MODELS: &[ModelEntry] = &[
         license: "Apache-2.0",
         description: "Flagship long-context MoE for report generation, German clinical text, RAG, and tool use.",
         disclaimer: None,
+        superseded_by: None,
     },
     // Apache-2.0; 27B dense; minimum 24 GB unified memory.
     ModelEntry {
@@ -74,6 +271,7 @@ pub(crate) const MODELS: &[ModelEntry] = &[
         license: "Apache-2.0",
         description: "Dense Qwen 3.6 quality tier with strong multilingual reasoning and 256K-class context.",
         disclaimer: None,
+        superseded_by: Some("Qwen3.8-27B-UD-Q4_K_M.gguf"),
     },
     // Apache-2.0; 25.2B total / 3.8B active; minimum 24 GB unified memory.
     ModelEntry {
@@ -89,6 +287,7 @@ pub(crate) const MODELS: &[ModelEntry] = &[
         license: "Apache-2.0",
         description: "Memory-efficient multilingual MoE alternative with 256K context and over 140 languages.",
         disclaimer: None,
+        superseded_by: Some("gemma-4-26B_q4_0-it.gguf"),
     },
     // Apache-2.0; 21B total / 3.6B active; minimum 18 GB unified memory.
     ModelEntry {
@@ -104,6 +303,7 @@ pub(crate) const MODELS: &[ModelEntry] = &[
         license: "Apache-2.0",
         description: "Compact reasoning and tool-use MoE; the official MXFP4 weights are designed for local use.",
         disclaimer: None,
+        superseded_by: None,
     },
     // Apache-2.0; 8B stored / 4.5B effective; minimum 12 GB unified memory.
     ModelEntry {
@@ -119,6 +319,7 @@ pub(crate) const MODELS: &[ModelEntry] = &[
         license: "Apache-2.0",
         description: "New on-device Gemma tier with 128K context and a low 4.3 GiB model footprint.",
         disclaimer: None,
+        superseded_by: Some("gemma-4-E4B_q4_0-it.gguf"),
     },
     // Apache-2.0; 5.1B stored / 2.3B effective; minimum 8 GB unified memory.
     ModelEntry {
@@ -134,6 +335,7 @@ pub(crate) const MODELS: &[ModelEntry] = &[
         license: "Apache-2.0",
         description: "Newest ultra-small multilingual option with 128K context for memory-constrained Macs.",
         disclaimer: None,
+        superseded_by: Some("gemma-4-E2B_q4_0-it.gguf"),
     },
     // Apache-2.0; 8B dense; minimum 16 GB unified memory.
     ModelEntry {
@@ -149,6 +351,7 @@ pub(crate) const MODELS: &[ModelEntry] = &[
         license: "Apache-2.0",
         description: "Established multilingual dense fallback with good quality at a 4.7 GiB footprint.",
         disclaimer: None,
+        superseded_by: Some("Qwen3.5-9B-Q4_K_M.gguf"),
     },
     // MIT; 3.8B dense; minimum 8 GB unified memory.
     ModelEntry {
@@ -164,6 +367,7 @@ pub(crate) const MODELS: &[ModelEntry] = &[
         license: "MIT",
         description: "Fast compact alternative for English-leaning workloads and limited memory.",
         disclaimer: None,
+        superseded_by: None,
     },
     // Google Health AI terms; 4B dense; minimum 8 GB unified memory.
     ModelEntry {
@@ -179,6 +383,7 @@ pub(crate) const MODELS: &[ModelEntry] = &[
         license: "Health AI Developer Foundations terms",
         description: "Medical-domain instruction model for clinician-reviewed on-device drafting.",
         disclaimer: Some("Use for clinician-reviewed drafting only. This model is not validated for diagnosis or treatment decisions."),
+        superseded_by: None,
     },
 ];
 
@@ -462,6 +667,52 @@ mod tests {
         ] {
             assert!(find_model(filename).is_some(), "missing model: {filename}");
         }
+    }
+
+    /// Every 2026-11 refresh entry is whitelisted, current, and not superseded.
+    #[test]
+    fn test_find_model_2026_11_entries() {
+        for filename in [
+            "gemma-4-31B_q4_0-it.gguf",
+            "granite-4.2-30b-Q4_K_M.gguf",
+            "NVIDIA-Nemotron-3.5-Lightning-30B-A3B-Q4_0.gguf",
+            "Qwen3.8-27B-UD-Q4_K_M.gguf",
+            "gemma-4-26B_q4_0-it.gguf",
+            "Ministral-3-14B-Instruct-2512-Q4_K_M.gguf",
+            "gemma-4-12b-it-qat-q4_0.gguf",
+            "Qwen3.5-9B-Q4_K_M.gguf",
+            "granite-4.2-8b-Q4_K_M.gguf",
+            "gemma-4-E4B_q4_0-it.gguf",
+            "NVIDIA-Nemotron-3.5-Bolt-E4B-UD-Q4_K_XL.gguf",
+            "gemma-4-E2B_q4_0-it.gguf",
+        ] {
+            let entry = find_model(filename).unwrap_or_else(|| panic!("missing model: {filename}"));
+            assert!(entry.superseded_by.is_none(), "{filename} is superseded");
+        }
+    }
+
+    /// A superseded entry must point at a current entry, never a chain or a gap.
+    #[test]
+    fn test_superseded_entries_point_at_current_models() {
+        for entry in MODELS.iter().filter(|m| m.superseded_by.is_some()) {
+            let successor = find_model(entry.superseded_by.unwrap())
+                .unwrap_or_else(|| panic!("{} points at an unknown model", entry.filename));
+            assert!(successor.superseded_by.is_none());
+            assert!(successor.min_ram_gb <= entry.min_ram_gb.max(16));
+        }
+    }
+
+    #[test]
+    fn test_catalog_has_no_duplicate_filenames_or_hashes() {
+        let mut names: Vec<_> = MODELS.iter().map(|m| m.filename).collect();
+        let mut hashes: Vec<_> = MODELS.iter().map(|m| m.pinned_sha256).collect();
+        names.sort_unstable();
+        hashes.sort_unstable();
+        let total = MODELS.len();
+        names.dedup();
+        hashes.dedup();
+        assert_eq!(names.len(), total);
+        assert_eq!(hashes.len(), total);
     }
 
     /// Both URL fields for every model must point at the same filename blob
