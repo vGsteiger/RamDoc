@@ -2,6 +2,7 @@ pub mod agent;
 #[cfg(any(test, feature = "benchmark-harness"))]
 #[doc(hidden)]
 pub mod benchmark_harness;
+pub mod chat_format;
 pub mod chunk;
 pub mod context_cache;
 pub mod download;
