@@ -1452,29 +1452,28 @@ mod tests {
             std::env::var("RAMDOC_BENCH_MODEL").expect("RAMDOC_BENCH_MODEL is required"),
         );
         let engine = LlmEngine::load(path, "family-check".into()).unwrap();
+        // Run through the product path: the think budget force-closes
+        // reasoning (128 tokens at Low) and the continuation writes the
+        // answer, so thinking-by-default models (Qwen) are covered too.
         for effort in [ThinkingEffort::Low, ThinkingEffort::High] {
-            let prompt = engine
-                .format_chat_history_with_effort(
-                    "Sie sind ein knapper klinischer Assistent. Antworten Sie auf Deutsch.",
-                    &[AgentMessage {
-                        role: "user".into(),
-                        content: "Fasse zusammen: Schlaf verbessert, Angst reduziert.".into(),
-                    }],
-                    effort,
-                )
-                .unwrap();
             let mut answer = String::new();
-            engine
-                .generate_streaming_raw_with_sampler(
-                    &prompt,
-                    384,
-                    SamplerConfig::from_temperature(0.0),
-                    |piece| {
-                        answer.push_str(piece);
-                        true
-                    },
-                )
-                .unwrap();
+            let collected = std::cell::RefCell::new(String::new());
+            crate::llm::thinking::generate_with_think_budget_and_sampler(
+                &engine,
+                "Sie sind ein knapper klinischer Assistent. Antworten Sie auf Deutsch.",
+                "Fasse zusammen: Schlaf verbessert, Angst reduziert.",
+                crate::llm::harness::GenerationTask::Summary,
+                effort,
+                Some(SamplerConfig::from_temperature(0.0)),
+                &|piece| collected.borrow_mut().push_str(piece),
+            )
+            .map(|returned| answer = returned)
+            .unwrap();
+            assert_eq!(
+                answer,
+                *collected.borrow(),
+                "streamed and returned output differ"
+            );
             println!(
                 "family={:?} effort={effort:?}\n{answer}\n---",
                 engine.chat_family()

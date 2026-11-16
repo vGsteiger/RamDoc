@@ -213,6 +213,9 @@ pub fn generate_with_think_budget_from_prompt(
         if in_think {
             think_tokens += 1;
             if think_tokens >= max_think_tokens {
+                // The token is already part of `output`; stream it too so the
+                // live view and the returned text stay identical.
+                emit(token);
                 budget_hit = true;
                 return false;
             }
