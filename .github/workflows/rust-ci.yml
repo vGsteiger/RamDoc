@@ -40,9 +40,10 @@ jobs:
           ~/.cargo/registry
           ~/.cargo/git
           dokassist/src-tauri/target
-        key: ${{ runner.os }}-cargo-${{ matrix.rust }}-${{ hashFiles('dokassist/src-tauri/Cargo.lock') }}
+          dokassist/asr-worker/target
+        key: ${{ runner.os }}-cargo-${{ matrix.rust }}-${{ hashFiles('dokassist/src-tauri/Cargo.lock', 'dokassist/asr-worker/Cargo.lock') }}
         restore-keys: |
-          ${{ runner.os }}-cargo-${{ matrix.rust }}-${{ hashFiles('dokassist/src-tauri/Cargo.lock') }}-
+          ${{ runner.os }}-cargo-${{ matrix.rust }}-${{ hashFiles('dokassist/src-tauri/Cargo.lock', 'dokassist/asr-worker/Cargo.lock') }}-
           ${{ runner.os }}-cargo-${{ matrix.rust }}-
 
     - name: Run cargo check
@@ -52,6 +53,10 @@ jobs:
     - name: Run cargo test (lib)
       working-directory: ./dokassist/src-tauri
       run: cargo test --lib
+
+    - name: Run cargo test (dictation worker)
+      working-directory: ./dokassist/asr-worker
+      run: cargo test
 
     - name: Validate deterministic local-inference benchmark
       working-directory: .
@@ -72,7 +77,17 @@ jobs:
           -A clippy::too_many_arguments \
           -A clippy::type_complexity
 
+    - name: Run clippy (dictation worker)
+      if: matrix.rust == 'stable'
+      working-directory: ./dokassist/asr-worker
+      run: cargo clippy --all-targets -- -D warnings
+
     - name: Check formatting
       if: matrix.rust == 'stable'
       working-directory: ./dokassist/src-tauri
+      run: cargo fmt -- --check
+
+    - name: Check formatting (dictation worker)
+      if: matrix.rust == 'stable'
+      working-directory: ./dokassist/asr-worker
       run: cargo fmt -- --check

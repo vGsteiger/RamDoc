@@ -41,6 +41,11 @@ pub enum AppError {
     #[error("LLM error: {0}")]
     Llm(String),
 
+    /// Speech-to-text failed: no microphone, missing model or worker, or the
+    /// transcription worker reported an error.
+    #[error("Dictation error: {0}")]
+    Dictation(String),
+
     #[error("Auth required")]
     AuthRequired,
 
@@ -106,6 +111,7 @@ impl AppError {
             AppError::AuditCheckpointMismatch(_) => "AUDIT_CHECKPOINT_MISMATCH".to_string(),
             AppError::Filesystem(_) => "FILESYSTEM_ERROR".to_string(),
             AppError::Llm(_) => "LLM_ERROR".to_string(),
+            AppError::Dictation(_) => "DICTATION_ERROR".to_string(),
             AppError::AuthRequired => "AUTH_REQUIRED".to_string(),
             AppError::SetupInProgress => "SETUP_IN_PROGRESS".to_string(),
             AppError::AlreadyInitialized => "ALREADY_INITIALIZED".to_string(),

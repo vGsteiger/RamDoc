@@ -4,6 +4,7 @@ pub mod backup;
 pub mod chat;
 pub mod dashboard;
 pub mod diagnoses;
+pub mod dictation;
 pub mod emails;
 pub mod export;
 pub mod fhir_export;

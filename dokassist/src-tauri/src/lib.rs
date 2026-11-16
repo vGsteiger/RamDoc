@@ -6,6 +6,7 @@ mod commands;
 mod constants;
 mod crypto;
 mod database;
+mod dictation; // Local speech-to-text (out-of-process transcribe.cpp worker)
 mod error;
 mod filesystem; // PKG-3: Encrypted Filesystem
 mod keychain;
@@ -74,6 +75,7 @@ pub fn run() {
             commands::files::list_files,
             commands::files::delete_file,
             commands::files::process_file,
+            commands::files::get_file_text,
             commands::sessions::create_session,
             commands::sessions::get_session,
             commands::sessions::list_all_sessions,
@@ -201,12 +203,22 @@ pub fn run() {
             commands::models::list_available_models,
             commands::import::parse_csv_preview,
             commands::import::import_csv_data,
+            commands::dictation::get_dictation_status,
+            commands::dictation::download_dictation_model,
+            commands::dictation::delete_dictation_model,
+            commands::dictation::set_active_dictation_model,
+            commands::dictation::start_dictation,
+            commands::dictation::stop_dictation,
+            commands::dictation::cancel_dictation,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
                 // Gracefully clean up resources before closing
                 if let Some(state) = window.try_state::<AppState>() {
                     log::info!("Window close requested - cleaning up resources");
+
+                    // Close the microphone and kill any transcription worker
+                    state.clear_dictation();
 
                     // Close database connection to prevent corruption
                     if let Err(e) = state.clear_db() {

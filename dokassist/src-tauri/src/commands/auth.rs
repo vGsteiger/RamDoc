@@ -304,6 +304,7 @@ pub async fn reset_app(state: State<'_, AppState>) -> Result<(), AppError> {
     log::warn!("Factory reset requested — wiping all app data");
 
     begin_factory_reset(&state)?;
+    state.clear_dictation();
     state.clear_db()?;
     state.clear_llm();
     state.clear_embed();
@@ -337,6 +338,7 @@ pub async fn lock_app(state: State<'_, AppState>) -> Result<(), AppError> {
         drop(auth);
 
         // Clear database pool and ML resources
+        state.clear_dictation();
         state.clear_db()?;
         state.clear_llm();
         state.clear_embed();
@@ -368,6 +370,7 @@ mod tests {
             runtime_generation: std::sync::atomic::AtomicU64::new(0),
             embed: Mutex::new(None),
             medication_ref: Mutex::new(None),
+            dictation: Mutex::new(None),
         };
         (dir, state)
     }

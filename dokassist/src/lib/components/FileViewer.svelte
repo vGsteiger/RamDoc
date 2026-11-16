@@ -1,8 +1,17 @@
 <script lang="ts">
   import { t } from '$lib/translations';
-  import { downloadFile, type FileRecord } from '$lib/api';
+  import {
+    downloadFile,
+    getFileText,
+    processFile,
+    isAudioMime,
+    DICTATION_EVENTS,
+    type FileRecord,
+  } from '$lib/api';
   import { onDestroy } from 'svelte';
+  import { listen } from '@tauri-apps/api/event';
   import { Hourglass, FileText } from 'lucide-svelte';
+  import { errorText } from '$lib/translations/labels';
 
   interface Props {
     file: FileRecord | null;
@@ -40,6 +49,41 @@
     }
   }
 
+  // ── Dictation recordings: transcript + on-demand transcription ──────────
+  let transcript = $state<string | null>(null);
+  let transcribing = $state(false);
+  let transcribeProgress = $state<{ done: number; total: number } | null>(null);
+  let transcribeError = $state('');
+
+  async function loadTranscript() {
+    if (!file || !isAudioMime(file.mime_type)) return;
+    transcript = await getFileText(file.id).catch(() => null);
+  }
+
+  async function transcribe() {
+    if (!file) return;
+    const fileId = file.id;
+    transcribing = true;
+    transcribeError = '';
+    transcribeProgress = null;
+    const unlisten = await listen<{ file_id: string; done: number; total: number }>(
+      DICTATION_EVENTS.fileProgress,
+      (e) => {
+        if (e.payload.file_id === fileId) transcribeProgress = e.payload;
+      }
+    );
+    try {
+      await processFile(fileId);
+      await loadTranscript();
+    } catch (error) {
+      transcribeError = $t('dictation.transcriptionFailed').replace('{error}', $errorText(error));
+    } finally {
+      unlisten();
+      transcribing = false;
+      transcribeProgress = null;
+    }
+  }
+
   function handleDownload() {
     if (!blobUrl || !file) return;
 
@@ -68,6 +112,9 @@
   $effect(() => {
     if (file) {
       loadFile();
+      transcript = null;
+      transcribeError = '';
+      loadTranscript();
     }
   });
 </script>
@@ -139,6 +186,37 @@
           {:else if file.mime_type.startsWith('image/')}
             <div class="flex items-center justify-center h-full p-4 overflow-auto">
               <img src={blobUrl} alt={file.filename} class="max-w-full max-h-full object-contain" />
+            </div>
+          {:else if isAudioMime(file.mime_type)}
+            <div class="flex flex-col h-full gap-4 p-6 overflow-auto">
+              <audio controls src={blobUrl} class="w-full shrink-0"></audio>
+              <div class="flex items-center justify-between gap-3">
+                <h3 class="text-md font-semibold text-fg">{$t('dictation.transcript')}</h3>
+                {#if !transcript}
+                  <button
+                    onclick={transcribe}
+                    disabled={transcribing}
+                    class="h-8 px-3 bg-accent hover:bg-accent-hover disabled:opacity-50 text-on-accent rounded-control transition-colors"
+                  >
+                    {#if transcribing}
+                      {transcribeProgress
+                        ? $t('dictation.transcribingFile')
+                            .replace('{done}', String(transcribeProgress.done))
+                            .replace('{total}', String(transcribeProgress.total))
+                        : $t('dictation.transcribing')}
+                    {:else}
+                      {$t('dictation.transcribe')}
+                    {/if}
+                  </button>
+                {/if}
+              </div>
+              {#if transcribeError}
+                <p class="text-caption text-danger-fg">{transcribeError}</p>
+              {/if}
+              {#if transcript}
+                <pre
+                  class="whitespace-pre-wrap font-sans text-body text-fg bg-surface-sunken border border-line rounded-card p-4">{transcript}</pre>
+              {/if}
             </div>
           {:else}
             <div class="flex items-center justify-center h-full">

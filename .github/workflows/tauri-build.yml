@@ -26,7 +26,8 @@ jobs:
       matrix:
         include:
           - platform: 'macos-latest'
-            args: '--target aarch64-apple-darwin'
+            # tauri.bundle.conf.json builds and bundles the dokassist-asr dictation worker sidecar.
+            args: '--target aarch64-apple-darwin --config src-tauri/tauri.bundle.conf.json'
             rust-targets: 'aarch64-apple-darwin'
 
     runs-on: ${{ matrix.platform }}
@@ -67,9 +68,10 @@ jobs:
           ~/.cargo/registry
           ~/.cargo/git
           dokassist/src-tauri/target
-        key: ${{ runner.os }}-tauri-${{ matrix.rust-targets }}-${{ hashFiles('dokassist/src-tauri/Cargo.lock') }}
+          dokassist/asr-worker/target
+        key: ${{ runner.os }}-tauri-${{ matrix.rust-targets }}-${{ hashFiles('dokassist/src-tauri/Cargo.lock', 'dokassist/asr-worker/Cargo.lock') }}
         restore-keys: |
-          ${{ runner.os }}-tauri-${{ matrix.rust-targets }}-${{ hashFiles('dokassist/src-tauri/Cargo.lock') }}-
+          ${{ runner.os }}-tauri-${{ matrix.rust-targets }}-${{ hashFiles('dokassist/src-tauri/Cargo.lock', 'dokassist/asr-worker/Cargo.lock') }}-
           ${{ runner.os }}-tauri-${{ matrix.rust-targets }}-
 
     - name: Install frontend dependencies
