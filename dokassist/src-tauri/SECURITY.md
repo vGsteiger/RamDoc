@@ -405,18 +405,23 @@ fn test_sql_injection_in_update() {
 ## 6. Key Management (PKG-1)
 
 ### Keychain Integration (macOS)
-- Master keys are stored in the macOS Keychain with
-  `SecAccessControl` using
-  `kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly` and
-  `biometryCurrentSet | or | devicePasscode`. They are device-bound and the
-  operating system requires the currently enrolled biometric set or the device
-  passcode before returning the key data.
-- Changing the enrolled biometric set invalidates the associated Keychain item,
-  requiring recovery with the user's recovery vault.
-- The application-level Touch ID prompt remains defense in depth; Keychain
-  access control independently gates direct Keychain reads.
-- Existing installations recreate their legacy master-key items during the next
-  successful unlock, before the app enters the unlocked state.
+- Master keys are stored as generic-password items in the macOS login keychain
+  with `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`: device-bound, never
+  synced, and unavailable while the Mac is locked. A `SecAccessControl` policy
+  is not used because it returns `errSecMissingEntitlement` (-34018) for the
+  app's current signing configuration.
+- Unlock is gated by an application-level `LocalAuthentication` prompt using
+  `LAPolicyDeviceOwnerAuthentication`: Touch ID when it is usable, otherwise
+  the login password (Touch ID locked out, lid closed, no enrolled fingers).
+- The app is not signed with a stable Developer ID, so a login-keychain item's
+  access list can stop trusting the binary after an update and macOS asks the
+  user to allow access again. A denied prompt, a locked keychain, or a login
+  keychain whose password no longer matches the account password is reported
+  as `KEYCHAIN_ACCESS_DENIED`, distinct from a missing item, and the unlock
+  screen explains the fix. Mnemonic recovery recreates items whose access list
+  rejects an in-place update.
+- Missing master-key items (for example on a new Mac) move the session to
+  recovery.
 - Fallback: **Recovery vault** (BIP-39 mnemonic + Argon2 key derivation)
 
 ### Key Lifecycle
@@ -488,10 +493,30 @@ Audit queries also verify the complete chain before returning rows. A checkpoint
 advanced when a database connection guard is released after its transaction has
 committed, so a rollback cannot move the external anchor ahead of SQLite.
 
-Mnemonic recovery and an explicitly authorized backup restore may re-anchor only
-after the restored chain verifies. This intentionally starts a new truncation-detection
-baseline because restoring an older valid backup is otherwise indistinguishable from
-rollback.
+Re-anchoring establishes a new truncation-detection baseline, because restoring an
+older valid backup is otherwise indistinguishable from rollback. It happens only
+after the complete chain verifies, and only through an explicit user-authorized flow:
+
+- **Mnemonic recovery** and **in-app backup restore**.
+- **Confirmed unlock.** When the chain verifies but the checkpoint is missing,
+  conflicting, or absent from the chain (typically after `~/DokAssist` was restored
+  from Time Machine or another file-level backup), a normal unlock fails with
+  `AUDIT_CHECKPOINT_MISMATCH` and leaves the session locked. The unlock screen
+  explains the discrepancy. If the user continues, a second Touch ID / login-password
+  confirmation re-anchors.
+
+In every case where a discrepancy existed, a `checkpoint_reanchored` entry is
+appended to the chain *before* the new checkpoint is written. The entry records the
+discrepancy (for example the checkpoint sequence that no longer exists), the chain
+head it replaced, and which flow authorized it. A rollback therefore does not
+silently disappear: it stays as a permanent, MAC-protected event in the audit log.
+If the process stops between the entry and the Keychain write, the old checkpoint
+still mismatches and the user is asked again.
+
+A chain that does not itself verify (modified, inserted, reordered, or deleted rows)
+is still rejected with `AUDIT_INTEGRITY_ERROR` and cannot be re-anchored by any flow.
+Keychain access failures while reading the checkpoint are reported as such and never
+treated as a mismatch.
 
 ### Residual threat
 

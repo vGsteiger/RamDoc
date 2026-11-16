@@ -4,6 +4,7 @@ import {
   checkAuth,
   initializeApp,
   unlockApp,
+  unlockAppAcceptingAuditCheckpoint,
   recoverApp,
   lockApp,
   listPatients,
@@ -620,6 +621,15 @@ describe('unlockApp', () => {
     mockInvoke.mockResolvedValueOnce(false);
     const result = await unlockApp();
     expect(result).toBe(false);
+  });
+});
+
+describe('unlockAppAcceptingAuditCheckpoint', () => {
+  it('calls the acknowledging unlock command with no arguments', async () => {
+    mockInvoke.mockResolvedValueOnce(true);
+    const result = await unlockAppAcceptingAuditCheckpoint();
+    expect(mockInvoke).toHaveBeenCalledWith('unlock_app_accepting_audit_checkpoint');
+    expect(result).toBe(true);
   });
 });
 
