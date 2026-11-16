@@ -1,7 +1,7 @@
 <script lang="ts">
   import { errorText } from '$lib/translations/labels';
   import { get } from 'svelte/store';
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { onMount, onDestroy } from 'svelte';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
@@ -23,27 +23,29 @@
   import { ThinkingIndicator } from '$lib/components/ui';
   import { t } from '$lib/translations';
 
-  $: patientId = $page.params.id!;
+  let patientId = $derived(page.params.id!);
 
-  let patient: Patient | null = null;
-  let recipientEmail = '';
-  let subject = '';
-  let body = '';
-  let error: AppError | null = null;
-  let isSaving = false;
+  let patient: Patient | null = $state(null);
+  let recipientEmail = $state('');
+  let subject = $state('');
+  let body = $state('');
+  let error: AppError | null = $state(null);
+  let isSaving = $state(false);
 
   // AI Assist panel
-  let showAiPanel = false;
-  let aiPrompt = '';
-  let isGenerating = false;
-  let activityStartedAt: number | null = null;
-  let aiError = '';
-  let aiDraft = '';
-  let aiThinking = '';
+  let showAiPanel = $state(false);
+  let aiPrompt = $state('');
+  let isGenerating = $state(false);
+  let activityStartedAt: number | null = $state(null);
+  let aiError = $state('');
+  let aiDraft = $state('');
+  let aiThinking = $state('');
+  // Accumulates streamed chunks; only its parsed results are rendered.
   let rawDraft = '';
-  let showThinking = false;
-  let engineStatus: LlmEngineStatus | null = null;
+  let showThinking = $state(false);
+  let engineStatus: LlmEngineStatus | null = $state(null);
 
+  // Listener handles are not rendered, so they stay plain variables.
   let unlistenChunk: UnlistenFn | null = null;
   let unlistenDone: UnlistenFn | null = null;
   let unlistenError: UnlistenFn | null = null;
@@ -259,7 +261,7 @@
 
     <div class="border-t border-line pt-4">
       <button
-        on:click={() => (showAiPanel = !showAiPanel)}
+        onclick={() => (showAiPanel = !showAiPanel)}
         class="text-body text-accent-fg hover:underline"
       >
         {$t('email.aiAssist')}
@@ -285,7 +287,7 @@
 
           {#if engineStatus?.is_loaded}
             <button
-              on:click={handleGenerateDraft}
+              onclick={handleGenerateDraft}
               disabled={isGenerating}
               class="h-8 px-3 bg-accent text-on-accent rounded-control hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -308,7 +310,7 @@
                 {/if}
                 {#if aiDraft && !isGenerating}
                   <button
-                    on:click={() => {
+                    onclick={() => {
                       body = aiDraft;
                       aiDraft = '';
                       aiThinking = '';
@@ -332,7 +334,7 @@
           {#if aiThinking}
             <div class="mt-2">
               <button
-                on:click={() => (showThinking = !showThinking)}
+                onclick={() => (showThinking = !showThinking)}
                 class="text-caption text-fg-subtle hover:underline"
               >
                 {showThinking ? $t('email.hideReasoning') : $t('email.showReasoning')} ({aiThinking.split(
@@ -359,14 +361,14 @@
       </a>
       <div class="flex space-x-3">
         <button
-          on:click={handleSaveDraft}
+          onclick={handleSaveDraft}
           disabled={isSaving || isGenerating}
           class="h-8 px-3 bg-surface-selected text-fg-muted rounded-control hover:bg-surface-selected transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isSaving ? $t('email.saving') : $t('email.saveDraft')}
         </button>
         <button
-          on:click={handleSendEmail}
+          onclick={handleSendEmail}
           disabled={isSaving || isGenerating}
           class="h-8 px-3 bg-accent text-on-accent rounded-control hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >

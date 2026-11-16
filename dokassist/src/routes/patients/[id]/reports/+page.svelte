@@ -1,15 +1,15 @@
 <script lang="ts">
   import { reportTypeLabel } from '$lib/translations/labels';
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import { onMount } from 'svelte';
   import { listReports, deleteReport, parseError, type Report, type AppError } from '$lib/api';
   import ErrorDisplay from '$lib/components/ErrorDisplay.svelte';
   import { t } from '$lib/translations';
 
-  $: patientId = $page.params.id!;
-  let reports: Report[] = [];
-  let loading = true;
-  let error: AppError | null = null;
+  let patientId = $derived(page.params.id!);
+  let reports: Report[] = $state([]);
+  let loading = $state(true);
+  let error: AppError | null = $state(null);
 
   async function loadReports() {
     try {
@@ -103,7 +103,7 @@
                 {$t('reports.view')}
               </a>
               <button
-                on:click={() => handleDeleteReport(report.id)}
+                onclick={() => handleDeleteReport(report.id)}
                 class="h-7 px-2.5 text-body bg-danger-subtle text-danger-fg rounded-control hover:bg-danger-subtle/40 transition-colors"
               >
                 {$t('common.delete')}

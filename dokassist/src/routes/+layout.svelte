@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import { checkAuth, listPatients, type Patient } from '$lib/api';
   import { authStatus } from '$lib/stores/auth';
   import { resolvedTheme } from '$lib/stores/theme';
@@ -14,7 +14,7 @@
 
   let { children }: { children: Snippet } = $props();
 
-  let currentPath = $derived($page.url.pathname);
+  let currentPath = $derived(page.url.pathname);
   let isCommandPaletteOpen = $state(false);
   let isSidebarOpen = $state(false);
   let patients = $state<Patient[]>([]);

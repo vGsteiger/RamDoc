@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import {
     listDiagnosesForPatient,
     createDiagnosis,
@@ -16,7 +16,7 @@
   import { get } from 'svelte/store';
   import { t } from '$lib/translations';
 
-  const patientId = $derived($page.params.id!);
+  const patientId = $derived(page.params.id!);
 
   let diagnoses = $state<Diagnosis[]>([]);
   let loading = $state(true);

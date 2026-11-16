@@ -1,6 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte';
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import { lockApp } from '$lib/api';
   import { authStatus } from '$lib/stores/auth';
   import { goto } from '$app/navigation';
@@ -43,7 +43,7 @@
     }
   }
 
-  let currentPath = $derived($page.url.pathname);
+  let currentPath = $derived(page.url.pathname);
 
   function focusableElements(): HTMLElement[] {
     return sidebarElement

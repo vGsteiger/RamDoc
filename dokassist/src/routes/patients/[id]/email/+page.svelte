@@ -1,14 +1,14 @@
 <script lang="ts">
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import { onMount } from 'svelte';
   import { listEmails, deleteEmail, parseError, type Email, type AppError } from '$lib/api';
   import ErrorDisplay from '$lib/components/ErrorDisplay.svelte';
   import { t } from '$lib/translations';
 
-  $: patientId = $page.params.id!;
-  let emails: Email[] = [];
-  let loading = true;
-  let error: AppError | null = null;
+  let patientId = $derived(page.params.id!);
+  let emails: Email[] = $state([]);
+  let loading = $state(true);
+  let error: AppError | null = $state(null);
 
   async function loadEmails() {
     try {
@@ -120,7 +120,7 @@
               </a>
               {#if email.status === 'draft'}
                 <button
-                  on:click={() => handleDeleteEmail(email.id, email.status)}
+                  onclick={() => handleDeleteEmail(email.id, email.status)}
                   class="h-7 px-2.5 text-body bg-danger-subtle text-danger-fg rounded-control hover:bg-danger-subtle/40 transition-colors"
                 >
                   {$t('common.delete')}

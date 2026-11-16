@@ -49,7 +49,7 @@ jobs:
       # CRIT-7: Pinned to commit SHA for supply-chain security (tag: v4)
       uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v4
       with:
-        node-version: '20.19.0'
+        node-version: '24.21.0'
         cache: pnpm
         cache-dependency-path: dokassist/pnpm-lock.yaml
 

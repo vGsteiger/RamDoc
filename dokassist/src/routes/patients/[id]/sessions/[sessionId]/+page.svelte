@@ -1,6 +1,6 @@
 <script lang="ts">
   import { sessionTypeLabel } from '$lib/translations/labels';
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { onMount, onDestroy } from 'svelte';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
@@ -37,8 +37,8 @@
   import OutcomeScoreForm from '$lib/components/OutcomeScoreForm.svelte';
   import { t } from '$lib/translations';
 
-  const patientId = $derived($page.params.id!);
-  const sessionId = $derived($page.params.sessionId!);
+  const patientId = $derived(page.params.id!);
+  const sessionId = $derived(page.params.sessionId!);
 
   let session = $state<Session | null>(null);
   let patient = $state<Patient | null>(null);
