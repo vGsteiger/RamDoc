@@ -96,6 +96,8 @@ pub struct LlmEngine {
     model_name: String,
     chat_template: LlamaChatTemplate,
     chat_family: ChatFamily,
+    /// Whether the embedded template uses plain-text `<think>` blocks.
+    template_uses_think_tags: bool,
     context_size: usize,
     inference: Mutex<InferenceRuntime>,
     model_hash: String,
@@ -307,6 +309,8 @@ impl LlmEngine {
         let chat_family = ChatFamily::detect(&String::from_utf8_lossy(
             chat_template.as_c_str().to_bytes(),
         ));
+        let template_uses_think_tags =
+            String::from_utf8_lossy(chat_template.as_c_str().to_bytes()).contains("<think>");
         log::info!("Chat family for '{model_name}': {chat_family:?}");
 
         Ok(Self {
@@ -317,6 +321,7 @@ impl LlmEngine {
             model_name,
             chat_template,
             chat_family,
+            template_uses_think_tags,
             context_size,
             inference: Mutex::new(InferenceRuntime {
                 profile,
@@ -1191,6 +1196,24 @@ impl LlmEngine {
             .ok_or_else(|| AppError::Llm("Model not loaded".to_string()))?
             .apply_chat_template(&self.chat_template, &chat, true)
             .map_err(|e| AppError::Llm(format!("Failed to apply model chat template: {e}")))
+    }
+
+    /// Format a conversation with the model's reasoning switched off (or at
+    /// its lowest level where it cannot be switched off), for workloads that
+    /// need a direct answer within a small token limit, such as the
+    /// deterministic runtime benchmark.
+    pub fn format_chat_history_reasoning_off(
+        &self,
+        system_prompt: &str,
+        messages: &[AgentMessage],
+    ) -> Result<String, AppError> {
+        let prompt =
+            self.format_chat_history_with_effort(system_prompt, messages, ThinkingEffort::Low)?;
+        Ok(format!(
+            "{prompt}{}",
+            self.chat_family
+                .reasoning_off_prefix(self.template_uses_think_tags)
+        ))
     }
 
     /// Returns stats from the most recent generation call, if any.

@@ -10,6 +10,7 @@ use super::context_cache::InferenceSession;
 use super::engine::{AgentMessage, GenerationStats, LlmEngine};
 use super::inference::{InferenceDiagnostics, InferenceProfile, KvCacheQuantization};
 use super::memory_governor::{MemoryGovernor, MemoryGovernorDiagnostics};
+use crate::error::AppError;
 use ring::digest::{Context as DigestContext, SHA256};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -35,6 +36,10 @@ pub struct BenchmarkManifest {
     pub data_classification: String,
     pub random_seed: u64,
     pub temperature: f32,
+    /// `off` runs every case in the model's non-thinking mode so the short,
+    /// exact-answer checks measure the runtime rather than how much of a
+    /// small token limit a reasoning model spends inside `<think>`.
+    pub reasoning: BenchmarkReasoning,
     pub repetitions: usize,
     pub sample_interval_ms: u64,
     pub steady_state_delay_ms: u64,
@@ -44,6 +49,26 @@ pub struct BenchmarkManifest {
     pub context_profiles: Vec<ContextProfile>,
     pub baseline: Baseline,
     pub regression_thresholds: RegressionThresholds,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BenchmarkReasoning {
+    Off,
+}
+
+/// Format a benchmark conversation according to the manifest's reasoning mode.
+fn format_case(
+    engine: &LlmEngine,
+    reasoning: BenchmarkReasoning,
+    system_prompt: &str,
+    messages: &[AgentMessage],
+) -> Result<String, AppError> {
+    match reasoning {
+        BenchmarkReasoning::Off => {
+            engine.format_chat_history_reasoning_off(system_prompt, messages)
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1135,20 +1160,22 @@ fn padded_context(
     context_tokens: usize,
     completion_headroom: usize,
     fill_ratio: f64,
+    reasoning: BenchmarkReasoning,
 ) -> (String, usize) {
     let target =
         ((context_tokens.saturating_sub(completion_headroom)) as f64 * fill_ratio).floor() as usize;
     let filler = "Synthetischer Routineeintrag ohne entscheidende klinische Angabe. Das Befinden blieb unverändert und das Gespräch wurde fortgesetzt.\n";
     let base_user = make_user_prompt(&case.context, &case.question);
-    let base_formatted = engine
-        .format_chat_history(
-            &case.system_prompt,
-            &[AgentMessage {
-                role: "user".into(),
-                content: base_user,
-            }],
-        )
-        .unwrap_or_else(|_| case.context.clone());
+    let base_formatted = format_case(
+        engine,
+        reasoning,
+        &case.system_prompt,
+        &[AgentMessage {
+            role: "user".into(),
+            content: base_user,
+        }],
+    )
+    .unwrap_or_else(|_| case.context.clone());
     let base_tokens = engine.count_tokens(&base_formatted);
     let filler_tokens = engine.count_tokens(filler).max(1);
     let mut repetitions = target.saturating_sub(base_tokens) / filler_tokens;
@@ -1156,15 +1183,16 @@ fn padded_context(
         let before = filler.repeat(repetitions / 2);
         let after = filler.repeat(repetitions - repetitions / 2);
         let candidate = format!("{before}{}{after}", case.context);
-        let formatted = engine
-            .format_chat_history(
-                &case.system_prompt,
-                &[AgentMessage {
-                    role: "user".into(),
-                    content: make_user_prompt(&candidate, &case.question),
-                }],
-            )
-            .unwrap_or_else(|_| candidate.clone());
+        let formatted = format_case(
+            engine,
+            reasoning,
+            &case.system_prompt,
+            &[AgentMessage {
+                role: "user".into(),
+                content: make_user_prompt(&candidate, &case.question),
+            }],
+        )
+        .unwrap_or_else(|_| candidate.clone());
         if engine.count_tokens(&formatted) <= target || repetitions == 0 {
             return (candidate, target);
         }
@@ -1174,14 +1202,14 @@ fn padded_context(
 
 fn generate_session_turn(
     engine: &LlmEngine,
+    reasoning: BenchmarkReasoning,
     session: &InferenceSession,
     system_prompt: &str,
     messages: &[AgentMessage],
     max_tokens: usize,
     temperature: f32,
 ) -> Result<(String, GenerationStats), String> {
-    let prompt = engine
-        .format_chat_history(system_prompt, messages)
+    let prompt = format_case(engine, reasoning, system_prompt, messages)
         .map_err(|error| error.to_string())?;
     let mut answer = String::new();
     engine
@@ -1219,6 +1247,7 @@ fn execute_case(
             options.context_tokens,
             options.completion_headroom,
             manifest.long_prompt_fill_ratio,
+            manifest.reasoning,
         );
         (context, Some(target))
     } else {
@@ -1227,21 +1256,31 @@ fn execute_case(
 
     let mut warmup_stats = None;
     let generated = if case.scenario == "cold_prompt" {
-        let prompt = make_user_prompt(&context, &case.question);
-        engine
-            .generate(
-                &case.system_prompt,
-                &prompt,
-                case.max_tokens,
-                manifest.temperature,
-            )
-            .map_err(|error| error.to_string())
-            .and_then(|answer| {
-                engine
-                    .last_generation_stats()
-                    .map(|stats| (answer, stats))
-                    .ok_or_else(|| "generation completed without telemetry".to_string())
+        let user = make_user_prompt(&context, &case.question);
+        let mut answer = String::new();
+        format_case(
+            engine,
+            manifest.reasoning,
+            &case.system_prompt,
+            &[AgentMessage {
+                role: "user".into(),
+                content: user,
+            }],
+        )
+        .and_then(|prompt| {
+            engine.generate_streaming_raw(&prompt, case.max_tokens, manifest.temperature, |piece| {
+                answer.push_str(piece);
+                true
             })
+        })
+        .map_err(|error| error.to_string())
+        .map(|()| answer)
+        .and_then(|answer| {
+            engine
+                .last_generation_stats()
+                .map(|stats| (answer, stats))
+                .ok_or_else(|| "generation completed without telemetry".to_string())
+        })
     } else {
         let setup = case.setup_prompt.as_deref().unwrap_or(
             "Bestätige die synthetische Test-Patienten-ID kurz, ohne ein Tool aufzurufen.",
@@ -1258,6 +1297,7 @@ fn execute_case(
         }];
         match generate_session_turn(
             engine,
+            manifest.reasoning,
             &session,
             &case.system_prompt,
             &setup_messages,
@@ -1282,6 +1322,7 @@ fn execute_case(
                 ];
                 generate_session_turn(
                     engine,
+                    manifest.reasoning,
                     &session,
                     &case.system_prompt,
                     &messages,
