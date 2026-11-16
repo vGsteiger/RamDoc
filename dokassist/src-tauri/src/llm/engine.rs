@@ -1,3 +1,4 @@
+use super::chat_format::ChatFamily;
 use super::context_cache::{reusable_prefix, ContextCacheTelemetry, ContextKey, InferenceSession};
 use super::download;
 use super::harness::SamplerConfig;
@@ -6,6 +7,7 @@ use super::inference::{
     KvCacheQuantization,
 };
 use super::memory_governor::{MemoryGovernor, MemoryGovernorDiagnostics};
+use super::thinking::ThinkingEffort;
 use crate::error::AppError;
 use encoding_rs::UTF_8;
 use llama_cpp_2::context::params::LlamaContextParams;
@@ -93,6 +95,7 @@ pub struct LlmEngine {
     model_path: PathBuf,
     model_name: String,
     chat_template: LlamaChatTemplate,
+    chat_family: ChatFamily,
     context_size: usize,
     inference: Mutex<InferenceRuntime>,
     model_hash: String,
@@ -301,6 +304,10 @@ impl LlmEngine {
             ))
         })?;
         let chat_template_hash = sha256_bytes(chat_template.as_c_str().to_bytes());
+        let chat_family = ChatFamily::detect(&String::from_utf8_lossy(
+            chat_template.as_c_str().to_bytes(),
+        ));
+        log::info!("Chat family for '{model_name}': {chat_family:?}");
 
         Ok(Self {
             contexts: Mutex::new(ContextPool::new(max_persistent_contexts_for_ram(ram))),
@@ -309,6 +316,7 @@ impl LlmEngine {
             model_path,
             model_name,
             chat_template,
+            chat_family,
             context_size,
             inference: Mutex::new(InferenceRuntime {
                 profile,
@@ -559,6 +567,8 @@ impl LlmEngine {
 
         // 5. Stateful UTF-8 decoder for multi-byte tokens
         let mut utf8_dec = UTF_8.new_decoder();
+        let decode_special = self.chat_family.decodes_special_tokens();
+        let mut normalizer = self.chat_family.normalizer();
 
         let mut first_token = true;
         let mut ttft_ms = 0.0f64;
@@ -572,16 +582,17 @@ impl LlmEngine {
                 break;
             }
 
-            let piece = model
-                .token_to_piece(token, &mut utf8_dec, false, None)
+            let raw_piece = model
+                .token_to_piece(token, &mut utf8_dec, decode_special, None)
                 .map_err(|e| AppError::Llm(format!("Token decode failed: {e}")))?;
+            let piece = normalizer.push(&raw_piece);
 
             if first_token {
                 ttft_ms = wall_start.elapsed().as_secs_f64() * 1000.0;
                 first_token = false;
             }
 
-            if !on_token(&piece) {
+            if !piece.is_empty() && !on_token(&piece) {
                 break;
             }
 
@@ -597,6 +608,11 @@ impl LlmEngine {
                 .map_err(|e| AppError::Llm(format!("Failed to add token: {e}")))?;
             ctx.decode(&mut batch)
                 .map_err(|e| AppError::Llm(format!("Failed to decode token: {e}")))?;
+        }
+
+        let tail = normalizer.finish();
+        if !tail.is_empty() {
+            on_token(&tail);
         }
 
         if completion_tokens > 0 {
@@ -884,6 +900,8 @@ impl LlmEngine {
 
         let mut sampler = sampler_config.build();
         let mut utf8_dec = UTF_8.new_decoder();
+        let decode_special = self.chat_family.decodes_special_tokens();
+        let mut normalizer = self.chat_family.normalizer();
         let mut ttft_ms = 0.0;
         let mut completion_tokens = 0usize;
 
@@ -893,13 +911,14 @@ impl LlmEngine {
             if model.is_eog_token(token) {
                 break;
             }
-            let piece = model
-                .token_to_piece(token, &mut utf8_dec, false, None)
+            let raw_piece = model
+                .token_to_piece(token, &mut utf8_dec, decode_special, None)
                 .map_err(|e| AppError::Llm(format!("Token decode failed: {e}")))?;
+            let piece = normalizer.push(&raw_piece);
             if completion_tokens == 0 {
                 ttft_ms = wall_start.elapsed().as_secs_f64() * 1000.0;
             }
-            if !on_token(&piece) {
+            if !piece.is_empty() && !on_token(&piece) {
                 break;
             }
             let position = pool.entries[index].tokens.len();
@@ -916,6 +935,11 @@ impl LlmEngine {
                 .map_err(|e| AppError::Llm(format!("Failed to decode token: {e}")))?;
             pool.entries[index].tokens.push(token);
             completion_tokens += 1;
+        }
+
+        let tail = normalizer.finish();
+        if !tail.is_empty() {
+            on_token(&tail);
         }
 
         let gen_elapsed = gen_phase_start.elapsed().as_secs_f64();
@@ -1003,6 +1027,8 @@ impl LlmEngine {
         let mut sampler = SamplerConfig::from_temperature(temperature).build();
 
         let mut utf8_dec = UTF_8.new_decoder();
+        let decode_special = self.chat_family.decodes_special_tokens();
+        let mut normalizer = self.chat_family.normalizer();
 
         let mut first_token = true;
         let mut ttft_ms = 0.0f64;
@@ -1016,16 +1042,17 @@ impl LlmEngine {
                 break;
             }
 
-            let piece = model
-                .token_to_piece(token, &mut utf8_dec, false, None)
+            let raw_piece = model
+                .token_to_piece(token, &mut utf8_dec, decode_special, None)
                 .map_err(|e| AppError::Llm(format!("Token decode failed: {e}")))?;
+            let piece = normalizer.push(&raw_piece);
 
             if first_token {
                 ttft_ms = wall_start.elapsed().as_secs_f64() * 1000.0;
                 first_token = false;
             }
 
-            if !on_token(&piece) {
+            if !piece.is_empty() && !on_token(&piece) {
                 break;
             }
 
@@ -1040,6 +1067,11 @@ impl LlmEngine {
                 .map_err(|e| AppError::Llm(format!("Failed to add token: {e}")))?;
             ctx.decode(&mut batch)
                 .map_err(|e| AppError::Llm(format!("Failed to decode token: {e}")))?;
+        }
+
+        let tail = normalizer.finish();
+        if !tail.is_empty() {
+            on_token(&tail);
         }
 
         if completion_tokens > 0 {
@@ -1078,6 +1110,11 @@ impl LlmEngine {
         self.context_size
     }
 
+    /// Chat dialect detected from the loaded model's embedded template.
+    pub fn chat_family(&self) -> ChatFamily {
+        self.chat_family
+    }
+
     /// Format conversation history with the template embedded in the loaded GGUF.
     /// This is required for non-ChatML families such as gpt-oss (Harmony) and Gemma.
     pub fn format_chat_history(
@@ -1085,6 +1122,20 @@ impl LlmEngine {
         system_prompt: &str,
         messages: &[AgentMessage],
     ) -> Result<String, AppError> {
+        self.format_chat_history_with_effort(system_prompt, messages, ThinkingEffort::default())
+    }
+
+    /// Like [`Self::format_chat_history`], forwarding `effort` to families with
+    /// a native reasoning switch (Gemma 4 `<|think|>`, Harmony `Reasoning:`).
+    pub fn format_chat_history_with_effort(
+        &self,
+        system_prompt: &str,
+        messages: &[AgentMessage],
+        effort: ThinkingEffort,
+    ) -> Result<String, AppError> {
+        if let Some(prompt) = self.chat_family.format(system_prompt, messages, effort) {
+            return Ok(prompt);
+        }
         let mut chat = Vec::with_capacity(messages.len() + 1);
         chat.push(new_chat_message("system", system_prompt)?);
         for message in messages {
@@ -1307,6 +1358,59 @@ mod tests {
         assert!(is_selectable_metal_device("", "MTL0"));
         assert!(!is_selectable_metal_device("MTL", ""));
         assert!(!is_selectable_metal_device("CPU", "CPU"));
+    }
+
+    /// Real-GGUF check that families with control-token reasoning (Gemma 4,
+    /// gpt-oss) format, generate and normalise to canonical `<think>` output.
+    /// Run with RAMDOC_BENCH_MODEL pointing at such a model.
+    #[test]
+    #[ignore = "requires a local GGUF model"]
+    fn chat_family_formats_and_normalises_reasoning() {
+        let path = PathBuf::from(
+            std::env::var("RAMDOC_BENCH_MODEL").expect("RAMDOC_BENCH_MODEL is required"),
+        );
+        let engine = LlmEngine::load(path, "family-check".into()).unwrap();
+        for effort in [ThinkingEffort::Low, ThinkingEffort::High] {
+            let prompt = engine
+                .format_chat_history_with_effort(
+                    "Sie sind ein knapper klinischer Assistent. Antworten Sie auf Deutsch.",
+                    &[AgentMessage {
+                        role: "user".into(),
+                        content: "Fasse zusammen: Schlaf verbessert, Angst reduziert.".into(),
+                    }],
+                    effort,
+                )
+                .unwrap();
+            let mut answer = String::new();
+            engine
+                .generate_streaming_raw_with_sampler(
+                    &prompt,
+                    384,
+                    SamplerConfig::from_temperature(0.0),
+                    |piece| {
+                        answer.push_str(piece);
+                        true
+                    },
+                )
+                .unwrap();
+            println!(
+                "family={:?} effort={effort:?}\n{answer}\n---",
+                engine.chat_family()
+            );
+            for leaked in [
+                "<|channel",
+                "channel|>",
+                "<|message|>",
+                "<|start|>",
+                "<turn|>",
+            ] {
+                assert!(!answer.contains(leaked), "native marker {leaked} leaked");
+            }
+            let visible = crate::llm::harness::strip_think_blocks(&answer);
+            assert!(!visible.trim().is_empty(), "no visible answer");
+            assert!(!visible.trim_start().starts_with("thought"));
+            assert!(!visible.trim_start().starts_with("analysis"));
+        }
     }
 
     /// Hardware benchmark harness for issue #400. It is ignored because CI has

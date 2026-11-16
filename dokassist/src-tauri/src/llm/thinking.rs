@@ -116,7 +116,11 @@ pub fn generate_with_think_budget_and_sampler(
     if let Some(sampler) = sampler {
         profile.sampler = sampler.validate().map_err(AppError::Validation)?;
     }
-    let system_prompt = profile.effort.apply_to_system_prompt(system_prompt);
+    let system_prompt = if engine.chat_family().uses_plain_think_tags() {
+        profile.effort.apply_to_system_prompt(system_prompt)
+    } else {
+        system_prompt.to_string()
+    };
     let system_prompt = task.apply_to_system_prompt(&system_prompt);
     generate_with_think_budget_from_prompt(
         engine,
@@ -149,6 +153,17 @@ pub fn generate_with_think_budget_from_prompt(
     let mut in_think = false;
     let mut tag_tail = String::new();
 
+    let single_turn_prompt = || {
+        engine.format_chat_history_with_effort(
+            system_prompt,
+            &[super::engine::AgentMessage {
+                role: "user".to_string(),
+                content: user_message.to_string(),
+            }],
+            profile.effort,
+        )
+    };
+
     let phase1 = |on_token: &mut dyn FnMut(&str) -> bool| -> Result<(), AppError> {
         if let Some(prompt) = formatted_prompt {
             if let Some(session) = session {
@@ -169,15 +184,8 @@ pub fn generate_with_think_budget_from_prompt(
                 )
             }
         } else {
-            let prompt = engine.format_chat_history(
-                system_prompt,
-                &[super::engine::AgentMessage {
-                    role: "user".to_string(),
-                    content: user_message.to_string(),
-                }],
-            )?;
             engine.generate_streaming_raw_with_sampler(
-                &prompt,
+                &single_turn_prompt()?,
                 max_tokens,
                 profile.sampler,
                 on_token,
@@ -220,46 +228,28 @@ pub fn generate_with_think_budget_from_prompt(
         output.push_str(close_tag);
         emit(close_tag);
 
-        let tail_start = output.len().saturating_sub(1_200);
-        let tail_start = utf8::find_boundary_forward(&output, tail_start);
-        let continuation = format!(
-            "Setze die Antwort auf die folgende ursprüngliche Aufgabe unmittelbar fort. \
-             Wiederhole nichts und gib nur den fertigen Inhalt aus.\n\nAufgabe:\n{user_message}\n\n\
-             Bisheriges Ende:\n{}",
-            &output[tail_start..]
+        // Continue the same turn rather than starting a new chat: the model
+        // keeps its full reasoning, and the prompt prefix is reused from the
+        // context cache. The canonical output is rendered back into the
+        // model's native reasoning markers first.
+        let base_prompt = match formatted_prompt {
+            Some(prompt) => prompt.to_string(),
+            None => single_turn_prompt()?,
+        };
+        let continued = format!(
+            "{base_prompt}{}",
+            engine.chat_family().native_assistant_prefix(&output)
         );
-
-        if let Some(prompt) = formatted_prompt {
-            let continued = format!("{prompt}{output}");
-            engine.generate_streaming_raw_with_sampler(
-                &continued,
-                max_tokens.saturating_sub(max_think_tokens),
-                profile.sampler,
-                |token| {
-                    output.push_str(token);
-                    emit(token);
-                    true
-                },
-            )?;
-        } else {
-            let continuation_prompt = engine.format_chat_history(
-                system_prompt,
-                &[super::engine::AgentMessage {
-                    role: "user".to_string(),
-                    content: continuation,
-                }],
-            )?;
-            engine.generate_streaming_raw_with_sampler(
-                &continuation_prompt,
-                max_tokens.saturating_sub(max_think_tokens),
-                profile.sampler,
-                |token| {
-                    output.push_str(token);
-                    emit(token);
-                    true
-                },
-            )?;
-        }
+        engine.generate_streaming_raw_with_sampler(
+            &continued,
+            max_tokens.saturating_sub(max_think_tokens),
+            profile.sampler,
+            |token| {
+                output.push_str(token);
+                emit(token);
+                true
+            },
+        )?;
     } else if let Some(stats) = phase1_stats {
         let ctx_size = engine.context_size();
         let was_cut_off = stats.completion_tokens > 0
@@ -271,12 +261,13 @@ pub fn generate_with_think_budget_from_prompt(
             let tail = &output[tail_start..];
             let continuation_msg = prompts::continuation_prompt(tail);
 
-            let continuation_prompt = engine.format_chat_history(
+            let continuation_prompt = engine.format_chat_history_with_effort(
                 system_prompt,
                 &[super::engine::AgentMessage {
                     role: "user".to_string(),
                     content: continuation_msg,
                 }],
+                profile.effort,
             )?;
             engine.generate_streaming_raw_with_sampler(
                 &continuation_prompt,
