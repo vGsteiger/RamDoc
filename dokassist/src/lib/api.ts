@@ -133,6 +133,8 @@ export interface ContextCacheTelemetry {
   estimated_prefill_saved_ms: number;
   resident_contexts: number;
   max_contexts: number;
+  checkpoint_restores?: number;
+  checkpoints_created?: number;
 }
 
 export interface LlmEngineStatus {

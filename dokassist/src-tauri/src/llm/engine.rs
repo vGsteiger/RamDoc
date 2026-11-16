@@ -1,5 +1,8 @@
 use super::chat_format::ChatFamily;
-use super::context_cache::{reusable_prefix, ContextCacheTelemetry, ContextKey, InferenceSession};
+use super::context_cache::{
+    checkpoint_for_prefix, checkpoint_position, reusable_prefix, ContextCacheTelemetry, ContextKey,
+    InferenceSession,
+};
 use super::download;
 use super::harness::SamplerConfig;
 use super::inference::{
@@ -11,6 +14,7 @@ use super::thinking::ThinkingEffort;
 use crate::error::AppError;
 use encoding_rs::UTF_8;
 use llama_cpp_2::context::params::LlamaContextParams;
+use llama_cpp_2::context::session::{LlamaStateSeqFlags, SeqState};
 use llama_cpp_2::context::LlamaContext;
 use llama_cpp_2::llama_backend::LlamaBackend;
 use llama_cpp_2::llama_batch::LlamaBatch;
@@ -57,7 +61,23 @@ struct CachedContext {
     tokens: Vec<LlamaToken>,
     key: ContextKey,
     last_used: u64,
+    /// Recurrent-state snapshots (hybrid/recurrent models only), oldest first.
+    checkpoints: Vec<StateCheckpoint>,
 }
+
+/// The recurrent part of sequence 0's state after its first `n_tokens` prompt
+/// tokens. Restoring it lets a hybrid model rewind to that position, which
+/// KV-cache rollback alone cannot do for recurrent layers.
+struct StateCheckpoint {
+    n_tokens: usize,
+    state: SeqState,
+}
+
+/// Prompt tokens decoded after the snapshot, so the next turn (this prompt
+/// plus an answer) resumes all but this many tokens.
+const CHECKPOINT_TAIL_TOKENS: usize = 64;
+/// Snapshots kept per context; each holds one recurrent state.
+const MAX_CHECKPOINTS_PER_CONTEXT: usize = 2;
 
 // llama.cpp permits a context to move between threads when calls are
 // serialized. ContextPool never exposes one outside its mutex lease.
@@ -96,6 +116,9 @@ pub struct LlmEngine {
     model_name: String,
     chat_template: LlamaChatTemplate,
     chat_family: ChatFamily,
+    /// Hybrid or recurrent memory: KV rollback cannot rewind the recurrent
+    /// layers, so prefix reuse relies on [`StateCheckpoint`]s.
+    uses_state_checkpoints: bool,
     context_size: usize,
     inference: Mutex<InferenceRuntime>,
     model_hash: String,
@@ -307,6 +330,7 @@ impl LlmEngine {
         let chat_family = ChatFamily::detect(&String::from_utf8_lossy(
             chat_template.as_c_str().to_bytes(),
         ));
+        let uses_state_checkpoints = model.is_hybrid() || model.is_recurrent();
         log::info!("Chat family for '{model_name}': {chat_family:?}");
 
         Ok(Self {
@@ -317,6 +341,7 @@ impl LlmEngine {
             model_name,
             chat_template,
             chat_family,
+            uses_state_checkpoints,
             context_size,
             inference: Mutex::new(InferenceRuntime {
                 profile,
@@ -884,6 +909,7 @@ impl LlmEngine {
                 tokens: Vec::new(),
                 key,
                 last_used: use_clock,
+                checkpoints: Vec::new(),
             });
             pool.entries.len() - 1
         };
@@ -896,14 +922,26 @@ impl LlmEngine {
                 .clear_kv_cache_seq(Some(0), Some(reused as u32), None)
                 .map_err(|e| AppError::Llm(format!("KV-cache rollback failed: {e}")))?;
             if !rollback_ok {
-                pool.entries[index].context.clear_kv_cache();
-                pool.telemetry.invalidations += 1;
-                reused = 0;
+                match restore_checkpoint(&mut pool.entries[index], reused) {
+                    Some(restored) => {
+                        pool.telemetry.checkpoint_restores += 1;
+                        reused = restored;
+                    }
+                    None => {
+                        pool.entries[index].context.clear_kv_cache();
+                        pool.telemetry.invalidations += 1;
+                        reused = 0;
+                    }
+                }
             }
         } else if !pool.entries[index].tokens.is_empty() {
             pool.entries[index].context.clear_kv_cache();
         }
         pool.entries[index].tokens.truncate(reused);
+        // Snapshots past the surviving prefix describe a different history.
+        pool.entries[index]
+            .checkpoints
+            .retain(|checkpoint| checkpoint.n_tokens <= reused);
         // A resident entry is only a real cache hit when at least one prompt
         // token survives validation and rollback. This keeps UI and telemetry
         // aligned with actual prefill work avoided.
@@ -917,22 +955,37 @@ impl LlmEngine {
         let wall_start = Instant::now();
         let prompt_batch_size = pool.entries[index].context.n_batch() as usize;
         let mut batch = LlamaBatch::new(prompt_batch_size, 1);
-        for chunk in tokens[reused..].chunks(prompt_batch_size) {
-            batch.clear();
-            let start = pool.entries[index].tokens.len();
-            for (offset, token) in chunk.iter().enumerate() {
-                let position = i32::try_from(start + offset)
-                    .map_err(|_| AppError::Llm("Prompt position exceeds i32".to_string()))?;
-                let needs_logits = start + offset + 1 == tokens.len();
-                batch
-                    .add(*token, position, &[0], needs_logits)
-                    .map_err(|e| AppError::Llm(format!("Failed to build batch: {e}")))?;
+        let checkpoint_at = if self.uses_state_checkpoints {
+            checkpoint_position(tokens.len(), reused, CHECKPOINT_TAIL_TOKENS)
+        } else {
+            None
+        };
+        let segments: Vec<&[LlamaToken]> = match checkpoint_at {
+            Some(at) => vec![&tokens[reused..at], &tokens[at..]],
+            None => vec![&tokens[reused..]],
+        };
+        for (segment_index, segment) in segments.iter().enumerate() {
+            if segment_index == 1 {
+                take_checkpoint(&mut pool.entries[index]);
+                pool.telemetry.checkpoints_created += 1;
             }
-            pool.entries[index]
-                .context
-                .decode(&mut batch)
-                .map_err(|e| AppError::Llm(format!("Failed to decode prompt suffix: {e}")))?;
-            pool.entries[index].tokens.extend_from_slice(chunk);
+            for chunk in segment.chunks(prompt_batch_size) {
+                batch.clear();
+                let start = pool.entries[index].tokens.len();
+                for (offset, token) in chunk.iter().enumerate() {
+                    let position = i32::try_from(start + offset)
+                        .map_err(|_| AppError::Llm("Prompt position exceeds i32".to_string()))?;
+                    let needs_logits = start + offset + 1 == tokens.len();
+                    batch
+                        .add(*token, position, &[0], needs_logits)
+                        .map_err(|e| AppError::Llm(format!("Failed to build batch: {e}")))?;
+                }
+                pool.entries[index]
+                    .context
+                    .decode(&mut batch)
+                    .map_err(|e| AppError::Llm(format!("Failed to decode prompt suffix: {e}")))?;
+                pool.entries[index].tokens.extend_from_slice(chunk);
+            }
         }
         let prefill_ms = wall_start.elapsed().as_secs_f64() * 1000.0;
         let evaluated = tokens.len().saturating_sub(reused);
@@ -1354,6 +1407,50 @@ fn peak_rss_bytes() -> u64 {
     }
 }
 
+/// Snapshot the recurrent part of sequence 0 at the context's current length.
+fn take_checkpoint(entry: &mut CachedContext) {
+    match entry
+        .context
+        .state_seq_get(0, LlamaStateSeqFlags::PARTIAL_ONLY)
+    {
+        Ok(state) => {
+            if entry.checkpoints.len() >= MAX_CHECKPOINTS_PER_CONTEXT {
+                entry.checkpoints.remove(0);
+            }
+            log::debug!(
+                "LLM context checkpoint at {} tokens ({} bytes)",
+                entry.tokens.len(),
+                state.byte_len()
+            );
+            entry.checkpoints.push(StateCheckpoint {
+                n_tokens: entry.tokens.len(),
+                state,
+            });
+        }
+        Err(error) => log::warn!("LLM context checkpoint skipped: {error}"),
+    }
+}
+
+/// Rewind sequence 0 to the newest checkpoint within `reused` shared tokens:
+/// restore its recurrent state, then drop attention KV past it. Returns the
+/// position resumed from, or `None` when the caller must reset the context.
+fn restore_checkpoint(entry: &mut CachedContext, reused: usize) -> Option<usize> {
+    let positions: Vec<usize> = entry.checkpoints.iter().map(|c| c.n_tokens).collect();
+    let position = checkpoint_for_prefix(&positions, reused)?;
+    let checkpoint = entry.checkpoints.iter().find(|c| c.n_tokens == position)?;
+    if let Err(error) = entry.context.state_seq_set(&checkpoint.state, 0) {
+        log::warn!("LLM context checkpoint restore failed: {error}");
+        return None;
+    }
+    match entry
+        .context
+        .clear_kv_cache_seq(Some(0), Some(u32::try_from(position).ok()?), None)
+    {
+        Ok(true) => Some(position),
+        _ => None,
+    }
+}
+
 /// Decode one token through a stateful UTF-8 decoder so code points split
 /// across tokens are emitted once complete.
 ///
@@ -1515,6 +1612,80 @@ mod tests {
             assert!(!visible.trim_start().starts_with("thought"));
             assert!(!visible.trim_start().starts_with("analysis"));
         }
+    }
+
+    /// Real-GGUF check of prefix reuse on a long, agent-shaped conversation:
+    /// turn 2 repeats turn 1's prompt plus an answer and a new question. On
+    /// hybrid models this exercises the recurrent-state checkpoints.
+    #[test]
+    #[ignore = "requires a local GGUF model"]
+    fn long_agent_prefix_reuse() {
+        let path = PathBuf::from(
+            std::env::var("RAMDOC_BENCH_MODEL").expect("RAMDOC_BENCH_MODEL is required"),
+        );
+        let engine = LlmEngine::load(path, "prefix-check".into()).unwrap();
+        let record = "Sitzung: Schlaf weiterhin gestört, Grübeln am Abend, Sertralin 100 mg 1-0-0 gut vertragen. "
+            .repeat(220);
+        let system = "Sie sind ein knapper klinischer Assistent.";
+        let turn1 = vec![AgentMessage {
+            role: "user".into(),
+            content: format!("{record}\nFasse den Verlauf in einem Satz zusammen."),
+        }];
+        let session = InferenceSession::agent("prefix-check", None, None);
+        let run = |messages: &[AgentMessage]| {
+            let prompt = engine
+                .format_chat_history_with_effort(system, messages, ThinkingEffort::Low)
+                .unwrap();
+            let mut out = String::new();
+            let started = Instant::now();
+            engine
+                .generate_streaming_session_with_sampler(
+                    &session,
+                    system,
+                    &prompt,
+                    48,
+                    SamplerConfig::from_temperature(0.0),
+                    |piece| {
+                        out.push_str(piece);
+                        true
+                    },
+                )
+                .unwrap();
+            (
+                out,
+                engine.last_generation_stats().unwrap(),
+                started.elapsed(),
+            )
+        };
+        let (answer1, first, first_wall) = run(&turn1);
+        let mut turn2 = turn1.clone();
+        turn2.push(AgentMessage {
+            role: "assistant".into(),
+            content: answer1,
+        });
+        turn2.push(AgentMessage {
+            role: "user".into(),
+            content: "Welche Dosis ist dokumentiert?".into(),
+        });
+        let (_, second, second_wall) = run(&turn2);
+        let telemetry = engine.contexts.lock().unwrap().telemetry.clone();
+        println!(
+            "hybrid={} turn1: prompt={} prefill_ms={:.0} wall_ms={} | turn2: prompt={} reused={} evaluated={} prefill_ms={:.0} ttft_ms={:.0} wall_ms={} | restores={} checkpoints={}",
+            engine.uses_state_checkpoints,
+            first.prompt_tokens,
+            first.prefill_ms,
+            first_wall.as_millis(),
+            second.prompt_tokens,
+            second.reused_prompt_tokens,
+            second.evaluated_prompt_tokens,
+            second.prefill_ms,
+            second.ttft_ms,
+            second_wall.as_millis(),
+            telemetry.checkpoint_restores,
+            telemetry.checkpoints_created
+        );
+        assert!(second.cache_hit);
+        assert!(second.reused_prompt_tokens > first.prompt_tokens / 2);
     }
 
     /// Hardware benchmark harness for issue #400. It is ignored because CI has
