@@ -31,6 +31,12 @@
 /// - `SECURITY.md` Section 2: Prompt Injection Prevention
 /// - `llm/prompts.rs`: Prompt template examples (to be implemented)
 pub fn sanitize_for_prompt(input: &str) -> String {
+    sanitize_for_prompt_with_limit(input, 10_000)
+}
+
+/// [`sanitize_for_prompt`] with a caller-chosen character limit, for inputs
+/// that are already bounded by a token budget (e.g. assembled evidence).
+pub fn sanitize_for_prompt_with_limit(input: &str, max_chars: usize) -> String {
     input
         .trim()
         // Remove control characters except newline and tab
@@ -57,7 +63,7 @@ pub fn sanitize_for_prompt(input: &str) -> String {
         .replace("\u{FF1C}|im_start|\u{FF1E}", "")
         // Enforce reasonable length limit per field
         .chars()
-        .take(10_000)
+        .take(max_chars)
         .collect()
 }
 
@@ -140,9 +146,75 @@ pub fn build_delimited_prompt(instruction: &str, data: &str) -> String {
     )
 }
 
+/// Deterministic clean-up of a generated clinical document before it is
+/// proposed for saving. Each step enforces a rule the prompt already states,
+/// so a model that slips does not hand the clinician avoidable edits:
+///
+/// * reasoning blocks are removed;
+/// * Swiss orthography: `ß` becomes `ss` (the prompt forbids `ß` outright);
+/// * Markdown emphasis and heading markers are dropped, keeping their text;
+/// * evidence citation markers such as `[E3 | 2026-01-05 | Sitzung | r2]`
+///   are removed, since they are prompt scaffolding, not report content.
+///
+/// Clinical wording is never rewritten.
+pub fn polish_document_text(text: &str) -> String {
+    let without_reasoning = super::harness::strip_think_blocks(text);
+    let swiss = without_reasoning.replace('ß', "ss").replace('ẞ', "SS");
+    let lines: Vec<String> = swiss
+        .lines()
+        .map(|line| {
+            let trimmed = line.trim_start();
+            let line = match trimmed.strip_prefix('#') {
+                Some(_) => trimmed.trim_start_matches('#').trim_start(),
+                None => line,
+            };
+            strip_citation_markers(&line.replace("**", "").replace("__", ""))
+        })
+        .collect();
+    lines.join("\n").trim().to_string()
+}
+
+/// Remove `[E<digits>…]` evidence markers and the space before them.
+fn strip_citation_markers(line: &str) -> String {
+    let mut out = String::with_capacity(line.len());
+    let mut rest = line;
+    while let Some(at) = rest.find("[E") {
+        let after = &rest[at + 2..];
+        let digits = after.chars().take_while(char::is_ascii_digit).count();
+        let close = after.find(']');
+        match close {
+            Some(end) if digits > 0 && !after[..end].contains('[') => {
+                out.push_str(rest[..at].trim_end_matches(' '));
+                rest = &after[end + 1..];
+            }
+            _ => {
+                out.push_str(&rest[..at + 2]);
+                rest = after;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn polish_enforces_document_rules_without_rewriting_content() {
+        let raw = "<think>plan</think>\n\n## Diagnosen\n**F33.1** Rezidivierende depressive Störung [E2 | 2026-03-01 | Diagnose | r1].\nMit freundlichen Grüßen";
+        assert_eq!(
+            polish_document_text(raw),
+            "Diagnosen\nF33.1 Rezidivierende depressive Störung.\nMit freundlichen Grüssen"
+        );
+    }
+
+    #[test]
+    fn polish_keeps_ordinary_brackets_and_e_words() {
+        let text = "Sertralin [Eskalation geplant] und [E] bleibt";
+        assert_eq!(polish_document_text(text), text);
+    }
 
     #[test]
     fn test_sanitize_control_characters() {

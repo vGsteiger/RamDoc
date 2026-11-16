@@ -113,7 +113,7 @@ fn build_system_prompt(scope: &AgentScope, patient_context: Option<&str>) -> Str
             "list_treatment_plans(patient_id: string) - Listet Behandlungspläne des Patienten.\n",
             "search(query: string) - Volltextsuche über Patienten, Diagnosen, Sitzungen und Berichte.\n",
             "search_literature(query: string) - Semantische Suche in Fachliteratur (z.B. Medikamentenrichtlinien, Behandlungsleitlinien). Gibt relevante Textausschnitte zurück.\n",
-            "write_report(patient_id: string, report_type: string, session_notes: string) - Generiert nur einen Berichtsvorschlag; Speichern erfordert ausdrückliche Bestätigung durch den Behandler. report_type: Befundbericht | Verlaufsbericht | Ueberweisungsschreiben.",
+            "write_report(patient_id: string, report_type: string, session_notes?: string) - Generiert nur einen Berichtsvorschlag aus der Patientenakte, die automatisch geladen wird; Speichern erfordert ausdrückliche Bestätigung durch den Behandler. report_type: Befundbericht | Verlaufsbericht | Ueberweisungsschreiben. session_notes: nur das Anliegen oder neue Angaben des Behandlers, nicht die Akte abschreiben.",
         ),
         AgentScope::Global => concat!(
             "get_patient(patient_id: string) - Holt Patientendaten für eine gegebene ID.\n",
@@ -130,7 +130,7 @@ fn build_system_prompt(scope: &AgentScope, patient_context: Option<&str>) -> Str
             "list_treatment_plans(patient_id: string) - Listet Behandlungspläne des Patienten.\n",
             "search(query: string) - Volltextsuche über Patienten, Diagnosen, Sitzungen und Berichte.\n",
             "search_literature(query: string) - Semantische Suche in Fachliteratur (z.B. Medikamentenrichtlinien, Behandlungsleitlinien). Gibt relevante Textausschnitte zurück.\n",
-            "write_report(patient_id: string, report_type: string, session_notes: string) - Generiert nur einen Berichtsvorschlag; Speichern erfordert ausdrückliche Bestätigung durch den Behandler. report_type: Befundbericht | Verlaufsbericht | Ueberweisungsschreiben.",
+            "write_report(patient_id: string, report_type: string, session_notes?: string) - Generiert nur einen Berichtsvorschlag aus der Patientenakte, die automatisch geladen wird; Speichern erfordert ausdrückliche Bestätigung durch den Behandler. report_type: Befundbericht | Verlaufsbericht | Ueberweisungsschreiben. session_notes: nur das Anliegen oder neue Angaben des Behandlers, nicht die Akte abschreiben.",
         ),
     };
 

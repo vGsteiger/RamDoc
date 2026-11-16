@@ -26,6 +26,29 @@ Directives:\n\
 - Structurez les rapports selon les normes médicales françaises et suisses\n\
 - N'utilisez PAS de Markdown, PAS d'astérisques, PAS de dièses et PAS de listes à tirets. De courts intertitres sur une ligne séparée sont autorisés";
 
+/// Upper bound on the patient context inserted into a report prompt. The real
+/// limit is the model's token budget, enforced before this point; this only
+/// caps pathological input (~100K tokens).
+const MAX_REPORT_CONTEXT_CHARS: usize = 400_000;
+const MAX_REPORT_NOTES_CHARS: usize = 60_000;
+
+/// Grounding and style rules shared by Befund- and Verlaufsberichte. They
+/// mirror the benchmarked referral rules without the letter-specific parts.
+const REPORT_QUALITY_RULES: &str = "Qualitätsregeln:\n\
+- Verwenden Sie ausschliesslich Angaben aus den bereitgestellten Daten und zusätzlichen Vorgaben.\n\
+- Erfinden Sie keine Befunde, Diagnosen, Risiken, Behandlungen, Medikamente, Dosierungen, Namen oder Daten.\n\
+- Erweitern oder konkretisieren Sie dokumentierte Symptome nicht. Erfinden Sie insbesondere keine \
+  Dauer, Schweregrade, direkten Zitate oder Beispiele.\n\
+- Übernehmen Sie Dosierungen, Daten, ICD-10-Codes, Negationen und Unsicherheitsangaben unverändert.\n\
+- Leiten Sie Alter, Geschlecht oder Anrede nicht aus Namen oder Geburtsdatum ab.\n\
+- Fehlt eine Information, lassen Sie sie weg; schreiben Sie keine Platzhalter und keine \
+  Formulierungen wie 'nicht angegeben'.\n\
+- Unterscheiden Sie dokumentierte Tatsachen, anamnestische Angaben und klinische Einschätzungen.\n\
+- Bei widersprüchlichen Angaben gilt der neueste datierte Eintrag; nennen Sie relevante Widersprüche sachlich.\n\
+- Verwenden Sie durchgehend Schweizer Rechtschreibung mit 'ss'.\n\
+- Geben Sie ausschliesslich den fertigen Berichtstext aus, ohne Entwurfsvermerke, eckige Klammern \
+  oder Erläuterungen an die schreibende Person.";
+
 #[derive(Debug, Clone)]
 pub enum ReportType {
     Befundbericht,
@@ -77,10 +100,15 @@ pub fn report_generation_prompt(
     additional_context: Option<&str>,
     instructions: Option<&str>,
 ) -> String {
-    use super::sanitize::{build_delimited_prompt, sanitize_for_prompt};
+    use super::sanitize::{
+        build_delimited_prompt, sanitize_for_prompt, sanitize_for_prompt_with_limit,
+    };
 
-    let safe_context = sanitize_for_prompt(patient_context);
-    let safe_notes = sanitize_for_prompt(session_notes);
+    // The context is already fitted to the model's token budget (evidence
+    // assembly or the summariser), so the generic 10,000-character field cap
+    // would only discard clinical data the model has room for.
+    let safe_context = sanitize_for_prompt_with_limit(patient_context, MAX_REPORT_CONTEXT_CHARS);
+    let safe_notes = sanitize_for_prompt_with_limit(session_notes, MAX_REPORT_NOTES_CHARS);
 
     let type_instructions = match report_type {
         ReportType::Befundbericht => {
@@ -92,7 +120,9 @@ pub fn report_generation_prompt(
             4. Körperlicher Befund (falls relevant)\n\
             5. Diagnosen (nach ICD-10)\n\
             6. Beurteilung und Empfehlungen\n\
-            7. Therapieplan"
+            7. Therapieplan\n\n\
+            Lassen Sie Abschnitte ohne passende Quelldaten vollständig weg; Personalien stehen bereits \
+            im Dokumentkopf und werden nur als Anlass der Vorstellung aufgegriffen."
         }
         ReportType::Verlaufsbericht => {
             "Erstellen Sie einen psychiatrischen Verlaufsbericht mit folgenden Abschnitten:\n\
@@ -100,7 +130,9 @@ pub fn report_generation_prompt(
             2. Aktueller psychischer Befund\n\
             3. Medikation und Verträglichkeit\n\
             4. Zielerreichung und Fortschritt\n\
-            5. Weiteres Vorgehen und Therapieziele"
+            5. Weiteres Vorgehen und Therapieziele\n\n\
+            Stellen Sie Veränderungen chronologisch und mit Datum dar, sofern Daten vorliegen. \
+            Lassen Sie Abschnitte ohne passende Quelldaten vollständig weg."
         }
         ReportType::Ueberweisungsschreiben => {
             "Verfassen Sie ein versandfertiges psychiatrisches Überweisungsschreiben an eine \
@@ -150,11 +182,21 @@ pub fn report_generation_prompt(
         combined_data.push_str(&format!("\n\nZusatzdokument:\n{safe_ctx}"));
     }
 
+    // The referral instructions already carry their benchmarked rule set.
+    let type_instructions = match report_type {
+        ReportType::Ueberweisungsschreiben => type_instructions.to_string(),
+        _ => format!("{type_instructions}\n\n{REPORT_QUALITY_RULES}"),
+    };
+
     let full_instructions = if let Some(instr) = instructions.filter(|s| !s.is_empty()) {
         let safe_instr = sanitize_for_prompt(instr);
         format!("{type_instructions}\n\nZusätzliche Vorgaben:\n{safe_instr}")
     } else {
-        type_instructions.to_string()
+        type_instructions
+    };
+    let (document_noun, output_label) = match report_type {
+        ReportType::Ueberweisungsschreiben => ("den fertigen Brief", "Bericht:"),
+        _ => ("den fertigen Bericht", "Bericht:"),
     };
 
     let delimited = build_delimited_prompt(&full_instructions, &combined_data);
@@ -166,7 +208,8 @@ pub fn report_generation_prompt(
         - Nicht vorhandene Angaben vollständig weglassen; weder das Fehlen erwähnen noch Details ergänzen.\n\
         - Keine eckigen Klammern, Unterschriftsfelder, Platzhalter oder Hinweise an die schreibende Person.\n\
         - Schweizer Rechtschreibung mit ss verwenden; das Zeichen ß darf nicht vorkommen.\n\
-        - Nur den fertigen Brief ausgeben.\nBericht:"
+        - Keine Quellenmarkierungen wie [E1] aus den klinischen Daten übernehmen.\n\
+        - Nur {document_noun} ausgeben.\n{output_label}"
     )
 }
 
@@ -487,5 +530,36 @@ mod tests {
         assert_eq!(prompt.matches("===== CLINICAL DATA START =====").count(), 1);
         assert_eq!(prompt.matches("===== CLINICAL DATA END =====").count(), 1);
         assert!(prompt.contains("Zusatzdokument"));
+    }
+
+    #[test]
+    fn befundbericht_gets_shared_rules_and_does_not_call_itself_a_letter() {
+        let prompt = report_generation_prompt(
+            ReportType::Befundbericht,
+            "Diagnose: F33.1",
+            "Notiz",
+            None,
+            None,
+        );
+        assert!(prompt.contains("Erfinden Sie keine Befunde"));
+        assert!(prompt.contains("Abschnitte ohne passende Quelldaten"));
+        assert!(prompt.contains("Nur den fertigen Bericht ausgeben"));
+        assert!(!prompt.contains("fertigen Brief"));
+    }
+
+    #[test]
+    fn referral_keeps_its_letter_wording() {
+        let prompt =
+            report_generation_prompt(ReportType::Ueberweisungsschreiben, "a", "b", None, None);
+        assert!(prompt.contains("Nur den fertigen Brief ausgeben"));
+        assert!(!prompt.contains("Bei widersprüchlichen Angaben gilt"));
+    }
+
+    #[test]
+    fn report_context_is_not_cut_at_the_generic_field_limit() {
+        let context = format!("{}ENDE-DER-AKTE", "x".repeat(20_000));
+        let prompt =
+            report_generation_prompt(ReportType::Verlaufsbericht, &context, "n", None, None);
+        assert!(prompt.contains("ENDE-DER-AKTE"));
     }
 }

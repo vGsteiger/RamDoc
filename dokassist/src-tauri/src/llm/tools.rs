@@ -320,87 +320,25 @@ fn tool_write_report(
         }
     };
 
-    let session_notes = sanitize_for_prompt(str_arg(args, "session_notes")?);
-
-    // Fetch patient + clinical data for the report
-    let p = patient::get_patient(conn, &patient_id)?;
-    let diagnoses =
-        diagnosis::list_diagnoses_for_patient(conn, &patient_id, 20, 0).unwrap_or_default();
-    let medications =
-        medication::list_medications_for_patient(conn, &patient_id, 20, 0).unwrap_or_default();
-    let sessions = session::list_sessions_for_patient(conn, &patient_id, 5, 0).unwrap_or_default();
-
-    let mut ctx = format!(
-        "Name: {} {}\nGeburtsdatum: {}\nAHV-Nummer: {}",
-        p.first_name, p.last_name, p.date_of_birth, p.ahv_number
-    );
-    if let Some(ins) = &p.insurance {
-        ctx.push_str(&format!("\nVersicherung: {}", ins));
-    }
-    if let Some(gp) = &p.gp_name {
-        ctx.push_str(&format!("\nHausarzt: {}", gp));
-    }
-
-    if !diagnoses.is_empty() {
-        ctx.push_str("\n\nDiagnosen:");
-        for d in &diagnoses {
-            ctx.push_str(&format!(
-                "\n- {} {} ({}, seit {})",
-                sanitize_for_prompt(&d.icd10_code),
-                sanitize_for_prompt(&d.description),
-                sanitize_for_prompt(&d.status),
-                sanitize_for_prompt(&d.diagnosed_date),
-            ));
-        }
-    }
-
-    let current_meds: Vec<_> = medications
-        .iter()
-        .filter(|m| m.end_date.is_none())
-        .collect();
-    if !current_meds.is_empty() {
-        ctx.push_str("\n\nAktuelle Medikamente:");
-        for m in &current_meds {
-            ctx.push_str(&format!(
-                "\n- {} {}, {}",
-                sanitize_for_prompt(&m.substance),
-                sanitize_for_prompt(&m.dosage),
-                sanitize_for_prompt(&m.frequency),
-            ));
-        }
-    }
-
-    if !sessions.is_empty() {
-        ctx.push_str("\n\nLetzte Sitzungen:");
-        for s in &sessions {
-            let mut line = format!(
-                "\n- {}: {}",
-                sanitize_for_prompt(&s.session_date),
-                sanitize_for_prompt(&s.session_type),
-            );
-            let summary = s.clinical_summary.as_deref().or(s.notes.as_deref());
-            if let Some(text) = summary {
-                let safe = sanitize_for_prompt(text);
-                let truncated: String = safe.chars().take(400).collect();
-                line.push_str(&format!(" — {}", truncated));
-            }
-            ctx.push_str(&line);
-        }
-    }
-
-    let patient_context = ctx;
+    // The tool-calling model only supplies the clinician's request and focus.
+    // The record itself is loaded here, so the report never depends on how
+    // much of it the router managed to paraphrase into a JSON argument.
+    let focus = sanitize_for_prompt(opt_str_arg(args, "session_notes").unwrap_or_default());
+    let patient_context =
+        assemble_report_context(conn, engine, &patient_id, &rt, &focus, thinking_effort)?;
 
     let content = crate::llm::generate_report_streaming_with_prompt(
         app,
         engine,
         rt,
         &patient_context,
-        &session_notes,
+        &focus,
         None,
         None,
         crate::llm::SYSTEM_PROMPT_DE,
         thinking_effort,
     )?;
+    let content = crate::llm::sanitize::polish_document_text(&content);
 
     crate::llm::sanitize::validate_report_output(&content)?;
 
@@ -415,6 +353,81 @@ fn tool_write_report(
             "session_ids": null,
         }),
     ))
+}
+
+/// Retrieval terms per report type. Retrieval is lexical when no query
+/// embedding is available, so these name the sections each report draws on.
+fn report_retrieval_query(report_type: &crate::llm::ReportType) -> &'static str {
+    use crate::llm::ReportType;
+    match report_type {
+        ReportType::Befundbericht => {
+            "Anamnese Vorgeschichte Anlass Vorstellung psychischer Befund Diagnose Beurteilung \
+             Empfehlung Therapieplan Medikation"
+        }
+        ReportType::Verlaufsbericht => {
+            "Verlauf Sitzung Therapie Veränderung Befund Medikation Verträglichkeit Nebenwirkung \
+             Ziel Fortschritt Plan"
+        }
+        ReportType::Ueberweisungsschreiben => {
+            "Überweisung Fragestellung Anamnese Befund Diagnose Verlauf Behandlung Medikation \
+             Beurteilung"
+        }
+    }
+}
+
+/// Tokens reserved beyond `evidence::PROMPT_SCAFFOLD_TOKENS` for the report
+/// instructions and quality rules, which are longer than a history question.
+const REPORT_INSTRUCTION_TOKENS: usize = 1_536;
+
+/// Build the report's patient context from the provenance-bearing evidence
+/// layer: structured facts (diagnoses, current medication, scores, plans)
+/// first, then verbatim excerpts retrieved for the report type and focus, all
+/// sized to this model's context window. Replaces a hand-built summary that
+/// kept only five sessions at 400 characters each.
+fn assemble_report_context(
+    conn: &Connection,
+    engine: &Arc<LlmEngine>,
+    patient_id: &str,
+    report_type: &crate::llm::ReportType,
+    focus: &str,
+    thinking_effort: crate::llm::ThinkingEffort,
+) -> Result<String, AppError> {
+    report_evidence(
+        conn,
+        engine.as_ref(),
+        engine.context_size(),
+        patient_id,
+        report_type,
+        focus,
+        thinking_effort,
+    )
+}
+
+/// Model-independent core of [`assemble_report_context`], testable with a
+/// heuristic token counter.
+fn report_evidence(
+    conn: &Connection,
+    counter: &dyn crate::llm::evidence::TokenCounter,
+    context_size: usize,
+    patient_id: &str,
+    report_type: &crate::llm::ReportType,
+    focus: &str,
+    thinking_effort: crate::llm::ThinkingEffort,
+) -> Result<String, AppError> {
+    use crate::llm::evidence;
+
+    let question = format!("{} {focus}", report_retrieval_query(report_type));
+    let budget = evidence::budget_for_context(context_size, thinking_effort.max_tokens())
+        .saturating_sub(REPORT_INSTRUCTION_TOKENS + counter.count(focus));
+    let request =
+        evidence::EvidenceRequest::new(patient_id, question.trim()).with_token_budget(budget);
+    let assembled = evidence::assemble_patient_evidence(conn, &request, counter)?;
+    log::info!(
+        "write_report evidence: {} units, {} omitted, budget {budget} tokens",
+        assembled.manifest.entries.len(),
+        assembled.manifest.omitted.len()
+    );
+    Ok(assembled.evidence)
 }
 
 /// Validate YYYY-MM-DD format (same check as in tool_create_calendar_event).
@@ -746,5 +759,53 @@ mod tests {
     fn medication_lookup_requires_a_query() {
         let conn = Connection::open_in_memory().unwrap();
         assert!(lookup_medication_reference(&conn, &json!({})).is_err());
+    }
+
+    #[test]
+    fn report_context_carries_structured_facts_and_full_session_text() {
+        use crate::llm::evidence::test_support::{seed_patient, TestVault};
+        use crate::llm::evidence::HeuristicCounter;
+
+        let vault = TestVault::new();
+        let conn = vault.conn();
+        let seeded = seed_patient(&conn, "756.1234.5678.97", "Erika", "Beispiel");
+        let context = report_evidence(
+            &conn,
+            &HeuristicCounter,
+            16_384,
+            &seeded.patient_id,
+            &crate::llm::ReportType::Verlaufsbericht,
+            "Schlaf",
+            crate::llm::ThinkingEffort::Medium,
+        )
+        .unwrap();
+
+        for expected in ["F32.1", "Sertralin", "100 mg", "PHQ-9", "Schlafhygiene"] {
+            assert!(context.contains(expected), "missing {expected}");
+        }
+        // Full session text, not a 400-character excerpt of the five latest.
+        assert!(context.contains("Patientin möchte die Therapiefrequenz reduzieren"));
+    }
+
+    #[test]
+    fn report_context_respects_a_small_budget() {
+        use crate::llm::evidence::test_support::{seed_patient, TestVault};
+        use crate::llm::evidence::{HeuristicCounter, TokenCounter};
+
+        let vault = TestVault::new();
+        let conn = vault.conn();
+        let seeded = seed_patient(&conn, "756.1234.5678.97", "Erika", "Beispiel");
+        let context = report_evidence(
+            &conn,
+            &HeuristicCounter,
+            6_656,
+            &seeded.patient_id,
+            &crate::llm::ReportType::Befundbericht,
+            "",
+            crate::llm::ThinkingEffort::Medium,
+        )
+        .unwrap();
+        // 6656 - 4096 completion - 768 scaffold - 1536 instructions = 256 tokens.
+        assert!(HeuristicCounter.count(&context) <= 256);
     }
 }
