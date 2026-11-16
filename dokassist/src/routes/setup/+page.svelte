@@ -34,7 +34,7 @@
       errorCode = code;
       if (code === 'SETUP_IN_PROGRESS') {
         error = $t('auth.setupInProgress');
-      } else if (code === 'KEYCHAIN_ERROR') {
+      } else if (code === 'KEYCHAIN_ERROR' || code === 'KEYCHAIN_ACCESS_DENIED') {
         error = $t('auth.setupKeychainError');
       } else {
         error = message;

@@ -5,6 +5,13 @@ pub enum AppError {
     #[error("Keychain error: {0}")]
     Keychain(String),
 
+    /// macOS refused to hand the item to this process: the access prompt was
+    /// denied, the login keychain is locked, or its password no longer matches
+    /// the account password. Retrying after allowing access can succeed, so
+    /// this is deliberately distinct from `KeychainItemMissing`.
+    #[error("Keychain access was denied: {0}")]
+    KeychainAccessDenied(String),
+
     /// A required master-key item is no longer available. The encrypted vault
     /// must be restored with the recovery phrase; retrying Touch ID cannot
     /// recreate the key material.
@@ -20,6 +27,13 @@ pub enum AppError {
     /// The audit HMAC chain or its independently stored checkpoint did not verify.
     #[error("Audit log integrity verification failed: {0}")]
     AuditIntegrity(String),
+
+    /// The audit HMAC chain itself verifies, but the Keychain checkpoint is
+    /// missing, conflicting, or does not occur in it (for example after the data
+    /// directory was restored from a file-level backup). The user can confirm the
+    /// discrepancy, which is then permanently recorded in the audit log.
+    #[error("Audit checkpoint does not match the database: {0}")]
+    AuditCheckpointMismatch(String),
 
     #[error("Filesystem error: {0}")]
     Filesystem(#[from] std::io::Error),
@@ -66,8 +80,15 @@ impl AppError {
     pub fn code(&self) -> String {
         match self {
             AppError::Keychain(_) => "KEYCHAIN_ERROR".to_string(),
+            AppError::KeychainAccessDenied(_) => "KEYCHAIN_ACCESS_DENIED".to_string(),
             AppError::KeychainItemMissing => "RECOVERY_REQUIRED".to_string(),
             AppError::Crypto(_) => "CRYPTO_ERROR".to_string(),
+            AppError::Database(rusqlite::Error::SqliteFailure(e, _))
+                if e.code == rusqlite::ErrorCode::NotADatabase =>
+            {
+                // SQLCipher reports a wrong key as "file is not a database".
+                "DB_KEY_MISMATCH".to_string()
+            }
             AppError::Database(e) => {
                 // Generate specific database error codes based on the error message
                 let msg = e.to_string().to_lowercase();
@@ -82,6 +103,7 @@ impl AppError {
                 }
             }
             AppError::AuditIntegrity(_) => "AUDIT_INTEGRITY_ERROR".to_string(),
+            AppError::AuditCheckpointMismatch(_) => "AUDIT_CHECKPOINT_MISMATCH".to_string(),
             AppError::Filesystem(_) => "FILESYSTEM_ERROR".to_string(),
             AppError::Llm(_) => "LLM_ERROR".to_string(),
             AppError::AuthRequired => "AUTH_REQUIRED".to_string(),
