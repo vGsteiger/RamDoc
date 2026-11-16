@@ -154,11 +154,7 @@ pub async fn unlock_app_accepting_audit_checkpoint(
 /// Opens the database with the unlocked master keys under a checkpoint policy.
 type OpenDb = fn(&AppState, &[u8; 32], &[u8; 32]) -> Result<(), AppError>;
 
-fn unlock_with(
-    state: &AppState,
-    reason: &str,
-    open_db: OpenDb,
-) -> Result<bool, AppError> {
+fn unlock_with(state: &AppState, reason: &str, open_db: OpenDb) -> Result<bool, AppError> {
     // Check auth state before showing Touch ID (avoids prompting if already unlocked).
     {
         let auth = state.auth.lock().map_err(|_| lock_poisoned())?;
