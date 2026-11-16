@@ -182,8 +182,15 @@ fn strip_citation_markers(line: &str) -> String {
         let after = &rest[at + 2..];
         let digits = after.chars().take_while(char::is_ascii_digit).count();
         let close = after.find(']');
+        // Only the assembler's citation forms, `[E3]` and `[E3 | …]`: the
+        // digits must be followed by `]` or a `|` separator, so bracketed
+        // ICD-10 codes such as `[E11.9]` are clinical content and stay.
+        let citation_shaped = digits > 0
+            && after[digits..]
+                .trim_start_matches(' ')
+                .starts_with([']', '|']);
         match close {
-            Some(end) if digits > 0 && !after[..end].contains('[') => {
+            Some(end) if citation_shaped && !after[..end].contains('[') => {
                 out.push_str(rest[..at].trim_end_matches(' '));
                 rest = &after[end + 1..];
             }
@@ -208,6 +215,13 @@ mod tests {
             polish_document_text(raw),
             "Diagnosen\nF33.1 Rezidivierende depressive Störung.\nMit freundlichen Grüssen"
         );
+    }
+
+    #[test]
+    fn polish_keeps_bracketed_icd10_e_codes() {
+        let text = "Diabetes mellitus [E11.9] und Hypothyreose [E03.9]";
+        assert_eq!(polish_document_text(text), text);
+        assert_eq!(polish_document_text("Befund [E12]."), "Befund.");
     }
 
     #[test]

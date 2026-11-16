@@ -416,9 +416,18 @@ fn report_evidence(
 ) -> Result<String, AppError> {
     use crate::llm::evidence;
 
-    let question = format!("{} {focus}", report_retrieval_query(report_type));
+    // Retrieval keeps only the first dozen query terms, so the clinician's
+    // focus goes first and the generic report terms fill what is left.
+    let question = format!("{focus} {}", report_retrieval_query(report_type));
     let budget = evidence::budget_for_context(context_size, thinking_effort.max_tokens())
         .saturating_sub(REPORT_INSTRUCTION_TOKENS + counter.count(focus));
+
+    // Recent sessions are included verbatim regardless of retrieval, so a new
+    // development (e.g. acute suicidality) cannot be missed because it shares
+    // no terms with the query. They take at most a quarter of the budget.
+    let recent = recent_session_baseline(conn, counter, patient_id, budget / 4)?;
+    let budget = budget.saturating_sub(counter.count(&recent));
+
     let request =
         evidence::EvidenceRequest::new(patient_id, question.trim()).with_token_budget(budget);
     let assembled = evidence::assemble_patient_evidence(conn, &request, counter)?;
@@ -427,7 +436,62 @@ fn report_evidence(
         assembled.manifest.entries.len(),
         assembled.manifest.omitted.len()
     );
-    Ok(assembled.evidence)
+    Ok(if recent.is_empty() {
+        assembled.evidence
+    } else {
+        format!("{recent}\n{}", assembled.evidence)
+    })
+}
+
+/// Sessions always shown in full, newest first.
+const RECENT_SESSION_BASELINE: u32 = 3;
+
+/// The latest sessions verbatim, newest first, within `budget` tokens. A
+/// session that does not fit whole is left out rather than cut mid-sentence.
+fn recent_session_baseline(
+    conn: &Connection,
+    counter: &dyn crate::llm::evidence::TokenCounter,
+    patient_id: &str,
+    budget: usize,
+) -> Result<String, AppError> {
+    let sessions =
+        session::list_sessions_for_patient(conn, patient_id, RECENT_SESSION_BASELINE, 0)?;
+    let mut block = String::from("--- LETZTE SITZUNGEN (vollständig, neueste zuerst) ---\n");
+    let header_tokens = counter.count(&block);
+    let mut spent = header_tokens;
+    let mut included = 0;
+    for s in &sessions {
+        let mut entry = format!(
+            "{} ({}):",
+            sanitize_for_prompt(&s.session_date),
+            sanitize_for_prompt(&s.session_type)
+        );
+        if let Some(notes) = s.notes.as_deref().filter(|n| !n.trim().is_empty()) {
+            entry.push_str(&format!(
+                "\n{}",
+                crate::llm::sanitize::sanitize_for_prompt_with_limit(notes, 60_000)
+            ));
+        }
+        if let Some(summary) = s
+            .clinical_summary
+            .as_deref()
+            .filter(|n| !n.trim().is_empty())
+        {
+            entry.push_str(&format!(
+                "\nZusammenfassung: {}",
+                sanitize_for_prompt(summary)
+            ));
+        }
+        entry.push('\n');
+        let cost = counter.count(&entry);
+        if spent + cost > budget {
+            break;
+        }
+        spent += cost;
+        block.push_str(&entry);
+        included += 1;
+    }
+    Ok(if included == 0 { String::new() } else { block })
 }
 
 /// Validate YYYY-MM-DD format (same check as in tool_create_calendar_event).
@@ -927,5 +991,51 @@ mod tests {
                 <= crate::llm::evidence::PROMPT_SCAFFOLD_TOKENS + REPORT_INSTRUCTION_TOKENS
         );
         assert!(request + effort.max_tokens() <= context_size);
+    }
+
+    #[test]
+    fn recent_session_is_included_even_without_matching_terms() {
+        use crate::llm::evidence::test_support::{seed_patient, TestVault};
+        use crate::llm::evidence::HeuristicCounter;
+
+        let vault = TestVault::new();
+        let conn = vault.conn();
+        let seeded = seed_patient(&conn, "756.1234.5678.97", "Erika", "Beispiel");
+        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        conn.execute(
+            "INSERT INTO sessions (id, patient_id, session_date, session_type, duration_minutes, \
+                 notes) VALUES ('acute', ?1, ?2, 'Krisenintervention', 30, ?3)",
+            rusqlite::params![
+                seeded.patient_id,
+                today,
+                "Zunehmende Hoffnungslosigkeit, äussert konkrete Pläne. Notfallplan erstellt."
+            ],
+        )
+        .unwrap();
+        let context = report_evidence(
+            &conn,
+            &HeuristicCounter,
+            16_384,
+            &seeded.patient_id,
+            &crate::llm::ReportType::Befundbericht,
+            "",
+            crate::llm::ThinkingEffort::Medium,
+        )
+        .unwrap();
+        assert!(context.starts_with("--- LETZTE SITZUNGEN"));
+        assert!(context.contains("äussert konkrete Pläne"));
+    }
+
+    #[test]
+    fn clinician_focus_leads_the_retrieval_query() {
+        // question_terms keeps 12 terms; the generic terms alone are 11.
+        let focus = "Lithiumspiegel Nierenfunktion";
+        let question = format!(
+            "{focus} {}",
+            report_retrieval_query(&crate::llm::ReportType::Befundbericht)
+        );
+        let terms = crate::llm::evidence::retrieve::question_terms(&question);
+        assert!(terms.contains(&"lithiumspiegel".to_string()));
+        assert!(terms.contains(&"nierenfunktion".to_string()));
     }
 }
