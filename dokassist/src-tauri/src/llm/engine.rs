@@ -1,3 +1,4 @@
+use super::chat_format::ChatFamily;
 use super::context_cache::{reusable_prefix, ContextCacheTelemetry, ContextKey, InferenceSession};
 use super::download;
 use super::harness::SamplerConfig;
@@ -6,6 +7,7 @@ use super::inference::{
     KvCacheQuantization,
 };
 use super::memory_governor::{MemoryGovernor, MemoryGovernorDiagnostics};
+use super::thinking::ThinkingEffort;
 use crate::error::AppError;
 use encoding_rs::UTF_8;
 use llama_cpp_2::context::params::LlamaContextParams;
@@ -93,6 +95,7 @@ pub struct LlmEngine {
     model_path: PathBuf,
     model_name: String,
     chat_template: LlamaChatTemplate,
+    chat_family: ChatFamily,
     context_size: usize,
     inference: Mutex<InferenceRuntime>,
     model_hash: String,
@@ -301,6 +304,10 @@ impl LlmEngine {
             ))
         })?;
         let chat_template_hash = sha256_bytes(chat_template.as_c_str().to_bytes());
+        let chat_family = ChatFamily::detect(&String::from_utf8_lossy(
+            chat_template.as_c_str().to_bytes(),
+        ));
+        log::info!("Chat family for '{model_name}': {chat_family:?}");
 
         Ok(Self {
             contexts: Mutex::new(ContextPool::new(max_persistent_contexts_for_ram(ram))),
@@ -309,6 +316,7 @@ impl LlmEngine {
             model_path,
             model_name,
             chat_template,
+            chat_family,
             context_size,
             inference: Mutex::new(InferenceRuntime {
                 profile,
@@ -559,6 +567,8 @@ impl LlmEngine {
 
         // 5. Stateful UTF-8 decoder for multi-byte tokens
         let mut utf8_dec = UTF_8.new_decoder();
+        let decode_special = self.chat_family.decodes_special_tokens();
+        let mut normalizer = self.chat_family.normalizer();
 
         let mut first_token = true;
         let mut ttft_ms = 0.0f64;
@@ -572,16 +582,17 @@ impl LlmEngine {
                 break;
             }
 
-            let piece = model
-                .token_to_piece(token, &mut utf8_dec, false, None)
+            let raw_piece = model
+                .token_to_piece(token, &mut utf8_dec, decode_special, None)
                 .map_err(|e| AppError::Llm(format!("Token decode failed: {e}")))?;
+            let piece = normalizer.push(&raw_piece);
 
             if first_token {
                 ttft_ms = wall_start.elapsed().as_secs_f64() * 1000.0;
                 first_token = false;
             }
 
-            if !on_token(&piece) {
+            if !piece.is_empty() && !on_token(&piece) {
                 break;
             }
 
@@ -597,6 +608,11 @@ impl LlmEngine {
                 .map_err(|e| AppError::Llm(format!("Failed to add token: {e}")))?;
             ctx.decode(&mut batch)
                 .map_err(|e| AppError::Llm(format!("Failed to decode token: {e}")))?;
+        }
+
+        let tail = normalizer.finish();
+        if !tail.is_empty() {
+            on_token(&tail);
         }
 
         if completion_tokens > 0 {
@@ -748,6 +764,35 @@ impl LlmEngine {
         }
     }
 
+    /// Continue an already-admitted generation (e.g. after the think budget
+    /// force-closed reasoning) in the same leased context.
+    ///
+    /// Phase 1 reserved the completion headroom; the continuation prompt is
+    /// phase 1's prompt plus what it generated, so it must not reserve the full
+    /// headroom again. `max_tokens` is clamped to the space actually left, and
+    /// the call fails only if no room remains at all.
+    pub fn continue_streaming_session_with_sampler(
+        &self,
+        session: &InferenceSession,
+        system_prompt: &str,
+        prompt: &str,
+        max_tokens: usize,
+        sampler: SamplerConfig,
+        on_token: impl FnMut(&str) -> bool,
+    ) -> Result<(), AppError> {
+        let prompt_tokens = self.count_tokens(prompt);
+        let max_tokens = continuation_budget(self.context_size, prompt_tokens, max_tokens)?;
+        self.generate_streaming_cached_with_headroom(
+            session,
+            &sha256_bytes(system_prompt.as_bytes()),
+            prompt,
+            max_tokens,
+            sampler,
+            Some(max_tokens),
+            on_token,
+        )
+    }
+
     fn generate_streaming_cached(
         &self,
         session: &InferenceSession,
@@ -755,6 +800,29 @@ impl LlmEngine {
         prompt: &str,
         max_tokens: usize,
         sampler_config: SamplerConfig,
+        on_token: impl FnMut(&str) -> bool,
+    ) -> Result<(), AppError> {
+        self.generate_streaming_cached_with_headroom(
+            session,
+            system_prompt_hash,
+            prompt,
+            max_tokens,
+            sampler_config,
+            None,
+            on_token,
+        )
+    }
+
+    /// `completion_headroom` overrides the profile's reservation; `None` keeps it.
+    #[allow(clippy::too_many_arguments)]
+    fn generate_streaming_cached_with_headroom(
+        &self,
+        session: &InferenceSession,
+        system_prompt_hash: &str,
+        prompt: &str,
+        max_tokens: usize,
+        sampler_config: SamplerConfig,
+        completion_headroom: Option<usize>,
         mut on_token: impl FnMut(&str) -> bool,
     ) -> Result<(), AppError> {
         let model = self
@@ -769,7 +837,7 @@ impl LlmEngine {
             self.context_size,
             tokens.len(),
             max_tokens,
-            runtime.profile.completion_headroom,
+            completion_headroom.unwrap_or(runtime.profile.completion_headroom),
         )?;
         let mut key = self.context_key(session, system_prompt_hash, &runtime);
 
@@ -884,6 +952,8 @@ impl LlmEngine {
 
         let mut sampler = sampler_config.build();
         let mut utf8_dec = UTF_8.new_decoder();
+        let decode_special = self.chat_family.decodes_special_tokens();
+        let mut normalizer = self.chat_family.normalizer();
         let mut ttft_ms = 0.0;
         let mut completion_tokens = 0usize;
 
@@ -893,13 +963,14 @@ impl LlmEngine {
             if model.is_eog_token(token) {
                 break;
             }
-            let piece = model
-                .token_to_piece(token, &mut utf8_dec, false, None)
+            let raw_piece = model
+                .token_to_piece(token, &mut utf8_dec, decode_special, None)
                 .map_err(|e| AppError::Llm(format!("Token decode failed: {e}")))?;
+            let piece = normalizer.push(&raw_piece);
             if completion_tokens == 0 {
                 ttft_ms = wall_start.elapsed().as_secs_f64() * 1000.0;
             }
-            if !on_token(&piece) {
+            if !piece.is_empty() && !on_token(&piece) {
                 break;
             }
             let position = pool.entries[index].tokens.len();
@@ -916,6 +987,11 @@ impl LlmEngine {
                 .map_err(|e| AppError::Llm(format!("Failed to decode token: {e}")))?;
             pool.entries[index].tokens.push(token);
             completion_tokens += 1;
+        }
+
+        let tail = normalizer.finish();
+        if !tail.is_empty() {
+            on_token(&tail);
         }
 
         let gen_elapsed = gen_phase_start.elapsed().as_secs_f64();
@@ -1003,6 +1079,8 @@ impl LlmEngine {
         let mut sampler = SamplerConfig::from_temperature(temperature).build();
 
         let mut utf8_dec = UTF_8.new_decoder();
+        let decode_special = self.chat_family.decodes_special_tokens();
+        let mut normalizer = self.chat_family.normalizer();
 
         let mut first_token = true;
         let mut ttft_ms = 0.0f64;
@@ -1016,16 +1094,17 @@ impl LlmEngine {
                 break;
             }
 
-            let piece = model
-                .token_to_piece(token, &mut utf8_dec, false, None)
+            let raw_piece = model
+                .token_to_piece(token, &mut utf8_dec, decode_special, None)
                 .map_err(|e| AppError::Llm(format!("Token decode failed: {e}")))?;
+            let piece = normalizer.push(&raw_piece);
 
             if first_token {
                 ttft_ms = wall_start.elapsed().as_secs_f64() * 1000.0;
                 first_token = false;
             }
 
-            if !on_token(&piece) {
+            if !piece.is_empty() && !on_token(&piece) {
                 break;
             }
 
@@ -1040,6 +1119,11 @@ impl LlmEngine {
                 .map_err(|e| AppError::Llm(format!("Failed to add token: {e}")))?;
             ctx.decode(&mut batch)
                 .map_err(|e| AppError::Llm(format!("Failed to decode token: {e}")))?;
+        }
+
+        let tail = normalizer.finish();
+        if !tail.is_empty() {
+            on_token(&tail);
         }
 
         if completion_tokens > 0 {
@@ -1078,6 +1162,11 @@ impl LlmEngine {
         self.context_size
     }
 
+    /// Chat dialect detected from the loaded model's embedded template.
+    pub fn chat_family(&self) -> ChatFamily {
+        self.chat_family
+    }
+
     /// Format conversation history with the template embedded in the loaded GGUF.
     /// This is required for non-ChatML families such as gpt-oss (Harmony) and Gemma.
     pub fn format_chat_history(
@@ -1085,6 +1174,20 @@ impl LlmEngine {
         system_prompt: &str,
         messages: &[AgentMessage],
     ) -> Result<String, AppError> {
+        self.format_chat_history_with_effort(system_prompt, messages, ThinkingEffort::default())
+    }
+
+    /// Like [`Self::format_chat_history`], forwarding `effort` to families with
+    /// a native reasoning switch (Gemma 4 `<|think|>`, Harmony `Reasoning:`).
+    pub fn format_chat_history_with_effort(
+        &self,
+        system_prompt: &str,
+        messages: &[AgentMessage],
+        effort: ThinkingEffort,
+    ) -> Result<String, AppError> {
+        if let Some(prompt) = self.chat_family.format(system_prompt, messages, effort) {
+            return Ok(prompt);
+        }
         let mut chat = Vec::with_capacity(messages.len() + 1);
         chat.push(new_chat_message("system", system_prompt)?);
         for message in messages {
@@ -1184,6 +1287,22 @@ fn recommended_model_for_ram(ram: u64) -> ModelChoice {
     }
 }
 
+/// Completion tokens a continuation may use: the request, clamped to the room
+/// left after its prompt (keeping one slot for the final decode).
+fn continuation_budget(
+    context_size: usize,
+    prompt_tokens: usize,
+    requested: usize,
+) -> Result<usize, AppError> {
+    let available = context_size.saturating_sub(prompt_tokens + 1);
+    match requested.min(available) {
+        0 => Err(AppError::Llm(format!(
+            "No room left to continue: {prompt_tokens} prompt tokens fill the {context_size}-token context"
+        ))),
+        budget => Ok(budget),
+    }
+}
+
 fn format_gib(bytes: u64) -> String {
     format!("{:.1} GiB", bytes as f64 / (1024_f64.powi(3)))
 }
@@ -1212,7 +1331,7 @@ fn is_selectable_metal_device(backend: &str, name: &str) -> bool {
     backend.eq_ignore_ascii_case("metal") || name.to_ascii_lowercase().starts_with("mtl")
 }
 
-fn sha256_bytes(bytes: &[u8]) -> String {
+pub(crate) fn sha256_bytes(bytes: &[u8]) -> String {
     hex::encode(ring::digest::digest(&SHA256, bytes).as_ref())
 }
 
@@ -1267,6 +1386,15 @@ mod tests {
     use super::*;
 
     #[test]
+    fn continuation_budget_clamps_instead_of_reserving_full_headroom() {
+        // 12K prompt + 1K reasoning in a 16K context: the 4K headroom check
+        // would reject this, but ~3K tokens of answer still fit.
+        assert_eq!(continuation_budget(16_384, 13_100, 3_072).unwrap(), 3_072);
+        assert_eq!(continuation_budget(16_384, 15_000, 3_072).unwrap(), 1_383);
+        assert!(continuation_budget(16_384, 16_384, 3_072).is_err());
+    }
+
+    #[test]
     fn recommendations_cover_memory_tiers() {
         const GB: u64 = 1024 * 1024 * 1024;
         let cases = [
@@ -1312,6 +1440,59 @@ mod tests {
         assert!(is_selectable_metal_device("", "MTL0"));
         assert!(!is_selectable_metal_device("MTL", ""));
         assert!(!is_selectable_metal_device("CPU", "CPU"));
+    }
+
+    /// Real-GGUF check that families with control-token reasoning (Gemma 4,
+    /// gpt-oss) format, generate and normalise to canonical `<think>` output.
+    /// Run with RAMDOC_BENCH_MODEL pointing at such a model.
+    #[test]
+    #[ignore = "requires a local GGUF model"]
+    fn chat_family_formats_and_normalises_reasoning() {
+        let path = PathBuf::from(
+            std::env::var("RAMDOC_BENCH_MODEL").expect("RAMDOC_BENCH_MODEL is required"),
+        );
+        let engine = LlmEngine::load(path, "family-check".into()).unwrap();
+        for effort in [ThinkingEffort::Low, ThinkingEffort::High] {
+            let prompt = engine
+                .format_chat_history_with_effort(
+                    "Sie sind ein knapper klinischer Assistent. Antworten Sie auf Deutsch.",
+                    &[AgentMessage {
+                        role: "user".into(),
+                        content: "Fasse zusammen: Schlaf verbessert, Angst reduziert.".into(),
+                    }],
+                    effort,
+                )
+                .unwrap();
+            let mut answer = String::new();
+            engine
+                .generate_streaming_raw_with_sampler(
+                    &prompt,
+                    384,
+                    SamplerConfig::from_temperature(0.0),
+                    |piece| {
+                        answer.push_str(piece);
+                        true
+                    },
+                )
+                .unwrap();
+            println!(
+                "family={:?} effort={effort:?}\n{answer}\n---",
+                engine.chat_family()
+            );
+            for leaked in [
+                "<|channel",
+                "channel|>",
+                "<|message|>",
+                "<|start|>",
+                "<turn|>",
+            ] {
+                assert!(!answer.contains(leaked), "native marker {leaked} leaked");
+            }
+            let visible = crate::llm::harness::strip_think_blocks(&answer);
+            assert!(!visible.trim().is_empty(), "no visible answer");
+            assert!(!visible.trim_start().starts_with("thought"));
+            assert!(!visible.trim_start().starts_with("analysis"));
+        }
     }
 
     /// Hardware benchmark harness for issue #400. It is ignored because CI has
