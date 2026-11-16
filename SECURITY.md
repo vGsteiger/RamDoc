@@ -73,9 +73,13 @@ audit MAC key and Keychain access to forge a new history and checkpoint. The des
 instead separates the database and audit-integrity trust boundaries, protecting
 against possession of the database/key alone and against offline database tampering.
 
-Mnemonic recovery and an explicitly authorized backup restore can establish a new
+Mnemonic recovery, an explicitly authorized backup restore, or an unlock that the user
+re-confirms with Touch ID after being shown a checkpoint mismatch can establish a new
 checkpoint after the remaining chain verifies. That action necessarily establishes a
 new truncation-detection baseline and must remain an explicit user-authorized flow.
+Whenever a discrepancy existed, a `checkpoint_reanchored` entry describing it is
+appended to the chain first, so the rollback stays visible in the audit log. A chain
+that does not itself verify can never be re-anchored.
 
 SQLite and Keychain cannot participate in one atomic transaction. RamDoc checkpoints
 immediately after a committed database operation, but forced process termination in

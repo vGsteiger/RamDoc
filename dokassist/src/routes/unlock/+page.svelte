@@ -1,13 +1,19 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { checkAuth, unlockApp, parseError } from '$lib/api';
+  import { resolve } from '$app/paths';
+  import { checkAuth, unlockApp, unlockAppAcceptingAuditCheckpoint, parseError } from '$lib/api';
   import { authStatus } from '$lib/stores/auth';
   import { t } from '$lib/translations';
+  import { classifyUnlockError } from '$lib/unlock-errors';
   import { Fingerprint, KeyRound } from 'lucide-svelte';
 
   let isUnlocking = $state(false);
   let error = $state<string | null>(null);
+  let errorDetails = $state<string | null>(null);
+  let suggestRecovery = $state(false);
+  /** Backend description of an audit checkpoint mismatch awaiting confirmation. */
+  let checkpointMismatch = $state<string | null>(null);
 
   // The browser history (or a manually entered URL) can reach this page even
   // though recovery is required. Do not offer a locked-only unlock action in
@@ -25,51 +31,50 @@
     })();
   });
 
-  function friendlyError(err: unknown): string {
-    const { code, message } = parseError(err);
-    switch (code) {
-      case 'KEYCHAIN_ERROR':
-        return $t('auth.keychainAccessError');
-      case 'DATABASE_ERROR':
-        return $t('auth.databaseAccessError');
-      case 'FILESYSTEM_ERROR':
-        return $t('auth.filesystemAccessError');
-      case 'AUTH_REQUIRED':
-        return $t('auth.unlockFailed');
-      default:
-        return message || $t('auth.unlockFailed');
-    }
-  }
-
-  async function handleUnlock() {
+  async function attemptUnlock(unlock: () => Promise<boolean>) {
     if (isUnlocking) return;
     isUnlocking = true;
     error = null;
+    errorDetails = null;
+    suggestRecovery = false;
 
     try {
-      const unlocked = await unlockApp();
+      const unlocked = await unlock();
       if (!unlocked) {
         error = $t('auth.unlockFailed');
         return;
       }
+      checkpointMismatch = null;
       authStatus.set('unlocked');
       goto('/dashboard');
     } catch (err) {
-      const { code } = parseError(err);
-      // User dismissed the Touch ID sheet — not an error, just stay on screen.
-      if (code === 'BIOMETRIC_CANCELLED') return;
-      // A missing or invalidated master-key item cannot be restored by trying
-      // Touch ID again. The backend has already moved this session to recovery.
-      if (code === 'RECOVERY_REQUIRED') {
-        authStatus.set('recovery_required');
-        await goto('/recover', { replaceState: true });
-        return;
+      const { code, message, ref } = parseError(err);
+      const outcome = classifyUnlockError(code);
+      switch (outcome.kind) {
+        case 'ignore':
+          return;
+        case 'recovery_required':
+          // A missing or invalidated master-key item cannot be restored by trying
+          // Touch ID again. The backend has already moved this session to recovery.
+          authStatus.set('recovery_required');
+          await goto('/recover', { replaceState: true });
+          return;
+        case 'checkpoint_mismatch':
+          checkpointMismatch = message;
+          return;
+        case 'error':
+          checkpointMismatch = null;
+          error = outcome.messageKey ? $t(outcome.messageKey) : message || $t('auth.unlockFailed');
+          errorDetails = outcome.showDetails ? `${message} (${ref})` : null;
+          suggestRecovery = outcome.suggestRecovery;
       }
-      error = friendlyError(err);
     } finally {
       isUnlocking = false;
     }
   }
+
+  const handleUnlock = () => attemptUnlock(unlockApp);
+  const handleAcceptCheckpoint = () => attemptUnlock(unlockAppAcceptingAuditCheckpoint);
 </script>
 
 <div class="min-h-screen bg-surface-sunken text-fg flex items-center justify-center p-8">
@@ -86,12 +91,42 @@
       <p class="text-fg-muted">{$t('auth.unlockSubtitle')}</p>
     </div>
 
-    {#if error}
+    {#if checkpointMismatch}
       <div
-        class="rounded-card border border-danger-line/50 bg-danger-subtle/40 p-4 text-left"
+        class="rounded-card border border-danger-line/50 bg-danger-subtle/40 p-4 text-left space-y-3"
+        role="alert"
+      >
+        <p class="text-body font-semibold text-danger-fg">{$t('auth.checkpointMismatchTitle')}</p>
+        <p class="text-body text-fg">{$t('auth.checkpointMismatchBody')}</p>
+        <details class="text-caption text-fg-muted">
+          <summary class="cursor-pointer">{$t('auth.technicalDetails')}</summary>
+          <p class="mt-1 break-words">{checkpointMismatch}</p>
+        </details>
+        <button
+          onclick={handleAcceptCheckpoint}
+          disabled={isUnlocking}
+          class="w-full px-4 py-3 border border-danger-line text-danger-fg hover:bg-danger-subtle/60 focus:outline-none focus:ring-2 focus:ring-danger-line/40 disabled:cursor-not-allowed disabled:opacity-60 font-medium rounded-card transition-colors"
+        >
+          {$t('auth.checkpointMismatchContinue')}
+        </button>
+      </div>
+    {:else if error}
+      <div
+        class="rounded-card border border-danger-line/50 bg-danger-subtle/40 p-4 text-left space-y-2"
         role="alert"
       >
         <p class="text-body text-danger-fg">{error}</p>
+        {#if errorDetails}
+          <details class="text-caption text-fg-muted">
+            <summary class="cursor-pointer">{$t('auth.technicalDetails')}</summary>
+            <p class="mt-1 break-words">{errorDetails}</p>
+          </details>
+        {/if}
+        {#if suggestRecovery}
+          <a href={resolve('/recover')} class="block text-body font-medium text-accent-fg hover:underline">
+            {$t('auth.useRecoveryPhrase')}
+          </a>
+        {/if}
       </div>
     {/if}
 
