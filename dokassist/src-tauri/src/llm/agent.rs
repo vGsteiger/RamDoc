@@ -281,7 +281,13 @@ pub fn run_agent_loop(
     let chat_profile = GenerationTask::Chat.profile(thinking_effort);
     let probe_system = GenerationTask::ToolProbe.apply_to_system_prompt(&system_prompt);
     let answer_system = {
-        let with_effort = chat_profile.effort.apply_to_system_prompt(&system_prompt);
+        // Families with a native reasoning switch get it through the chat
+        // format instead of a `<think>`-worded instruction.
+        let with_effort = if engine.chat_family().uses_plain_think_tags() {
+            chat_profile.effort.apply_to_system_prompt(&system_prompt)
+        } else {
+            system_prompt.clone()
+        };
         GenerationTask::Chat.apply_to_system_prompt(&with_effort)
     };
 
@@ -301,7 +307,11 @@ pub fn run_agent_loop(
 
     for iteration in 0..MAX_ITERATIONS {
         // Summarize history if it is getting too large to fit in the context window
-        let formatted = engine.format_chat_history(&answer_system, &history)?;
+        let formatted = engine.format_chat_history_with_effort(
+            &answer_system,
+            &history,
+            chat_profile.effort,
+        )?;
         let estimated_tokens = estimate_tokens(&formatted);
         if estimated_tokens > summarize_threshold {
             log::warn!(
@@ -310,7 +320,11 @@ pub fn run_agent_loop(
             history = summarize_history(engine, &system_prompt, history);
         }
 
-        let prompt = probe_engine.format_chat_history(&probe_system, &history)?;
+        let prompt = probe_engine.format_chat_history_with_effort(
+            &probe_system,
+            &history,
+            probe_profile.effort,
+        )?;
 
         // Probe: collect output to check for tool call. Thinking is forced off
         // so Extra high effort cannot hide a tool call inside <think>.
@@ -416,7 +430,11 @@ pub fn run_agent_loop(
             // No tool call — this is the final answer. Stream it with the
             // user-selected think budget. The probe stays short so tool
             // selection is not spent on a long <think> block.
-            let final_prompt = engine.format_chat_history(&answer_system, &history)?;
+            let final_prompt = engine.format_chat_history_with_effort(
+                &answer_system,
+                &history,
+                chat_profile.effort,
+            )?;
             let final_answer = thinking::generate_with_think_budget_from_prompt(
                 engine,
                 &answer_system,
@@ -445,7 +463,8 @@ pub fn run_agent_loop(
     }
 
     // Exceeded MAX_ITERATIONS — force a final answer from accumulated history
-    let final_prompt = engine.format_chat_history(&answer_system, &history)?;
+    let final_prompt =
+        engine.format_chat_history_with_effort(&answer_system, &history, chat_profile.effort)?;
     let final_answer = thinking::generate_with_think_budget_from_prompt(
         engine,
         &answer_system,
