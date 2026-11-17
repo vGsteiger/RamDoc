@@ -101,5 +101,16 @@
         {/if}
       </button>
     </div>
+
+    <!-- Without the phrase there is no way back in; offer the same
+         RESET-confirmed factory reset the unlock screen links to. -->
+    <div class="border-t border-line pt-6">
+      <a
+        href="/reset?from=recover"
+        class="text-caption text-fg-muted hover:text-danger-fg transition-colors"
+      >
+        {$t('auth.resetLink')}
+      </a>
+    </div>
   </main>
 </div>
