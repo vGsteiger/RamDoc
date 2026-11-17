@@ -101,6 +101,23 @@ than knowingly unsafe F16 allocations. Every effective context, K/V type,
 logical batch, micro-batch, Flash-Attention mode, fallback, and governor estimate
 is recorded in the result.
 
+## Reasoning mode (suite v2)
+
+Every case runs with the model's reasoning switched off (`"reasoning": "off"` in
+the manifest). The checks are short exact answers with 48–512-token limits;
+with reasoning on, a thinking-by-default model such as Qwen3 spends the whole
+limit inside `<think>` and the suite measures truncation instead of the runtime.
+Off means:
+
+- `<think>` templates (Qwen, Granite, Nemotron): the empty think block that the
+  template itself renders for `enable_thinking=False` is pre-filled.
+- Gemma 4: the `<|think|>` switch is not sent.
+- gpt-oss (Harmony): reasoning cannot be disabled; `Reasoning: low` is used.
+
+Results from suite v1 (reasoning left at the model default) are not comparable
+and the comparer rejects them because the suite IDs differ. The product's
+reasoning paths are covered separately by the referral-quality sweep.
+
 ## Workloads and scoring
 
 The synthetic, deidentified cases live in
