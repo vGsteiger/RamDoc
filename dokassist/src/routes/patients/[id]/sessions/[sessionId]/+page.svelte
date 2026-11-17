@@ -35,6 +35,8 @@
   import ErrorDisplay from '$lib/components/ErrorDisplay.svelte';
   import OutcomeScoreCard from '$lib/components/OutcomeScoreCard.svelte';
   import OutcomeScoreForm from '$lib/components/OutcomeScoreForm.svelte';
+  import DictationButton from '$lib/components/DictationButton.svelte';
+  import { insertDictation } from '$lib/dictation';
   import { t } from '$lib/translations';
 
   const patientId = $derived(page.params.id!);
@@ -58,6 +60,7 @@
   let llmStatus = $state<LlmEngineStatus | null>(null);
 
   let editedNotes = $state('');
+  let notesEl = $state<HTMLTextAreaElement>();
   let editedDuration = $state<number | null>(null);
   let editedSessionType = $state('');
   let editedSessionDate = $state('');
@@ -433,11 +436,17 @@ ${activeDiagnoses ? `Aktive Diagnosen:\n${activeDiagnoses}` : ''}
         <!-- Notes -->
         <div class="mb-6">
           {#if isEditing}
-            <label for="session-notes" class="block text-body font-medium text-fg-muted mb-2">
-              {$t('sessions.notes')}
-            </label>
+            <div class="flex items-center justify-between gap-2 mb-2">
+              <label for="session-notes" class="block text-body font-medium text-fg-muted">
+                {$t('sessions.notes')}
+              </label>
+              <DictationButton
+                onTranscript={(text) => (editedNotes = insertDictation(notesEl, editedNotes, text))}
+              />
+            </div>
             <textarea
               id="session-notes"
+              bind:this={notesEl}
               bind:value={editedNotes}
               rows="10"
               class="w-full px-3 py-2 border border-line rounded-control bg-surface-raised text-fg font-mono text-body"

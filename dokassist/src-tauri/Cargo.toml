@@ -65,6 +65,13 @@ futures-util = "0.3"
 libc = "0.2"
 dirs = "6"
 
+# Dictation audio I/O. Speech recognition itself runs out-of-process in the
+# `dokassist-asr` worker (../asr-worker) so transcribe.cpp's ggml copy never
+# shares an address space with llama.cpp's.
+cpal = "0.18"
+symphonia = { version = "0.6", default-features = false, features = ["wav", "pcm", "mp3", "flac", "ogg", "vorbis", "isomp4", "aac", "alac", "adpcm", "aiff", "caf"] }
+rubato = "5"
+
 # PDF (PKG-3)
 pdf-extract = "0.12"
 

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Merged into the bundle's Info.plist by the Tauri bundler. Required
+         before macOS will show the microphone permission prompt for live
+         dictation. -->
+    <key>NSMicrophoneUsageDescription</key>
+    <string>RamDoc nutzt das Mikrofon für Diktate. Die Spracherkennung läuft vollständig lokal; Audio verlässt Ihren Mac nicht. / RamDoc uses the microphone for dictation. Speech recognition runs entirely on this Mac.</string>
+</dict>
+</plist>

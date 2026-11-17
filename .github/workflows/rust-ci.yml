@@ -38,6 +38,7 @@ jobs:
         filters: |
           rust:
             - 'dokassist/src-tauri/**'
+            - 'dokassist/asr-worker/**'
             - 'scripts/benchmark-local-inference.py'
             - '.github/workflows/rust-ci.yml'
 
@@ -72,12 +73,19 @@ jobs:
       if: needs.changes.outputs.rust == 'true'
       uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       with:
-        workspaces: dokassist/src-tauri
+        workspaces: |
+          dokassist/src-tauri
+          dokassist/asr-worker
         save-if: ${{ github.ref == 'refs/heads/main' }}
 
     - name: Check formatting
       if: needs.changes.outputs.rust == 'true' && matrix.rust == 'stable'
       working-directory: ./dokassist/src-tauri
+      run: cargo fmt -- --check
+
+    - name: Check formatting (dictation worker)
+      if: needs.changes.outputs.rust == 'true' && matrix.rust == 'stable'
+      working-directory: ./dokassist/asr-worker
       run: cargo fmt -- --check
 
     # Clippy type-checks every target, so a separate `cargo check` is redundant.
@@ -90,10 +98,20 @@ jobs:
           -A clippy::too_many_arguments \
           -A clippy::type_complexity
 
+    - name: Run clippy (dictation worker)
+      if: needs.changes.outputs.rust == 'true' && matrix.rust == 'stable'
+      working-directory: ./dokassist/asr-worker
+      run: cargo clippy --all-targets -- -D warnings
+
     - name: Run cargo test (lib)
       if: needs.changes.outputs.rust == 'true' && matrix.rust == 'stable'
       working-directory: ./dokassist/src-tauri
       run: cargo test --lib
+
+    - name: Run cargo test (dictation worker)
+      if: needs.changes.outputs.rust == 'true' && matrix.rust == 'stable'
+      working-directory: ./dokassist/asr-worker
+      run: cargo test
 
     - name: Validate deterministic local-inference benchmark
       if: needs.changes.outputs.rust == 'true' && matrix.rust == 'stable'
@@ -111,4 +129,9 @@ jobs:
     - name: Check MSRV build
       if: needs.changes.outputs.rust == 'true' && matrix.rust != 'stable'
       working-directory: ./dokassist/src-tauri
+      run: cargo check --all-targets
+
+    - name: Check MSRV build (dictation worker)
+      if: needs.changes.outputs.rust == 'true' && matrix.rust != 'stable'
+      working-directory: ./dokassist/asr-worker
       run: cargo check --all-targets

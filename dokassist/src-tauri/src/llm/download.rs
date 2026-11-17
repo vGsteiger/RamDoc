@@ -481,28 +481,71 @@ pub async fn download_model_with_progress(
     dest_path: &Path,
     filename: &str,
 ) -> Result<String, AppError> {
-    let client = reqwest::Client::new();
-
-    // CRIT-3: Fetch expected SHA-256 from HuggingFace LFS pointer before the download begins.
-    // This fails fast (before any large transfer) if the pointer is unavailable or malformed.
-    // Every filename that passes model_url() is guaranteed to have an lfs_pointer_url entry
-    // in MODELS, so the error branch below is unreachable in normal operation.
+    // CRIT-3: Every filename that passes model_url() is guaranteed to have an
+    // lfs_pointer_url entry in MODELS, so the error branch below is
+    // unreachable in normal operation.
     let model = find_model(filename).ok_or_else(|| {
         AppError::Validation(format!(
             "No model entry for '{}' — integrity check cannot proceed",
             filename
         ))
     })?;
+    download_pinned_file(
+        app,
+        PinnedDownload {
+            url,
+            lfs_pointer_url: model.lfs_pointer_url,
+            pinned_sha256: model.pinned_sha256,
+            filename,
+            progress_event: "model-download-progress",
+            done_event: "model-download-done",
+        },
+        dest_path,
+    )
+    .await
+}
+
+/// A whitelisted file with a compile-time SHA-256 pin.
+pub(crate) struct PinnedDownload<'a> {
+    pub url: &'a str,
+    pub lfs_pointer_url: &'a str,
+    pub pinned_sha256: &'a str,
+    pub filename: &'a str,
+    /// Tauri event receiving progress as f64 0.0–1.0.
+    pub progress_event: &'a str,
+    /// Tauri event emitted once the file is verified.
+    pub done_event: &'a str,
+}
+
+/// Download a pinned file with resume, size cap and SHA-256 verification
+/// (CRIT-3 / HIGH-2). Shared by the LLM and dictation model catalogs.
+pub(crate) async fn download_pinned_file(
+    app: &AppHandle,
+    spec: PinnedDownload<'_>,
+    dest_path: &Path,
+) -> Result<String, AppError> {
+    let PinnedDownload {
+        url,
+        lfs_pointer_url,
+        pinned_sha256,
+        filename,
+        progress_event,
+        done_event,
+    } = spec;
+    let client = reqwest::Client::new();
+
+    // CRIT-3: Fetch expected SHA-256 from HuggingFace LFS pointer before the download begins.
+    // This fails fast (before any large transfer) if the pointer is unavailable or malformed.
     log::info!("Fetching LFS pointer for '{}'…", filename);
-    let expected_hex = fetch_lfs_sha256(&client, model.lfs_pointer_url).await?;
+    let expected_hex = fetch_lfs_sha256(&client, lfs_pointer_url).await?;
 
     // CRIT-3: Assert that the mutable LFS pointer still identifies the approved blob.
-    if expected_hex != model.pinned_sha256 {
+    if expected_hex != pinned_sha256 {
         return Err(AppError::Validation(format!(
             "LFS pointer SHA-256 for '{}' does not match pinned value: \
              expected pinned={}, fetched={}. \
              Possible supply-chain tampering — download aborted.",
-            filename, model.pinned_sha256, expected_hex
+            filename, pinned_sha256, expected_hex
         )));
     }
     log::info!("Pinned SHA-256 verified for '{}'.", filename);
@@ -585,7 +628,7 @@ pub async fn download_model_with_progress(
 
         if total_size > 0 {
             let progress = downloaded as f64 / total_size as f64;
-            let _ = app.emit("model-download-progress", progress);
+            let _ = app.emit(progress_event, progress);
         }
     }
 
@@ -607,7 +650,7 @@ pub async fn download_model_with_progress(
     }
     log::info!("SHA-256 verified for '{}': {}", filename, computed_hex);
 
-    let _ = app.emit("model-download-done", ());
+    let _ = app.emit(done_event, ());
     Ok(computed_hex)
 }
 

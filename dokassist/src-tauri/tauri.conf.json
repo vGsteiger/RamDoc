@@ -4,7 +4,7 @@
   "identifier": "ch.dokassist.app",
   "build": {
     "beforeBuildCommand": "pnpm build",
-    "beforeDevCommand": "pnpm dev",
+    "beforeDevCommand": "node scripts/build-asr-worker.mjs --dev && pnpm dev",
     "devUrl": "http://localhost:5173",
     "frontendDist": "../build"
   },
@@ -21,7 +21,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; frame-src 'self' blob:"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; frame-src 'self' blob:"
     }
   },
   "plugins": {
