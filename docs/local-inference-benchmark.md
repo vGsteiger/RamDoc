@@ -91,7 +91,7 @@ is the single source of truth. Its current control is:
 | Batch / micro-batch | 2,048 / 512 |
 | Completion headroom | 4,096 |
 | Flash Attention | enabled |
-| llama.cpp bindings | `llama-cpp-2` and `llama-cpp-sys-2` 0.1.146 |
+| llama.cpp bindings | `llama-cpp-2` and `llama-cpp-sys-2` 0.1.161 |
 
 The sweep declares 2K, 8K, 16K, 32K, 64K, and 128K context tiers. The long
 middle-retrieval case fills 75% of the prompt budget and records the tokenizer's

@@ -66,7 +66,7 @@ describe('linkPatientHistoryCitations', () => {
 describe('patientHistoryCitationHref', () => {
   it('links session evidence directly to the session record', () => {
     expect(patientHistoryCitationHref(entry('E1'))).toBe(
-      '/patients/patient%201/sessions/session%2F1'
+      'patients/patient%201/sessions/session%2F1'
     );
   });
 
@@ -82,7 +82,7 @@ describe('patientHistoryCitationHref', () => {
   ] satisfies [EvidenceRecordKind, string][])(
     'maps %s evidence to its patient view',
     (kind, suffix) => {
-      expect(patientHistoryCitationHref(entry('E1', kind))).toBe(`/patients/patient%201${suffix}`);
+      expect(patientHistoryCitationHref(entry('E1', kind))).toBe(`patients/patient%201${suffix}`);
     }
   );
 
@@ -92,6 +92,6 @@ describe('patientHistoryCitationHref', () => {
       record_kind: 'future_record_kind',
     } as unknown as EvidenceManifestEntry;
 
-    expect(patientHistoryCitationHref(unknownEntry)).toBe('/patients/patient%201');
+    expect(patientHistoryCitationHref(unknownEntry)).toBe('patients/patient%201');
   });
 });

@@ -2,7 +2,7 @@
   import { errorText } from '$lib/translations/labels';
   import { get } from 'svelte/store';
   import { onMount } from 'svelte';
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { save } from '@tauri-apps/plugin-dialog';
   import {
@@ -37,7 +37,7 @@
   let isLoadingScores = $state(false);
   let showTrendChart = $state(true);
 
-  let patientId = $derived($page.params.id!);
+  let patientId = $derived(page.params.id!);
 
   onMount(async () => {
     await loadPatient();

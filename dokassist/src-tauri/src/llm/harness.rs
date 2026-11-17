@@ -81,9 +81,9 @@ impl SamplerConfig {
         Ok(self)
     }
 
-    pub fn build(self) -> LlamaSampler {
+    pub fn build(self, n_vocab: i32) -> LlamaSampler {
         LlamaSampler::chain_simple([
-            LlamaSampler::penalties(64, self.repeat_penalty, 0.0, self.presence_penalty),
+            LlamaSampler::penalties(n_vocab, 64, self.repeat_penalty, 0.0, self.presence_penalty),
             LlamaSampler::temp(self.temperature),
             LlamaSampler::min_p(self.min_p.max(0.0), 1),
             LlamaSampler::top_k(self.top_k),
@@ -101,9 +101,17 @@ pub struct GenerationProfile {
     pub max_tokens: usize,
 }
 
-const CLINICAL_GROUNDING: &str = "\n\nErfinde keine Medikamente, Dosierungen, Daten, Diagnosen, \
-Zitate oder Untersuchungsergebnisse, die nicht in den bereitgestellten Daten stehen. \
-Kennzeichne fehlende Angaben ausdrücklich als fehlend — nicht interpolieren.";
+/// Documents (reports, letters, summaries) omit what the record does not
+/// contain; placeholders like "nicht angegeben" are as unwanted as invention.
+const DOCUMENT_GROUNDING: &str = "\n\nErfinden Sie keine Medikamente, Dosierungen, Daten, \
+Diagnosen, Zitate oder Untersuchungsergebnisse, die nicht in den bereitgestellten Daten stehen. \
+Fehlende Angaben lassen Sie weg, statt sie zu ergänzen oder als fehlend zu vermerken.";
+
+/// Answers to questions must say when the record is silent, rather than
+/// leave the clinician to infer it from an omission.
+const ANSWER_GROUNDING: &str = "\n\nErfinden Sie keine Medikamente, Dosierungen, Daten, \
+Diagnosen, Zitate oder Untersuchungsergebnisse, die nicht in den bereitgestellten Daten stehen. \
+Ist eine erfragte Angabe nicht dokumentiert, sagen Sie das ausdrücklich, statt zu interpolieren.";
 
 const TOOL_PROBE_HINT: &str = "\n\nWenn du ein Tool brauchst, gib AUSSCHLIESSLICH den \
 <tool_call>-Block aus. Kein <think>-Block, kein Fliesstext.";
@@ -148,9 +156,8 @@ impl GenerationTask {
     pub fn system_suffix(self) -> &'static str {
         match self {
             Self::ToolProbe => TOOL_PROBE_HINT,
-            Self::Report | Self::Letter | Self::Summary | Self::Evidence | Self::Chat => {
-                CLINICAL_GROUNDING
-            }
+            Self::Report | Self::Letter | Self::Summary => DOCUMENT_GROUNDING,
+            Self::Evidence | Self::Chat => ANSWER_GROUNDING,
             Self::Improve | Self::Extract => "",
         }
     }
@@ -232,7 +239,28 @@ mod tests {
 
     #[test]
     fn clinical_tasks_forbid_inventing_facts() {
-        let suffix = GenerationTask::Report.apply_to_system_prompt("base");
-        assert!(suffix.contains("Erfinde keine Medikamente"));
+        for task in [
+            GenerationTask::Report,
+            GenerationTask::Letter,
+            GenerationTask::Summary,
+            GenerationTask::Evidence,
+            GenerationTask::Chat,
+        ] {
+            assert!(task
+                .apply_to_system_prompt("base")
+                .contains("Erfinden Sie keine Medikamente"));
+        }
+    }
+
+    #[test]
+    fn documents_omit_missing_data_while_answers_name_it() {
+        // Reports used to be told both to omit missing data (report prompt)
+        // and to mark it as missing (this suffix).
+        let report = GenerationTask::Report.system_suffix();
+        assert!(report.contains("lassen Sie weg"));
+        assert!(!report.contains("ausdrücklich"));
+        assert!(GenerationTask::Evidence
+            .system_suffix()
+            .contains("sagen Sie das ausdrücklich"));
     }
 }

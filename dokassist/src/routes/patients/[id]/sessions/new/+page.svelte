@@ -1,6 +1,6 @@
 <script lang="ts">
   import { sessionTypeLabel } from '$lib/translations/labels';
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { createSession, type CreateSession } from '$lib/api';
   import { addToast } from '$lib/stores/toast';
@@ -11,10 +11,10 @@
   import { get } from 'svelte/store';
   import { t } from '$lib/translations';
 
-  const patientId = $derived($page.params.id);
+  const patientId = $derived(page.params.id);
 
-  const prefilledDate = $page.url.searchParams.get('date');
-  const prefilledTime = $page.url.searchParams.get('time');
+  const prefilledDate = page.url.searchParams.get('date');
+  const prefilledTime = page.url.searchParams.get('time');
 
   let sessionType = $state('Erstgespräch');
   let sessionDate = $state(prefilledDate ?? new Date().toISOString().split('T')[0]);

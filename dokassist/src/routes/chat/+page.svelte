@@ -1,7 +1,7 @@
 <script lang="ts">
   import { get } from 'svelte/store';
   import { onMount } from 'svelte';
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import {
     listChatSessions,
     createChatSession,
@@ -23,8 +23,8 @@
   let sessions = $state<ChatSession[]>([]);
   let activeSessionId = $state<string | null>(null);
   let isLoading = $state(true);
-  let patientId = $derived($page.url.searchParams.get('patientId'));
-  let intent = $derived($page.url.searchParams.get('intent'));
+  let patientId = $derived(page.url.searchParams.get('patientId'));
+  let intent = $derived(page.url.searchParams.get('intent'));
   let scope = $derived<'global' | 'patient'>(patientId ? 'patient' : 'global');
   let starterPrompt = $derived(intent === 'report' ? get(t)('chat.reportStarterPrompt') : '');
   let contextPlan = $state<ContextPlan>(createContextPlan());

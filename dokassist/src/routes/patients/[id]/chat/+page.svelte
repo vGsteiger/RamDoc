@@ -1,12 +1,12 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { t } from '$lib/translations';
 
   onMount(() => {
-    void goto(`${resolve('/chat')}?patientId=${encodeURIComponent($page.params.id ?? '')}`);
+    void goto(`${resolve('/chat')}?patientId=${encodeURIComponent(page.params.id ?? '')}`);
   });
 </script>
 

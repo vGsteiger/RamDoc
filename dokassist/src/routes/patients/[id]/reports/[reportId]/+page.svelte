@@ -1,6 +1,6 @@
 <script lang="ts">
   import { reportTypeLabel } from '$lib/translations/labels';
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import {
@@ -20,14 +20,14 @@
   import { get } from 'svelte/store';
   import { marked } from 'marked';
 
-  $: patientId = $page.params.id!;
-  $: reportId = $page.params.reportId!;
+  let patientId = $derived(page.params.id!);
+  let reportId = $derived(page.params.reportId!);
 
-  let report: Report | null = null;
-  let editMode = false;
-  let editableContent = '';
-  let loading = true;
-  let error: AppError | null = null;
+  let report: Report | null = $state(null);
+  let editMode = $state(false);
+  let editableContent = $state('');
+  let loading = $state(true);
+  let error: AppError | null = $state(null);
 
   async function loadReport() {
     try {
@@ -171,20 +171,20 @@
         <div class="flex space-x-4 mb-6">
           {#if !editMode}
             <button
-              on:click={() => (editMode = true)}
+              onclick={() => (editMode = true)}
               class="h-8 px-3 bg-accent text-on-accent rounded-control hover:bg-accent-hover transition-colors"
             >
               {$t('reports.edit')}
             </button>
           {:else}
             <button
-              on:click={saveChanges}
+              onclick={saveChanges}
               class="h-8 px-3 bg-success text-on-success rounded-control hover:bg-success-hover transition-colors"
             >
               {$t('reports.save')}
             </button>
             <button
-              on:click={() => {
+              onclick={() => {
                 editMode = false;
                 editableContent = report?.content ?? '';
               }}
@@ -194,21 +194,21 @@
             </button>
           {/if}
           <button
-            on:click={handleExportPdf}
+            onclick={handleExportPdf}
             disabled={editMode}
             class="h-8 px-3 bg-accent text-on-accent rounded-control hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {$t('reports.exportPDF')}
           </button>
           <button
-            on:click={handleExportDocx}
+            onclick={handleExportDocx}
             disabled={editMode}
             class="h-8 px-3 bg-accent text-on-accent rounded-control hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {$t('reports.exportDOCX')}
           </button>
           <button
-            on:click={handleDeleteReport}
+            onclick={handleDeleteReport}
             class="h-8 px-3 bg-danger-subtle text-danger-fg rounded-control hover:bg-danger-subtle/40 transition-colors"
           >
             {$t('reports.delete')}

@@ -34,9 +34,15 @@ export function linkPatientHistoryCitations(
   return parts;
 }
 
-/** Route to the most specific patient record view available for an evidence source. */
-export function patientHistoryCitationHref(entry: EvidenceManifestEntry): `/patients/${string}` {
-  const patientBase: `/patients/${string}` = `/patients/${encodeURIComponent(entry.patient_id)}`;
+/**
+ * Route to the most specific patient record view available for an evidence source.
+ *
+ * Returns a SvelteKit 3 pathname: percent-encoded and without a leading slash, for
+ * `resolve()` from `$app/paths`, which adds the base path. (A leading slash would make
+ * `resolve()` treat it as a route ID such as `/patients/[id]`.)
+ */
+export function patientHistoryCitationHref(entry: EvidenceManifestEntry): `patients/${string}` {
+  const patientBase: `patients/${string}` = `patients/${encodeURIComponent(entry.patient_id)}`;
 
   switch (entry.record_kind) {
     case 'session':

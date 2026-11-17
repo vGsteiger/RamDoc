@@ -6,14 +6,14 @@ import { listen } from '@tauri-apps/api/event';
 import { goto } from '$app/navigation';
 import EmailCompose from '../../routes/patients/[id]/email/new/+page.svelte';
 
-vi.mock('$app/stores', () => {
-  const { readable } = require('svelte/store');
+// `$app/state` exposes `page` as a plain reactive object, not a store.
+vi.mock('$app/state', () => {
   return {
-    page: readable({
+    page: {
       params: { id: 'patient-1' },
       url: new URL('http://localhost/patients/patient-1/email/new'),
       route: { id: null },
-    }),
+    },
   };
 });
 

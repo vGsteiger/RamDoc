@@ -7,7 +7,7 @@
     interventionTypeLabel,
   } from '$lib/translations/labels';
   import { onMount } from 'svelte';
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import {
     listTreatmentPlansForPatient,
     createTreatmentPlan,
@@ -32,7 +32,7 @@
     type UpdateTreatmentIntervention,
   } from '$lib/api';
 
-  const patientId = $derived($page.params.id);
+  const patientId = $derived(page.params.id);
 
   let plans = $state<TreatmentPlan[]>([]);
   let loading = $state(true);
