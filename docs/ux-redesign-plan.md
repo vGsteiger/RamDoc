@@ -1,6 +1,37 @@
 # RamDoc UX redesign plan
 
-Status: proposal, audit + plan only. Nothing here is implemented yet.
+Status: decided (2026-11-17). Implemented in one PR on `feat/ux-redesign`.
+§0 is binding and overrides anything below that disagrees with it.
+
+## 0. Product-owner decisions (binding)
+
+Direction in the product owner's words: *"closer to the Codex / Claude / Notion
+apps, with a sidebar with chats, but then richer context on patients
+reachable."* The patient is to RamDoc what a Project is to Claude: a container
+with its own chats and knowledge.
+
+| # | Decision | Notes for implementers |
+|---|----------|------------------------|
+| D1 | **Ink + red mark.** Primary buttons are near-black "ink" (inverted in dark mode). The logo red `#DC0000` appears only in the brand mark and the 2 px active-nav indicator. Red stays reserved for danger/errors. Links stay a muted blue; selected tabs are underlined in ink. | §6.1 option B. |
+| D2 | **Mac source-list sidebar.** Logo + "New chat" at the top; **Chat** with recent chats nested under it (each chat shows its attached patient's name); then Patients, Calendar, Reference; Settings, Lock and a labelled model-status chip in the footer. **The TopBar is removed**; search lives in Cmd+K. Collapses to an icon rail at 700–1023 px; hideable but shown by default. | Thread gets the full content width; no separate 256 px chat-list column. |
+| D3 | **Dashboard folds into the chat home.** A new/empty chat shows a "Today" panel (today's appointments, notes to finish with one-click Summarize/Open) above the composer. `/dashboard` redirects to `/chat`. | |
+| D4 | **Patient as project.** The patient page is: an identification header (name, age, key diagnoses/meds) + the patient's **Chats** (first section) + records sections Overview, Sessions, Diagnoses, Medications, Treatment plan, Documents (files/reports/letters/email unified). In a chat with a patient attached, a **collapsible right-hand patient context panel** shows the summary, active diagnoses and medications, latest outcome scores, recent sessions, and "open record" links. Starting a chat from a patient page attaches that patient. | Supersedes §8's "6 tabs + Ask in chat" and §9 D4 option B. Keep long clinical forms as real pages. |
+| D4a | **"Records only · cited" mode inside chat.** The audited `query_patient_history` pipeline is kept and surfaced as a mode toggle in a patient-attached chat (Assistant vs Records only · cited), with span citations rendered in the chat's style. `PatientHistoryQuery` on the overview is retired in favour of this. | Do not change backend audit/citation behaviour. |
+| D5 | **32 px controls, 28 px dense**, 36 px only for the chat composer send button and auth screens. Reverses PR #484's 40 px. | |
+| D6 | **Settings as sub-pages with their own section list**: General, Practice (editable again), AI models, Dictation, Reference data, Import & backup, Updates & about, Danger zone. Grouped rows (label left, control right). | Dictation pane = existing `DictationSettings`. |
+| D7 | **Product owner supplies the logo SVG.** Ship `BrandMark` with a clearly-marked placeholder that is swapped by replacing one file; replace the obsolete `dokassist/app-icon.svg` only once the real vector exists. | Do not trace the PNG. |
+| D8 | **Cool neutrals** echoing the icon tile `#F0F0F5` (e.g. page `#F7F7FA`, raised `#FFFFFF`, sunken `#F0F0F5`); dark mode equivalent cool near-black. | |
+| D9 | **"Reference"** replaces "Literature" in the nav: Medications (first) + Literature. `/literature` keeps working. | |
+| D10 | **System font (SF Pro)**. **Cmd+N = New chat, Cmd+Shift+N = New patient**, Cmd+K = search/commands. | |
+
+Also in scope (merged to `main` after this audit; preserve and restyle, don't
+remove): dictation (`DictationButton`, `DictationSettings`, audio upload and
+transcript view in `FileUploader`/`FileViewer`), and the recovery-screen reset
+link (#542).
+
+---
+
+Original status: proposal, audit + plan only.
 Scope: the SvelteKit frontend in `dokassist/src/` (routes, components, tokens).
 Builds on: #428 / PR #429 (token-driven design language), PR #484 (chat as the
 primary clinical workspace), `docs/design-language.md`, `docs/i18n.md`,
