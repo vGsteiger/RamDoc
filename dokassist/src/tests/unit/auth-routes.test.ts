@@ -10,6 +10,10 @@ describe('cancelResetPath', () => {
   it('returns unlock once a vault exists', () => {
     expect(cancelResetPath('locked')).toBe('/unlock');
     expect(cancelResetPath('unlocked')).toBe('/unlock');
-    expect(cancelResetPath('recovery_required')).toBe('/unlock');
+  });
+
+  it('returns to recovery when the master keys need restoring', () => {
+    // Touch ID cannot unlock without the keys, so /unlock would be a dead end.
+    expect(cancelResetPath('recovery_required')).toBe('/recover');
   });
 });

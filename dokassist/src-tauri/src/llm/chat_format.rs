@@ -72,6 +72,18 @@ impl ChatFamily {
         matches!(self, Self::Native)
     }
 
+    /// Assistant prefix that disables reasoning for one turn, appended after
+    /// the generation prompt. For `<think>` templates this is the empty think
+    /// block that Qwen-style templates render for `enable_thinking=False`.
+    /// Gemma 4 is switched off in [`ChatFamily::format`] at Low effort, and
+    /// Harmony has no off switch (the lowest level is `Reasoning: low`).
+    pub fn reasoning_off_prefix(self, template_uses_think_tags: bool) -> &'static str {
+        match self {
+            Self::Native if template_uses_think_tags => "<think>\n\n</think>\n\n",
+            _ => "",
+        }
+    }
+
     pub fn normalizer(self) -> ReasoningNormalizer {
         ReasoningNormalizer::new(self)
     }
@@ -420,6 +432,17 @@ mod tests {
         let mut out: String = pieces.iter().map(|p| n.push(p)).collect();
         out.push_str(&n.finish());
         out
+    }
+
+    #[test]
+    fn reasoning_off_prefills_an_empty_think_block_only_for_think_templates() {
+        assert_eq!(
+            ChatFamily::Native.reasoning_off_prefix(true),
+            "<think>\n\n</think>\n\n"
+        );
+        assert_eq!(ChatFamily::Native.reasoning_off_prefix(false), "");
+        assert_eq!(ChatFamily::Gemma4.reasoning_off_prefix(true), "");
+        assert_eq!(ChatFamily::Harmony.reasoning_off_prefix(true), "");
     }
 
     #[test]

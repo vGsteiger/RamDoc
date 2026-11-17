@@ -1,9 +1,10 @@
 {
   "schema_version": 1,
-  "suite_id": "ramdoc-local-inference-16gb-v1",
+  "suite_id": "ramdoc-local-inference-16gb-v2",
   "data_classification": "synthetic_deidentified",
   "random_seed": 0,
   "temperature": 0.0,
+  "reasoning": "off",
   "repetitions": 2,
   "sample_interval_ms": 25,
   "steady_state_delay_ms": 250,
