@@ -1051,7 +1051,14 @@
     "rename": "Umbenennen",
     "dismiss": "Benachrichtigung schliessen",
     "preview": "Vorschau",
-    "export": "Exportieren"
+    "export": "Exportieren",
+    "moreActions": "Weitere Aktionen",
+    "more": "Mehr",
+    "cannotUndo": "Dies kann nicht rückgängig gemacht werden.",
+    "progress": "Fortschritt",
+    "unknown": "unbekannt",
+    "measurementOne": "Messung",
+    "measurementMany": "Messungen"
   },
   "onboarding": {
     "skipForNow": "Später einrichten",

@@ -21,7 +21,7 @@
       'disabled:cursor-not-allowed disabled:bg-surface-sunken disabled:text-fg-disabled',
       invalid
         ? 'border-danger focus:border-danger focus:ring-2 focus:ring-danger/25'
-        : 'border-line focus:border-accent focus:ring-2 focus:ring-accent/25',
+        : 'border-line focus:border-focus focus:ring-2 focus:ring-focus/25',
       className,
     ].join(' ')
   );

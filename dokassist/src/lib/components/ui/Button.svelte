@@ -2,8 +2,8 @@
   import type { Snippet } from 'svelte';
   import { LoaderCircle } from 'lucide-svelte';
 
-  type Variant = 'primary' | 'secondary' | 'ghost' | 'subtle' | 'danger';
-  type Size = 'sm' | 'md';
+  type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'danger-solid';
+  type ButtonSize = 'sm' | 'md' | 'lg';
 
   let {
     variant = 'secondary',
@@ -17,8 +17,8 @@
     children,
     ...rest
   }: {
-    variant?: Variant;
-    size?: Size;
+    variant?: ButtonVariant;
+    size?: ButtonSize;
     type?: 'button' | 'submit' | 'reset';
     href?: string;
     disabled?: boolean;
@@ -29,19 +29,23 @@
     [key: string]: unknown;
   } = $props();
 
-  /* Exactly one primary action per view. Everything else is secondary or
-   * ghost — the accent stops meaning anything if it fills three buttons. */
-  const variants: Record<Variant, string> = {
+  /* Exactly one primary action per view: an ink fill. Everything else is
+   * secondary or ghost. `danger` is an outline at rest — a filled red button
+   * (`danger-solid`) belongs only inside a ConfirmDialog, where the user has
+   * already chosen the destructive path. */
+  const variants: Record<ButtonVariant, string> = {
     primary: 'border-transparent bg-accent text-on-accent hover:bg-accent-hover',
     secondary: 'border-line bg-surface-raised text-fg hover:bg-surface-hover',
     ghost: 'border-transparent text-fg-muted hover:bg-surface-hover hover:text-fg',
-    subtle: 'border-transparent bg-surface-hover text-fg hover:bg-surface-selected',
-    danger: 'border-transparent bg-danger text-on-danger hover:bg-danger-hover',
+    danger: 'border-danger-line bg-surface-raised text-danger-fg hover:bg-danger-subtle',
+    'danger-solid': 'border-transparent bg-danger text-on-danger hover:bg-danger-hover',
   };
 
-  const sizes: Record<Size, string> = {
-    sm: 'min-h-9 gap-1.5 px-3 text-label',
-    md: 'min-h-10 gap-2 px-3.5 text-body',
+  /* D5: 28 / 32 / 36 px. `lg` is for the chat composer and auth screens only. */
+  const sizes: Record<ButtonSize, string> = {
+    sm: 'h-control-sm gap-1.5 px-2.5 text-label',
+    md: 'h-control gap-2 px-3 text-body',
+    lg: 'h-control-lg gap-2 px-4 text-body',
   };
 
   // Anchors are never :disabled, so the disabled: variants below do nothing on
@@ -52,7 +56,9 @@
   let classes = $derived(
     [
       'inline-flex items-center justify-center rounded-control border font-medium leading-none',
-      'whitespace-nowrap transition-colors duration-150 ease-standard',
+      // A label never wraps or gets squeezed: overflow is a layout bug in the
+      // parent, not something a button should absorb by growing taller.
+      'shrink-0 whitespace-nowrap transition-colors duration-150 ease-standard',
       'disabled:pointer-events-none disabled:opacity-50',
       sizes[size],
       variants[variant],
@@ -78,7 +84,7 @@
     {@render children?.()}
   </a>
 {:else}
-  <button {type} class={classes} disabled={inert} {...rest}>
+  <button {type} class={classes} disabled={inert} aria-busy={loading || undefined} {...rest}>
     {#if loading}
       <LoaderCircle size={14} class="animate-spin" aria-hidden="true" />
     {/if}

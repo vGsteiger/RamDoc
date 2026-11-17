@@ -3,25 +3,31 @@
     value = $bindable(''),
     type = 'text',
     invalid = false,
+    controlSize = 'md',
     class: className = '',
     ...rest
   }: {
     value?: string | number | null;
     type?: string;
     invalid?: boolean;
+    /** 28 / 32 / 36 px. Not `size`: that is a native input/select attribute. */
+    controlSize?: 'sm' | 'md' | 'lg';
     class?: string;
     [key: string]: unknown;
   } = $props();
 
+  const heights = { sm: 'h-control-sm', md: 'h-control', lg: 'h-control-lg' };
+
   let classes = $derived(
     [
-      'h-8 w-full rounded-control border bg-surface-raised px-2.5 text-body text-fg',
+      heights[controlSize],
+      'w-full rounded-control border bg-surface-raised px-2.5 text-body text-fg',
       'transition-colors duration-150 ease-standard',
       'focus:outline-none focus-visible:outline-none',
       'disabled:cursor-not-allowed disabled:bg-surface-sunken disabled:text-fg-disabled',
       invalid
         ? 'border-danger focus:border-danger focus:ring-2 focus:ring-danger/25'
-        : 'border-line focus:border-accent focus:ring-2 focus:ring-accent/25',
+        : 'border-line focus:border-focus focus:ring-2 focus:ring-focus/25',
       className,
     ].join(' ')
   );

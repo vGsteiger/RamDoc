@@ -1051,7 +1051,14 @@
     "rename": "Rename",
     "dismiss": "Dismiss notification",
     "preview": "Preview",
-    "export": "Export"
+    "export": "Export",
+    "moreActions": "More actions",
+    "more": "More",
+    "cannotUndo": "This cannot be undone.",
+    "progress": "Progress",
+    "unknown": "unknown",
+    "measurementOne": "measurement",
+    "measurementMany": "measurements"
   },
   "onboarding": {
     "skipForNow": "Skip for now",
