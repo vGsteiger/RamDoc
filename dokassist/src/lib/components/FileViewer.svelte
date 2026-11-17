@@ -121,7 +121,7 @@
 
 {#if file}
   <div
-    class="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
+    class="fixed inset-0 z-50 flex items-center justify-center bg-scrim-strong"
     role="presentation"
     onclick={handleClose}
     onkeydown={(e) => e.key === 'Escape' && handleClose()}
@@ -191,7 +191,7 @@
             <div class="flex flex-col h-full gap-4 p-6 overflow-auto">
               <audio controls src={blobUrl} class="w-full shrink-0"></audio>
               <div class="flex items-center justify-between gap-3">
-                <h3 class="text-md font-semibold text-fg">{$t('dictation.transcript')}</h3>
+                <h3 class="text-heading font-semibold text-fg">{$t('dictation.transcript')}</h3>
                 {#if !transcript}
                   <button
                     onclick={transcribe}

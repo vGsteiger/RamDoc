@@ -1069,7 +1069,7 @@
     <!-- Installed Models List -->
     <div class="mb-6">
       <div class="flex flex-wrap items-start justify-between gap-3 mb-3">
-        <h3 class="text-md font-semibold text-fg">
+        <h3 class="text-heading font-semibold text-fg">
           {$t('settings.installedModels')}
         </h3>
         <button
@@ -1326,7 +1326,7 @@
     <!-- Download New Model -->
     {#if recommended}
       <div class="mb-6">
-        <h3 class="text-md font-semibold text-fg mb-3">
+        <h3 class="text-heading font-semibold text-fg mb-3">
           {$t('settings.recommendedModelSection')}
         </h3>
         <div class="bg-surface-hover border border-line rounded-card p-4">

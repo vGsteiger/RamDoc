@@ -330,7 +330,7 @@
         class="flex items-center gap-2 text-caption text-fg-muted hover:text-fg-muted transition-colors"
       >
         <Wrench size={14} class="text-fg-subtle" />
-        <span>{$t('chat.toolCall')}: {message.tool_name ?? 'unknown'}</span>
+        <span>{$t('chat.toolCall')}: {message.tool_name ?? $t('common.unknown')}</span>
         <span>{toolCallCollapsed ? '▶' : '▼'}</span>
       </button>
       {#if !toolCallCollapsed}

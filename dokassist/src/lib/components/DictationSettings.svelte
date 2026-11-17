@@ -84,7 +84,7 @@
     <p class="text-caption text-warning-fg mb-4">{$t('dictation.workerMissingSettings')}</p>
   {/if}
 
-  <h3 class="text-md font-semibold text-fg mb-3">{$t('dictation.models')}</h3>
+  <h3 class="text-heading font-semibold text-fg mb-3">{$t('dictation.models')}</h3>
   <div class="space-y-3">
     {#each status?.models ?? [] as model (model.id)}
       <div class="bg-surface-hover border border-line rounded-card p-4">

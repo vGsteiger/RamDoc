@@ -388,7 +388,7 @@
 {#if isOpen}
   <!-- Backdrop -->
   <div
-    class="fixed inset-0 bg-black/50 z-50 flex items-start justify-center pt-32"
+    class="fixed inset-0 bg-scrim z-50 flex items-start justify-center pt-32"
     onclick={handleBackdropClick}
     role="presentation"
   >

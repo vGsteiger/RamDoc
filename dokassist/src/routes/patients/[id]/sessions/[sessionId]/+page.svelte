@@ -610,7 +610,7 @@ ${activeDiagnoses ? `Aktive Diagnosen:\n${activeDiagnoses}` : ''}
 </div>
 
 {#if showDeleteConfirm}
-  <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+  <div class="fixed inset-0 bg-scrim flex items-center justify-center z-50">
     <div class="bg-surface-raised rounded-card p-6 max-w-md w-full mx-4">
       <h3 class="text-heading font-semibold text-fg mb-4">
         {$t('sessions.confirmDelete')}

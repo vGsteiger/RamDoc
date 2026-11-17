@@ -86,7 +86,7 @@
 {#if mobileOpen}
   <button
     type="button"
-    class="fixed inset-0 z-30 bg-black/25 sm:hidden"
+    class="fixed inset-0 z-30 bg-scrim sm:hidden"
     aria-label={$t('nav.closeNavigation')}
     onclick={() => onMobileClose?.()}
   ></button>

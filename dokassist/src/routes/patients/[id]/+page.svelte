@@ -327,7 +327,9 @@
                             {scaleType}
                             <span class="text-caption font-normal text-fg-muted">
                               ({scoresForScale.length}
-                              {scoresForScale.length === 1 ? 'measurement' : 'measurements'})
+                              {scoresForScale.length === 1
+                                ? $t('common.measurementOne')
+                                : $t('common.measurementMany')})
                             </span>
                           </h4>
                           <OutcomeScoreTrendChart scores={scoresForScale} {scaleType} />
@@ -480,7 +482,7 @@
       <!-- Delete Confirmation Modal -->
       {#if showDeleteConfirm}
         <div
-          class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          class="fixed inset-0 bg-scrim flex items-center justify-center z-50"
           role="presentation"
           onclick={() => (showDeleteConfirm = false)}
           onkeydown={(e) => e.key === 'Escape' && (showDeleteConfirm = false)}

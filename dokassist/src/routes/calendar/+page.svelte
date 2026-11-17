@@ -550,7 +550,7 @@
 <!-- Patient-picker modal for new session from time slot -->
 {#if showNewSessionModal}
   <div
-    class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+    class="fixed inset-0 bg-scrim flex items-center justify-center z-50"
     role="dialog"
     aria-modal="true"
     aria-label={$t('calendar.newSession')}
@@ -597,7 +597,7 @@
 <!-- Mark-completed modal -->
 {#if showCompleteModal && completeSession}
   <div
-    class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+    class="fixed inset-0 bg-scrim flex items-center justify-center z-50"
     role="dialog"
     aria-modal="true"
     aria-label={$t('calendar.completeSession')}

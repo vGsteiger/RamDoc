@@ -603,7 +603,7 @@
                 <!-- Goals Section -->
                 <div class="mb-6">
                   <div class="flex justify-between items-center mb-3">
-                    <h4 class="text-md font-semibold text-fg">{$t('treatmentPlans.goals')}</h4>
+                    <h4 class="text-heading font-semibold text-fg">{$t('treatmentPlans.goals')}</h4>
                     <button
                       onclick={() => {
                         if (showAddGoalForm) {
@@ -784,7 +784,7 @@
                 <!-- Interventions Section -->
                 <div>
                   <div class="flex justify-between items-center mb-3">
-                    <h4 class="text-md font-semibold text-fg">
+                    <h4 class="text-heading font-semibold text-fg">
                       {$t('treatmentPlans.interventions')}
                     </h4>
                     <button
