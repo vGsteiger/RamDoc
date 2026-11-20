@@ -454,7 +454,11 @@
     "applyToBody": "Zum Nachrichtentext übernehmen",
     "showReasoning": "Begründung anzeigen",
     "hideReasoning": "Begründung ausblenden",
-    "reasoningLines": "Zeilen"
+    "reasoningLines": "Zeilen",
+    "backToDocuments": "Dokumente",
+    "deleteTitle": "E-Mail löschen",
+    "confirmDeleteNamed": "Den E-Mail-Entwurf «{subject}» löschen?",
+    "noSubject": "(kein Betreff)"
   },
   "sessions": {
     "title": "Sitzungen",
@@ -681,7 +685,10 @@
       "activityWriting": "Schreibt einen Vorschlag",
       "apply": "Anwenden",
       "discard": "Verwerfen",
-      "charsSelected": "{count} Zeichen ausgewählt"
+      "charsSelected": "{count} Zeichen ausgewählt",
+      "suggestionsFor": "Vorschlag für die Auswahl",
+      "suggestionsForAll": "Vorschlag für den ganzen Bericht",
+      "closeSuggestions": "Vorschläge schliessen"
     },
     "types": {
       "befundbericht": "Umfassender Diagnosebericht mit Befunden und Beurteilung",
@@ -705,7 +712,15 @@
     "streamWillAppear": "Der Bericht erscheint hier, während er erstellt wird...",
     "streamWaiting": "Warten auf das Sprachmodell...",
     "streamEmpty": "Es wurde kein Berichtsinhalt erstellt.",
-    "fileChars": "({count} Zeichen)"
+    "fileChars": "({count} Zeichen)",
+    "editorMode": "Editor-Modus",
+    "backToDocuments": "Dokumente",
+    "generatedOn": "Erstellt am {date}",
+    "modelName": "Modell: {name}",
+    "deleteTitle": "Bericht löschen",
+    "confirmDeleteNamed": "{type} vom {date} löschen?",
+    "editing": "Bearbeitung",
+    "unsavedHint": "Der Export ist nach dem Speichern verfügbar."
   },
   "files": {
     "title": "Dateien",
@@ -732,7 +747,68 @@
     "uploadArea": "Datei-Upload-Bereich",
     "loadingFile": "Datei wird geladen...",
     "previewNotAvailable": "Für diesen Dateityp ist keine Vorschau verfügbar",
-    "downloadToView": "Zum Ansehen herunterladen"
+    "downloadToView": "Zum Ansehen herunterladen",
+    "loadFailed": "Die Datei konnte nicht geladen werden: {error}",
+    "browse": "Dateien auswählen",
+    "dropHere": "Dateien zum Hochladen ablegen",
+    "dropCompact": "Dateien hierher ziehen, oder",
+    "viewerDescription": "{type} · {size}",
+    "recording": "Diktataufnahme",
+    "openTranscribe": "Zum Transkribieren öffnen"
+  },
+  "documents": {
+    "title": "Dokumente",
+    "filterLabel": "Dokumenttyp",
+    "filters": {
+      "all": "Alle",
+      "files": "Dateien",
+      "reports": "Berichte",
+      "letters": "Briefe",
+      "emails": "E-Mails"
+    },
+    "new": "Neu",
+    "newMenu": "Dokument erstellen",
+    "uploadFile": "Datei hochladen",
+    "newReport": "Neuer Bericht",
+    "newLetter": "Neuer Brief",
+    "newEmail": "Neue E-Mail",
+    "kinds": {
+      "file": "Datei",
+      "report": "Bericht",
+      "letter": "Brief",
+      "email": "E-Mail"
+    },
+    "status": {
+      "draft": "Entwurf",
+      "final": "Final",
+      "sent": "Versendet"
+    },
+    "empty": {
+      "all": "Noch keine Dokumente",
+      "files": "Noch keine Dateien",
+      "reports": "Noch keine Berichte",
+      "letters": "Noch keine Briefe",
+      "emails": "Noch keine E-Mails"
+    },
+    "emptyHint": {
+      "all": "Laden Sie eine Datei hoch oder erstellen Sie über «Neu» einen Bericht, Brief oder eine E-Mail.",
+      "files": "Dateien oben ablegen oder im Menü «Neu» «Datei hochladen» wählen.",
+      "reports": "Berichte werden in einem Chat mit diesem Patienten entworfen.",
+      "letters": "Erstellen Sie aus der Patientenakte einen Überweisungs-, Kostengutsprache- oder Verlängerungsbrief.",
+      "emails": "Verfassen Sie eine E-Mail und speichern Sie sie als Entwurf oder öffnen Sie sie im Mailprogramm."
+    },
+    "loading": "Dokumente werden geladen...",
+    "partialError": "Einige Dokumente konnten nicht geladen werden: {kinds}",
+    "open": "Öffnen",
+    "edit": "Bearbeiten",
+    "view": "Ansehen",
+    "download": "Herunterladen",
+    "delete": "Löschen",
+    "deleteTitle": "Dokument löschen",
+    "confirmDelete": "«{name}» löschen?",
+    "deleteFailed": "«{name}» konnte nicht gelöscht werden: {error}",
+    "to": "an {recipient}",
+    "modifiedOn": "Zuletzt geändert am {date}"
   },
   "literature": {
     "title": "Literatur",
@@ -1005,7 +1081,25 @@
       "referral": "Formelles Zuweisungsschreiben an einen anderen Arzt oder Spezialisten",
       "insurance_authorization": "Antrag auf Kostengutsprache für psychiatrisch-psychotherapeutische Behandlung",
       "therapy_extension": "Gesuch um Verlängerung der bewilligten Therapiedauer"
-    }
+    },
+    "loadingLetter": "Brief wird geladen...",
+    "backToDocuments": "Dokumente",
+    "recipient": "Empfänger",
+    "content": "Brief",
+    "saveChanges": "Änderungen speichern",
+    "saved": "Brief gespeichert",
+    "copyText": "Text kopieren",
+    "copied": "Brieftext kopiert",
+    "deleteTitle": "Brief löschen",
+    "confirmDeleteNamed": "Den Brief «{subject}» löschen?",
+    "createdOn": "Erstellt am {date}",
+    "finalizedOn": "Finalisiert am {date}",
+    "sentOn": "Versendet am {date}",
+    "readOnlyHint": "Finalisierte Briefe können nicht mehr bearbeitet werden.",
+    "settings": "Brief",
+    "sources": "Grundlagen für den Entwurf",
+    "draftSection": "Entwurf",
+    "generateFirstHint": "Erstellen Sie einen Entwurf aus den Grundlagen oben, prüfen Sie ihn und speichern Sie ihn."
   },
   "thinking": {
     "label": "Nachdenken",

@@ -1,46 +1,51 @@
 <script lang="ts">
   import { t } from '$lib/translations';
-  export let content: string = '';
-  export let readonly: boolean = false;
+  import { Markdown, SegmentedControl, Textarea } from '$lib/components/ui';
 
-  let showPreview = false;
+  /* Plain report editor (Edit/Preview) without dictation or suggestions.
+   * EnhancedReportEditor is the full version used by the report page. */
+  let {
+    content = $bindable(''),
+    readonly = false,
+  }: {
+    content?: string;
+    readonly?: boolean;
+  } = $props();
+
+  let mode = $state<'edit' | 'preview'>('edit');
+
+  let modeOptions = $derived([
+    { value: 'edit', label: $t('reports.edit') },
+    { value: 'preview', label: $t('reports.preview') },
+  ]);
 </script>
 
-<div class="flex flex-col h-full border border-line rounded-card overflow-hidden">
-  <div class="flex border-b border-line bg-surface-hover">
-    <button
-      on:click={() => (showPreview = false)}
-      class="flex-1 h-8 px-3 text-body font-medium transition-colors {!showPreview
-        ? 'bg-surface-raised text-fg'
-        : 'text-fg-muted hover:text-fg'}"
-    >
-      {$t('reports.edit')}
-    </button>
-    <button
-      on:click={() => (showPreview = true)}
-      class="flex-1 h-8 px-3 text-body font-medium transition-colors {showPreview
-        ? 'bg-surface-raised text-fg'
-        : 'text-fg-muted hover:text-fg'}"
-    >
-      {$t('reports.preview')}
-    </button>
-  </div>
+<div class="space-y-3">
+  <SegmentedControl
+    options={modeOptions}
+    bind:value={mode}
+    label={$t('reports.editorMode')}
+    size="sm"
+  />
 
-  <div class="flex-1 overflow-auto">
-    {#if showPreview}
-      <div class="p-6 prose dark:prose-invert max-w-none">
-        {#if content}
-          <pre class="whitespace-pre-wrap font-sans text-fg">{content}</pre>
-        {:else}
-          <p class="text-fg-subtle italic">{$t('reports.noPreviewContent')}</p>
-        {/if}
-      </div>
-    {:else}
-      <textarea
-        bind:value={content}
-        {readonly}
-        class="w-full h-full p-6 bg-surface-raised text-fg font-mono text-body resize-none focus:outline-none"
-        placeholder={$t('reports.contentPlaceholder')}></textarea>
-    {/if}
-  </div>
+  {#if mode === 'preview'}
+    <div
+      class="min-h-80 rounded-card border border-line bg-surface-raised px-5 py-4 sm:px-8 sm:py-6"
+    >
+      {#if content}
+        <Markdown source={content} headingOffset={1} />
+      {:else}
+        <p class="text-body text-fg-subtle">{$t('reports.noPreviewContent')}</p>
+      {/if}
+    </div>
+  {:else}
+    <Textarea
+      bind:value={content}
+      {readonly}
+      rows={22}
+      class="resize-y px-4 py-3 leading-relaxed"
+      placeholder={$t('reports.contentPlaceholder')}
+      aria-label={$t('reports.edit')}
+    />
+  {/if}
 </div>
