@@ -1,34 +1,32 @@
 <script lang="ts">
   import { t } from '$lib/translations';
-  import { AlertCircle, CheckCircle2, X } from 'lucide-svelte';
+  import { CheckCircle2, XCircle, X } from 'lucide-svelte';
   import { toasts, removeToast } from '$lib/stores/toast';
+  import { IconButton } from '$lib/components/ui';
 </script>
 
+<!-- Top-right, clear of the sidebar and of the chat composer. An overlay surface with a hairline and one status icon: the icon shape
+     and the text carry the state, colour only reinforces it. -->
 <div
-  class="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"
+  class="pointer-events-none fixed right-4 top-4 z-50 flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-2"
   aria-live="polite"
   aria-atomic="false"
 >
   {#each $toasts as toast (toast.id)}
-    <!-- A bordered overlay surface with one tinted status icon, rather than a
-         saturated block of colour shouting from the corner of the screen. -->
     <div
-      role="status"
-      class="pointer-events-auto flex min-w-64 max-w-sm items-start gap-2.5 rounded-card border border-line bg-surface-overlay p-3 text-body text-fg shadow-popover"
+      role={toast.type === 'error' ? 'alert' : 'status'}
+      data-toast={toast.type}
+      class="pointer-events-auto flex items-start gap-2.5 rounded-card border border-line bg-surface-overlay py-2 pl-3 pr-1.5 text-body text-fg shadow-popover"
     >
       {#if toast.type === 'success'}
-        <CheckCircle2 size={16} class="mt-0.5 shrink-0 text-success-fg" aria-hidden="true" />
+        <CheckCircle2 size={16} class="mt-1.5 shrink-0 text-success-fg" aria-hidden="true" />
       {:else}
-        <AlertCircle size={16} class="mt-0.5 shrink-0 text-danger-fg" aria-hidden="true" />
+        <XCircle size={16} class="mt-1.5 shrink-0 text-danger-fg" aria-hidden="true" />
       {/if}
-      <span class="flex-1">{toast.message}</span>
-      <button
-        onclick={() => removeToast(toast.id)}
-        class="-mr-0.5 -mt-0.5 shrink-0 rounded-control p-0.5 text-fg-subtle transition-colors duration-150 ease-standard hover:bg-surface-hover hover:text-fg"
-        aria-label={$t('common.dismiss')}
-      >
-        <X size={14} />
-      </button>
+      <span class="min-w-0 flex-1 py-1 [overflow-wrap:anywhere]">{toast.message}</span>
+      <IconButton size="sm" label={$t('common.dismiss')} onclick={() => removeToast(toast.id)}>
+        <X size={14} aria-hidden="true" />
+      </IconButton>
     </div>
   {/each}
 </div>
