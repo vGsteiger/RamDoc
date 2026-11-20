@@ -31,12 +31,12 @@ describe('PageShell', () => {
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Patients');
     expect(screen.getByRole('button', { name: 'New patient' })).toBeInTheDocument();
     const shell = container.querySelector('[data-page-shell]');
-    expect(shell).toHaveClass('max-w-form', 'px-page-x', 'mx-auto');
+    expect(shell).toHaveClass('max-w-none', 'px-page-x', 'mx-auto');
   });
 
   it('defaults to the wide page width', () => {
     const { container } = render(PageShell, { children: html('<p>x</p>') });
-    expect(container.querySelector('[data-page-shell]')).toHaveClass('max-w-page');
+    expect(container.querySelector('[data-page-shell]')).toHaveClass('max-w-none');
     expect(screen.queryByRole('heading')).toBeNull();
   });
 });
@@ -122,7 +122,7 @@ describe('Tabs', () => {
     const selected = screen.getByRole('tab', { selected: true });
     expect(selected).toHaveTextContent('Sessions');
     expect(selected).toHaveAttribute('tabindex', '0');
-    expect(selected).toHaveClass('border-accent');
+    expect(selected).toHaveClass('bg-surface-raised', 'shadow-control');
     expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('tabindex', '-1');
   });
 

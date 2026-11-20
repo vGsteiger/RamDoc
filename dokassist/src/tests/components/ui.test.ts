@@ -38,9 +38,9 @@ describe('Button', () => {
     expect(screen.getByRole('button')).not.toHaveClass('bg-accent');
   });
 
-  it('uses an outlined danger button at rest and a filled one only on request', () => {
+  it('uses a quiet danger button at rest and a filled one only on request', () => {
     const { unmount } = render(Button, { variant: 'danger' });
-    expect(screen.getByRole('button')).toHaveClass('text-danger-fg', 'border-danger-line');
+    expect(screen.getByRole('button')).toHaveClass('text-danger-fg', 'bg-fill');
     expect(screen.getByRole('button')).not.toHaveClass('bg-danger');
     unmount();
 
@@ -188,11 +188,11 @@ describe('Badge and Card', () => {
     expect(badge.className).not.toMatch(RAW_PALETTE);
   });
 
-  it('separates cards with a hairline rather than a shadow', () => {
+  it('renders cards as soft sheets rather than outlined boxes', () => {
     const { container } = render(Card);
     const card = container.querySelector('div');
-    expect(card).toHaveClass('border-line');
-    expect(card?.className).not.toMatch(/shadow-/);
+    expect(card).toHaveClass('card-surface', 'rounded-panel');
+    expect(card).not.toHaveClass('border');
   });
 
   // List rows are clickable cards, so Card renders a real button rather than
@@ -201,7 +201,7 @@ describe('Badge and Card', () => {
     let clicks = 0;
     render(Card, { onclick: () => (clicks += 1) });
     const card = screen.getByRole('button');
-    expect(card).toHaveClass('rounded-card');
+    expect(card).toHaveClass('rounded-panel');
     await fireEvent.click(card);
     expect(clicks).toBe(1);
   });
@@ -213,7 +213,7 @@ describe('Badge and Card', () => {
 
   it('gains the hover affordance implicitly when actionable', () => {
     const { unmount } = render(Card, { onclick: () => {} });
-    expect(screen.getByRole('button')).toHaveClass('hover:bg-surface-hover');
+    expect(screen.getByRole('button')).toHaveClass('hover:bg-surface-raised');
     unmount();
 
     const { container } = render(Card);
