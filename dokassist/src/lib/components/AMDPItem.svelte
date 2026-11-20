@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { t } from '$lib/translations';
   import type { AMDPItem } from '$lib/amdp';
 
+  /* One AMDP item scored 0–3. The selected score is ink-filled (a selection, like a segment). */
   interface Props {
     item: AMDPItem;
     onScoreChange: (code: string, score: 0 | 1 | 2 | 3) => void;
@@ -9,10 +11,10 @@
   let { item, onScoreChange }: Props = $props();
 
   const scores = [
-    { value: 0, label: '0', title: 'Nicht vorhanden' },
-    { value: 1, label: '1', title: 'Leicht' },
-    { value: 2, label: '2', title: 'Mittel' },
-    { value: 3, label: '3', title: 'Schwer' },
+    { value: 0, titleKey: 'amdp.scoreNone' },
+    { value: 1, titleKey: 'amdp.scoreMild' },
+    { value: 2, titleKey: 'amdp.scoreModerate' },
+    { value: 3, titleKey: 'amdp.scoreSevere' },
   ] as const;
 
   function handleScoreClick(score: 0 | 1 | 2 | 3) {
@@ -20,26 +22,27 @@
   }
 </script>
 
-<div class="flex items-center justify-between py-2 px-3 hover:bg-surface-selected/30 rounded-card">
-  <div class="flex-1">
-    <span class="text-body text-fg-muted">
-      <span class="text-fg-muted font-mono text-caption mr-2">{item.code}</span>
-      {item.label}
-    </span>
-  </div>
-  <div class="flex gap-1 ml-4">
-    {#each scores as { value, label, title }}
+<div
+  class="flex items-center justify-between gap-3 rounded-control px-2 py-1 hover:bg-surface-hover"
+>
+  <span class="min-w-0 flex-1 text-body text-fg">
+    <span class="mr-2 font-mono text-caption text-fg-subtle">{item.code}</span>
+    {item.label}
+  </span>
+  <div class="flex shrink-0 gap-1" role="group" aria-label={item.label}>
+    {#each scores as { value, titleKey } (value)}
       <button
         type="button"
-        class="w-10 h-10 rounded-control transition-colors font-medium text-body"
-        class:bg-surface-hover={item.score !== value}
-        class:text-fg-muted={item.score !== value}
-        class:bg-accent={item.score === value}
-        class:text-on-accent={item.score === value}
+        class="size-control-sm rounded-control border text-label font-medium transition-colors duration-150 ease-standard {item.score ===
+        value
+          ? 'border-accent bg-accent text-on-accent'
+          : 'border-line bg-surface-raised text-fg-muted hover:bg-surface-hover'}"
+        aria-pressed={item.score === value}
         onclick={() => handleScoreClick(value)}
-        {title}
+        title={$t(titleKey)}
+        aria-label="{value} {$t(titleKey)}"
       >
-        {label}
+        {value}
       </button>
     {/each}
   </div>

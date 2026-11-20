@@ -2,6 +2,7 @@
   import { t } from '$lib/translations';
   import { untrack } from 'svelte';
   import type { CreateOutcomeScore, UpdateOutcomeScore, OutcomeScore } from '$lib/api';
+  import { Button, Field, Input, Select, Textarea } from '$lib/components/ui';
 
   interface Props {
     outcomeScore?: OutcomeScore;
@@ -26,10 +27,11 @@
   let administeredAt = $state(initial.administeredAt);
   let notes = $state(initial.notes);
 
+  // `value` is persisted; the label is translated.
   const scaleOptions = [
-    { value: 'PHQ-9', label: 'PHQ-9 (Depression)', max: 27 },
-    { value: 'GAD-7', label: 'GAD-7 (Anxiety)', max: 21 },
-    { value: 'BDI-II', label: 'BDI-II (Depression)', max: 63 },
+    { value: 'PHQ-9', labelKey: 'outcomeScores.scales.phq9', max: 27 },
+    { value: 'GAD-7', labelKey: 'outcomeScores.scales.gad7', max: 21 },
+    { value: 'BDI-II', labelKey: 'outcomeScores.scales.bdiii', max: 63 },
   ];
 
   let maxScore = $derived(scaleOptions.find((s) => s.value === scaleType)?.max || 27);
@@ -67,77 +69,50 @@
 </script>
 
 <form onsubmit={handleSubmit} class="space-y-4">
-  <div>
-    <label for="scale-type" class="block text-body font-medium text-fg mb-1">
-      {$t('outcomeScores.questionnaire')} *
-    </label>
-    <select
-      id="scale-type"
-      bind:value={scaleType}
-      required
-      class="w-full px-3 py-2 bg-surface-raised border border-line rounded-control text-fg focus:outline-none focus:ring-2 focus:ring-accent/30"
-    >
-      {#each scaleOptions as option}
-        <option value={option.value}>{option.label}</option>
+  <Field label={$t('outcomeScores.questionnaire')} for="scale-type" required>
+    <Select id="scale-type" bind:value={scaleType} required>
+      {#each scaleOptions as option (option.value)}
+        <option value={option.value}>{$t(option.labelKey)}</option>
       {/each}
-    </select>
-  </div>
+    </Select>
+  </Field>
 
-  <div>
-    <label for="score" class="block text-body font-medium text-fg mb-1">
-      {$t('outcomeScores.totalScoreLabel')} * (0-{maxScore})
-    </label>
-    <input
-      id="score"
-      type="number"
-      bind:value={score}
+  <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <Field
+      label={$t('outcomeScores.totalScoreLabel')}
+      for="score"
       required
-      min="0"
-      max={maxScore}
-      placeholder={$t('outcomeScores.scorePlaceholder')}
-      class="w-full px-3 py-2 bg-surface-raised border border-line rounded-control text-fg focus:outline-none focus:ring-2 focus:ring-accent/30"
-    />
+      hint={$t('outcomeScores.scoreRange').replace('{max}', String(maxScore))}
+    >
+      <Input
+        id="score"
+        type="number"
+        bind:value={score}
+        required
+        min="0"
+        max={maxScore}
+        placeholder={$t('outcomeScores.scorePlaceholder')}
+      />
+    </Field>
+
+    <Field label={$t('outcomeScores.administeredOnLabel')} for="administered-at" required>
+      <Input id="administered-at" type="date" bind:value={administeredAt} required />
+    </Field>
   </div>
 
-  <div>
-    <label for="administered-at" class="block text-body font-medium text-fg mb-1">
-      {$t('outcomeScores.administeredOnLabel')} *
-    </label>
-    <input
-      id="administered-at"
-      type="date"
-      bind:value={administeredAt}
-      required
-      class="w-full px-3 py-2 bg-surface-raised border border-line rounded-control text-fg focus:outline-none focus:ring-2 focus:ring-accent/30"
-    />
-  </div>
-
-  <div>
-    <label for="notes" class="block text-body font-medium text-fg mb-1">
-      {$t('common.notes')}
-    </label>
-    <textarea
-      id="notes"
+  <Field label={$t('common.notes')} for="score-notes">
+    <Textarea
+      id="score-notes"
       bind:value={notes}
-      rows="3"
+      rows={3}
       placeholder={$t('outcomeScores.notesPlaceholder')}
-      class="w-full px-3 py-2 bg-surface-raised border border-line rounded-control text-fg focus:outline-none focus:ring-2 focus:ring-accent/30 resize-none"
-    ></textarea>
-  </div>
+    />
+  </Field>
 
-  <div class="flex justify-end gap-3 pt-4">
-    <button
-      type="button"
-      onclick={onCancel}
-      class="h-8 px-3 bg-surface-selected text-fg rounded-control hover:bg-surface-selected transition-colors"
-    >
-      {$t('common.cancel')}
-    </button>
-    <button
-      type="submit"
-      class="h-8 px-3 bg-accent text-on-accent rounded-control hover:bg-accent-hover transition-colors"
-    >
+  <div class="flex justify-end gap-2 pt-2">
+    <Button onclick={onCancel}>{$t('common.cancel')}</Button>
+    <Button type="submit" variant="primary">
       {outcomeScore ? $t('common.update') : $t('common.add')}
-    </button>
+    </Button>
   </div>
 </form>

@@ -3,6 +3,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import { onDestroy } from 'svelte';
   import type { SubstanceSummary } from '$lib/api';
+  import { Input } from '$lib/components/ui';
 
   interface Props {
     value: string;
@@ -102,7 +103,7 @@
 </script>
 
 <div class="relative">
-  <input
+  <Input
     {id}
     type="text"
     {value}
@@ -122,7 +123,6 @@
       ? `${id}-option-${selectedIndex}`
       : undefined}
     aria-autocomplete="list"
-    class="w-full px-3 py-2 bg-surface-selected border border-line rounded-control text-fg focus:outline-none focus:ring-2 focus:ring-accent/30"
   />
 
   {#if showDropdown && suggestions.length > 0}
@@ -130,15 +130,15 @@
       id="{id}-listbox"
       role="listbox"
       aria-label={$t('medications.suggestions')}
-      class="absolute z-20 w-full mt-1 bg-surface-hover border border-line rounded-card shadow-modal max-h-64 overflow-y-auto"
+      class="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-card border border-line bg-surface-overlay p-1 shadow-popover"
     >
-      {#each suggestions as entry, index}
+      {#each suggestions as entry, index (`${entry.id}-${index}`)}
         <button
           type="button"
           id="{id}-option-{index}"
           role="option"
           aria-selected={index === selectedIndex}
-          class="w-full px-3 py-2 text-left transition-colors flex items-start gap-2"
+          class="flex w-full items-start gap-2 rounded-control px-2 py-1.5 text-left transition-colors duration-150 ease-standard"
           class:bg-surface-selected={index === selectedIndex}
           onmouseenter={() => (selectedIndex = index)}
           onclick={() => handleSelect(entry)}
@@ -153,7 +153,7 @@
           </div>
           {#if entry.atc_code}
             <span
-              class="shrink-0 text-caption font-mono bg-accent-subtle text-accent-fg px-1.5 py-0.5 rounded-card"
+              class="shrink-0 rounded-control border border-line-subtle px-1.5 font-mono text-caption text-fg-muted"
             >
               {entry.atc_code}
             </span>
