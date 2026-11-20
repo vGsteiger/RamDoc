@@ -3,7 +3,7 @@
   import { get } from 'svelte/store';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import { open as openFileDialog } from '@tauri-apps/plugin-dialog';
-  import { Alert, Button, Dialog } from '$lib/components/ui';
+  import { Alert, Button, Dialog, ProgressBar } from '$lib/components/ui';
   import { inspectPromotedModel, importPromotedModel, type PromotedModelPreview } from '$lib/api';
   import { t } from '$lib/translations';
 
@@ -135,7 +135,7 @@
     <Alert tone="info">{$t('settings.promotionDisclaimer')}</Alert>
 
     {#if preview}
-      <div class="rounded-card border border-line bg-surface-hover p-3">
+      <div class="rounded-card border border-line-subtle bg-surface p-3">
         <p class="text-body font-medium text-fg">{preview.display_name}</p>
         <p class="text-caption text-fg-muted mt-1">
           {$t('settings.promotionQuantization').replace('{quantization}', preview.quantization)}
@@ -172,7 +172,7 @@
           {$t('settings.promotionChangeRecord')}
         </Button>
         {#if !preview.artifact_found || !preview.artifact_size_matches}
-          <Button size="sm" variant="primary" onclick={handleChooseGguf} disabled={importing}>
+          <Button size="sm" onclick={handleChooseGguf} disabled={importing}>
             {$t('settings.promotionChooseGguf')}
           </Button>
         {/if}
@@ -184,22 +184,10 @@
     {/if}
 
     {#if importing || (progress !== null && !success)}
-      <div>
-        <div class="flex justify-between text-caption text-fg-muted mb-1">
-          <span>
-            {$t('settings.promotionImportProgress').replace('{percent}', String(progress ?? 0))}
-          </span>
-        </div>
-        <div
-          class="w-full bg-surface-selected rounded-full h-2"
-          role="progressbar"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={progress ?? 0}
-        >
-          <div class="bg-accent h-2 rounded-full" style="width: {progress ?? 0}%"></div>
-        </div>
-      </div>
+      <ProgressBar
+        value={progress ?? 0}
+        label={$t('settings.promotionImportProgress').replace('{percent}', String(progress ?? 0))}
+      />
     {/if}
 
     {#if error}

@@ -250,7 +250,9 @@
       "warningBody": "Dabei werden ALLE aktuellen Daten durch das Backup ersetzt. Geben Sie",
       "warningConfirm": "zur Bestätigung ein.",
       "restoring": "Wird wiederhergestellt…",
-      "confirmRestore": "Wiederherstellung bestätigen"
+      "confirmRestore": "Wiederherstellung bestätigen",
+      "chooseFile": "Sicherungsdatei auswählen",
+      "noFile": "Keine Datei ausgewählt"
     },
     "needsRam": "Benötigt {gb} GB+ RAM",
     "modelSpecs": "Grösse: {size} • Mindest-RAM: {ram} GB • Nativer Kontext: {context}K",
@@ -265,7 +267,73 @@
     "contextWarm": "Warmer Kontext",
     "contextCold": "Kalter Kontext",
     "cacheStats": "{reused} wiederverwendet · {evaluated} ausgewertet · {prefill} ms Prefill",
-    "availableModelsHint": "Wählen Sie ein Modell passend zum verfügbaren Arbeitsspeicher. Ihr System hat {ram} RAM."
+    "availableModelsHint": "Wählen Sie ein Modell passend zum verfügbaren Arbeitsspeicher. Ihr System hat {ram} RAM.",
+    "nav": {
+      "label": "Einstellungsbereiche",
+      "general": "Allgemein",
+      "practice": "Praxis",
+      "models": "KI-Modelle",
+      "dictation": "Diktat",
+      "referenceData": "Referenzdaten",
+      "importBackup": "Import & Backup",
+      "updates": "Updates & Info",
+      "dangerZone": "Gefahrenzone"
+    },
+    "panes": {
+      "generalDesc": "Sprache und Darstellung.",
+      "practiceDesc": "Werden für die Abrechnung und die Patientendokumentation verwendet.",
+      "modelsDesc": "Lokale Modelle schreiben Berichte und Briefe, leiten Werkzeugaufrufe und ermöglichen die Literatursuche. Alles läuft auf diesem Mac.",
+      "referenceDataDesc": "Lokale Referenzdatenbanken. Es verlassen keine Patientendaten diesen Mac.",
+      "importBackupDesc": "Patienten aus einer CSV-Datei übernehmen und den verschlüsselten Tresor sichern oder wiederherstellen.",
+      "updatesDesc": "Installierte Version und neue Versionen.",
+      "dangerZoneDesc": "Unumkehrbare Aktionen. Jede verlangt die Eingabe eines Bestätigungsworts."
+    },
+    "practice": {
+      "groupPractice": "Praxis und Behandler",
+      "groupContact": "Kontakt",
+      "groupBilling": "Abrechnung",
+      "name": "Praxisname",
+      "namePlaceholder": "Praxisname eingeben",
+      "therapist": "Name des Behandlers",
+      "therapistPlaceholder": "Ihren Namen eingeben",
+      "specialty": "Fachrichtung",
+      "specialtyPlaceholder": "z.B. Klinische Psychologie, Psychiatrie",
+      "address": "Praxisadresse",
+      "addressPlaceholder": "Strasse, PLZ und Ort",
+      "phone": "Telefon",
+      "email": "E-Mail",
+      "zsr": "ZSR-Nummer",
+      "zsrHint": "Für die TARMED-Abrechnung.",
+      "zsrPlaceholder": "ZSR-Nummer",
+      "canton": "Kanton",
+      "cantonHint": "Bestimmt den Taxpunktwert.",
+      "cantonSelect": "Kanton auswählen",
+      "save": "Änderungen speichern",
+      "saved": "Gespeichert",
+      "unsaved": "Ungespeicherte Änderungen",
+      "loadFailed": "Die Praxisangaben konnten nicht geladen werden."
+    },
+    "models": {
+      "writingStatus": "Schreibmodell",
+      "writingStatusDesc": "Schreibt Berichte, Briefe und Chat-Antworten. Laden Sie unten ein anderes installiertes Modell.",
+      "recommendedBadge": "Empfohlen",
+      "deleteTitle": "{name} löschen?",
+      "deleteMessage": "Die Modelldatei wird von diesem Mac entfernt. Sie können sie später erneut herunterladen.",
+      "routerResident": "Router im Speicher",
+      "routerResidentDesc": "Entladen gibt Speicher frei; der Router wird bei Bedarf erneut geladen.",
+      "routerNotLoaded": "Nicht geladen",
+      "diagnostics": "Expertendiagnose",
+      "diagnosticsDesc": "Laufzeitprofil, aktive Inferenzkonfiguration und Leistung der letzten Generierung.",
+      "reportSampling": "Berichts-Sampling",
+      "retrieval": "Literatursuche",
+      "routing": "Werkzeug-Routing"
+    },
+    "updates": {
+      "newVersion": "Version {version} ist verfügbar",
+      "releaseNotes": "Versionshinweise",
+      "upToDate": "Sie sind auf dem neuesten Stand"
+    },
+    "typedConfirmLabel": "Bestätigungswort"
   },
   "auth": {
     "welcomeToRamDoc": "Willkommen bei RamDoc",
@@ -1271,6 +1339,7 @@
     "transcript": "Diktat-Transkript",
     "transcribe": "Transkribieren",
     "transcribingFile": "Transkribiere {done}/{total}…",
-    "transcriptionFailed": "Transkription fehlgeschlagen: {error}"
+    "transcriptionFailed": "Transkription fehlgeschlagen: {error}",
+    "deleteTitle": "{name} löschen?"
   }
 }
