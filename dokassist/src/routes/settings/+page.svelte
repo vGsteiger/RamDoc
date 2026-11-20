@@ -231,6 +231,9 @@
     try {
       updateInfo = await checkForUpdates();
     } catch (e) {
+      // Drop any earlier result: a stale "You're up to date!" must not
+      // remain on screen next to (or instead of) a failed check.
+      updateInfo = null;
       updateError = $errorText(e);
     } finally {
       checkingUpdate = false;

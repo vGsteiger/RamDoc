@@ -1212,7 +1212,8 @@
       "DB_UNIQUE_CONSTRAINT": "This record already exists in the database.",
       "DB_FOREIGN_KEY": "Cannot complete this operation because it references data that doesn't exist.",
       "AUTH_REQUIRED": "Please unlock the application to continue.",
-      "LLM_ERROR": "An error occurred while generating content with the language model."
+      "LLM_ERROR": "An error occurred while generating content with the language model.",
+      "UPDATE_INFO_UNAVAILABLE": "Couldn't load update information. You may be offline, or the newest release is still being published. Please try again in a few minutes."
     },
     "referenceLine": "Error reference: {ref}\n(Share this reference with support if you need help.)"
   },
