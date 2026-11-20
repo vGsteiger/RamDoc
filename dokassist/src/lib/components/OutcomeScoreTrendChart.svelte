@@ -3,6 +3,7 @@
   import { interpretationLabel } from '$lib/translations/labels';
   import { onMount } from 'svelte';
   import type { OutcomeScore } from '$lib/api';
+  import { fmt } from '$lib/format';
 
   interface Props {
     scores: OutcomeScore[];
@@ -43,14 +44,7 @@
     return 30;
   };
 
-  const formatDate = (dateStr: string): string => {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('de-CH', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-  };
+  const formatDate = (dateStr: string): string => $fmt.date(dateStr);
 
   const drawChart = () => {
     if (!canvas || scores.length === 0) return;

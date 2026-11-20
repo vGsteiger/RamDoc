@@ -2,7 +2,6 @@
   import { errorText } from '$lib/translations/labels';
   import { get } from 'svelte/store';
   import { onMount } from 'svelte';
-  import { goto } from '$app/navigation';
   import { listPatients, globalSearch, type Patient } from '$lib/api';
   import PatientCard from '$lib/components/PatientCard.svelte';
   import {
@@ -11,7 +10,7 @@
     EmptyState,
     Input,
     ListSkeleton,
-    PageHeader,
+    PageShell,
     Select,
   } from '$lib/components/ui';
   import { Plus, Users } from 'lucide-svelte';
@@ -99,74 +98,67 @@
   }
 
   let sortedPatients = $derived(sortPatients(filteredPatients));
-
-  function handlePatientClick(patientId: string) {
-    goto(`/patients/${patientId}`);
-  }
-
-  function handleNewPatient() {
-    goto('/patients/new');
-  }
 </script>
 
-<div class="p-8">
-  <div class="max-w-7xl mx-auto">
-    <PageHeader title={$t('patients.title')}>
-      {#snippet actions()}
-        <Button variant="primary" onclick={handleNewPatient}>
-          <Plus size={14} />
-          {$t('patients.newPatient')}
-        </Button>
-      {/snippet}
-    </PageHeader>
+<PageShell title={$t('patients.title')}>
+  {#snippet actions()}
+    <Button variant="primary" href="/patients/new">
+      <Plus size={14} aria-hidden="true" />
+      {$t('patients.newPatient')}
+    </Button>
+  {/snippet}
 
-    <div class="flex gap-2 mb-4">
-      <Input
-        type="search"
-        class="flex-1"
-        placeholder={$t('patients.search')}
-        bind:value={searchQuery}
-        oninput={(e: Event) => handleSearch((e.currentTarget as HTMLInputElement).value)}
-      />
-      <Select bind:value={sortBy} class="w-48">
-        <option value="name">{$t('patients.sortByName')}</option>
-        <option value="created">{$t('patients.sortByCreated')}</option>
-      </Select>
-    </div>
-
-    {#if !isLoading}
-      <div class="mb-4 text-caption text-fg-subtle">
-        {sortedPatients.length}
-        {sortedPatients.length === 1 ? $t('patients.patient') : $t('patients.patients')}
-        {#if searchQuery}
-          {$t('patients.matching')} "{searchQuery}"
-        {/if}
-      </div>
-    {/if}
-
-    {#if isLoading}
-      <ListSkeleton count={5} />
-    {:else if error}
-      <Alert tone="danger">{error}</Alert>
-    {:else if sortedPatients.length === 0}
-      <EmptyState
-        icon={Users}
-        title={searchQuery ? $t('patients.noSearchResults') : $t('patients.noPatients')}
-      >
-        {#snippet action()}
-          {#if !searchQuery}
-            <Button variant="primary" onclick={handleNewPatient}>
-              {$t('patients.createFirst')}
-            </Button>
-          {/if}
-        {/snippet}
-      </EmptyState>
-    {:else}
-      <div class="grid gap-2">
-        {#each sortedPatients as patient (patient.id)}
-          <PatientCard {patient} onclick={() => handlePatientClick(patient.id)} />
-        {/each}
-      </div>
-    {/if}
+  <div class="mb-3 flex flex-wrap items-center gap-2">
+    <Input
+      type="search"
+      class="min-w-48 flex-1"
+      placeholder={$t('patients.search')}
+      aria-label={$t('patients.search')}
+      bind:value={searchQuery}
+      oninput={(e: Event) => handleSearch((e.currentTarget as HTMLInputElement).value)}
+    />
+    <Select bind:value={sortBy} class="w-48" aria-label={$t('patients.sortLabel')}>
+      <option value="name">{$t('patients.sortByName')}</option>
+      <option value="created">{$t('patients.sortByCreated')}</option>
+    </Select>
   </div>
-</div>
+
+  {#if isLoading}
+    <ListSkeleton count={6} />
+  {:else if error}
+    <Alert tone="danger">{error}</Alert>
+  {:else if sortedPatients.length === 0}
+    <EmptyState
+      icon={Users}
+      title={searchQuery ? $t('patients.noSearchResults') : $t('patients.noPatients')}
+    >
+      {#snippet action()}
+        {#if !searchQuery}
+          <Button href="/patients/new">{$t('patients.createFirst')}</Button>
+        {/if}
+      {/snippet}
+    </EmptyState>
+  {:else}
+    <div
+      class="flex items-center gap-2 border-b border-line-subtle px-3 pb-1.5 text-caption text-fg-subtle"
+      aria-hidden="true"
+    >
+      <span class="min-w-0 flex-1">{$t('patients.name')}</span>
+      <span class="w-36 shrink-0">{$t('patients.dateOfBirth')}</span>
+      <span class="hidden w-40 shrink-0 md:block">{$t('patients.ahvNumber')}</span>
+    </div>
+    <ul class="mt-1" aria-label={$t('patients.title')}>
+      {#each sortedPatients as patient (patient.id)}
+        <li>
+          <PatientCard {patient} />
+        </li>
+      {/each}
+    </ul>
+    <p class="mt-3 px-3 text-caption text-fg-subtle" role="status">
+      {(sortedPatients.length === 1 ? $t('patients.countOne') : $t('patients.countMany')).replace(
+        '{count}',
+        String(sortedPatients.length)
+      )}
+    </p>
+  {/if}
+</PageShell>

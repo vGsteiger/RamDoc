@@ -11,10 +11,10 @@
   let { current, replacement }: Props = $props();
 </script>
 
-<div class="bg-surface-raised border border-line rounded-card p-6">
+<div class="bg-surface-raised border border-line rounded-card p-4">
   <h3 class="text-heading font-semibold text-fg mb-4">{$t('medications.comparison')}</h3>
 
-  <div class="grid grid-cols-2 gap-6">
+  <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
     <!-- Current Medication Column -->
     <div class="border-r border-line pr-4">
       <div class="mb-4">

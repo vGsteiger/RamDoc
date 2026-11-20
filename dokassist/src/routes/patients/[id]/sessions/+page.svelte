@@ -3,10 +3,16 @@
   import { get } from 'svelte/store';
   import { onMount } from 'svelte';
   import { page } from '$app/state';
-  import { goto } from '$app/navigation';
   import { listSessionsForPatient, type Session } from '$lib/api';
   import SessionCard from '$lib/components/SessionCard.svelte';
-  import { Alert, Button, EmptyState, PageHeader, Spinner } from '$lib/components/ui';
+  import {
+    Alert,
+    Button,
+    EmptyState,
+    ListSkeleton,
+    PageShell,
+    SectionHeader,
+  } from '$lib/components/ui';
   import { CalendarClock, Plus } from 'lucide-svelte';
 
   const patientId = $derived(page.params.id!);
@@ -32,43 +38,35 @@
       loading = false;
     }
   }
-
-  function handleNewSession() {
-    goto(`/patients/${patientId}/sessions/new`);
-  }
-
-  function handleSessionClick(sessionId: string) {
-    goto(`/patients/${patientId}/sessions/${sessionId}`);
-  }
 </script>
 
-<div class="p-8">
-  <PageHeader title={$t('sessions.title')}>
+<PageShell>
+  <SectionHeader title={$t('sessions.title')}>
     {#snippet actions()}
-      <Button variant="primary" onclick={handleNewSession}>
-        <Plus size={14} />
+      <Button size="sm" href={`/patients/${patientId}/sessions/new`}>
+        <Plus size={14} aria-hidden="true" />
         {$t('sessions.newSession')}
       </Button>
     {/snippet}
-  </PageHeader>
+  </SectionHeader>
 
   {#if loading}
-    <div class="flex justify-center py-12">
-      <Spinner label={$t('common.loading')} />
-    </div>
+    <ListSkeleton count={4} />
   {:else if error}
     <Alert tone="danger">{error}</Alert>
   {:else if sessions.length === 0}
     <EmptyState icon={CalendarClock} title={$t('sessions.noSessions')}>
       {#snippet action()}
-        <Button variant="primary" onclick={handleNewSession}>{$t('sessions.addFirst')}</Button>
+        <Button href={`/patients/${patientId}/sessions/new`}>{$t('sessions.addFirst')}</Button>
       {/snippet}
     </EmptyState>
   {:else}
-    <div class="grid gap-2">
+    <ul class="-mx-3" aria-label={$t('sessions.title')}>
       {#each sessions as session (session.id)}
-        <SessionCard {session} onclick={() => handleSessionClick(session.id)} />
+        <li>
+          <SessionCard {session} href={`/patients/${patientId}/sessions/${session.id}`} />
+        </li>
       {/each}
-    </div>
+    </ul>
   {/if}
-</div>
+</PageShell>

@@ -91,7 +91,7 @@ Nutze das compare_medications Tool, um detaillierte Informationen zu beiden Medi
   <MedicationComparisonPanel current={currentSubstance} replacement={replacementSubstance} />
 
   <!-- Guidance Section -->
-  <div class="bg-surface-raised border border-line rounded-card p-6">
+  <div class="bg-surface-raised border border-line rounded-card p-4">
     <div class="flex items-center justify-between mb-4">
       <h3 class="text-heading font-semibold text-fg">{$t('medications.decisionSupport')}</h3>
       <Button variant="primary" onclick={generateGuidance} loading={isGenerating}>

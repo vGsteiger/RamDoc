@@ -410,7 +410,35 @@
     "exportSummaryFailed": "Failed to export patient summary",
     "exporting": "Exporting...",
     "exportPdf": "Export PDF",
-    "duplicateAhv": "A patient with this AHV number already exists."
+    "duplicateAhv": "A patient with this AHV number already exists.",
+    "tabChats": "Chats",
+    "tabTreatmentPlan": "Treatment plan",
+    "tabDocuments": "Documents",
+    "ageYears": "{age} years",
+    "ahvShort": "AHV",
+    "newChat": "New chat",
+    "patientActions": "Patient actions",
+    "keyFacts": "Active diagnoses and current medications",
+    "moreCount": "+{count} more",
+    "noChats": "No chats about this patient yet",
+    "noChatsHint": "Start a chat to ask about the record, draft a report or summarise sessions. The patient is attached automatically.",
+    "untitledChat": "Untitled chat",
+    "updated": "Patient updated",
+    "activeDiagnoses": "Active diagnoses",
+    "noActiveDiagnoses": "No active diagnoses",
+    "currentMedications": "Current medications",
+    "noCurrentMedications": "No current medications",
+    "recentSessions": "Recent sessions",
+    "incompleteNotes": "Notes to finish",
+    "incompleteNotesHint": "Sessions without notes",
+    "viewAll": "View all",
+    "details": "Patient details",
+    "createdOn": "Created {date}",
+    "updatedOn": "updated {date}",
+    "sortLabel": "Sort patients",
+    "name": "Name",
+    "countOne": "{count} patient",
+    "countMany": "{count} patients"
   },
   "email": {
     "title": "Emails",
@@ -501,7 +529,9 @@
     "amdpTitle": "AMDP assessment",
     "saved": "Session saved",
     "markedCompleted": "Session marked as completed",
-    "updateFailed": "Failed to update session"
+    "updateFailed": "Failed to update session",
+    "deleteSession": "Delete session",
+    "confirmDeleteNamed": "Delete the session \"{type}\" of {date}?"
   },
   "diagnoses": {
     "title": "Diagnoses",
@@ -524,7 +554,9 @@
     "addFirst": "Add the first diagnosis",
     "icdCode": "ICD-10 code",
     "diagnosedOnValue": "Diagnosed: {date}",
-    "resolvedOnValue": "Resolved: {date}"
+    "resolvedOnValue": "Resolved: {date}",
+    "deleteDiagnosis": "Delete diagnosis",
+    "confirmDeleteNamed": "Delete the diagnosis {code} \"{name}\"?"
   },
   "medications": {
     "title": "Medications",
@@ -568,7 +600,9 @@
     "replacementNotEnded": "The new medication was recorded, but the replaced medication could not be ended: ",
     "suggestions": "Medication suggestions",
     "dateRangeFrom": "From {date}",
-    "dateRangeTo": "to {date}"
+    "dateRangeTo": "to {date}",
+    "deleteMedication": "Delete medication",
+    "confirmDeleteNamed": "Delete the medication \"{name}\"?"
   },
   "outcomeScores": {
     "title": "Outcome Scores",
@@ -604,7 +638,12 @@
       "Severe": "Severe"
     },
     "totalScoreLabel": "Total score",
-    "scoreValue": "Score: {score}"
+    "scoreValue": "Score: {score}",
+    "editScore": "Edit score",
+    "deleteScore": "Delete score",
+    "confirmDeleteNamed": "Delete the {scale} score of {date}?",
+    "changeSince": "{delta} since {date}",
+    "scoreRange": "0 to {max}"
   },
   "reports": {
     "title": "Reports",
@@ -1197,7 +1236,12 @@
     "confirmDeleteGoal": "Are you sure you want to delete this goal?",
     "confirmDeleteIntervention": "Are you sure you want to delete this intervention?",
     "confirmDeletePlan": "Are you sure you want to delete this treatment plan? This will also delete all goals and interventions.",
-    "targetDateValue": "Target: {date}"
+    "targetDateValue": "Target: {date}",
+    "deletePlan": "Delete treatment plan",
+    "confirmDeletePlanNamed": "Delete the treatment plan \"{name}\"? Its goals and interventions are deleted too.",
+    "confirmDeleteGoalNamed": "Delete the goal \"{name}\"?",
+    "confirmDeleteInterventionNamed": "Delete the intervention \"{name}\"?",
+    "dateRange": "{start} – {end}"
   },
   "errors": {
     "copy": "Copy",
@@ -1272,5 +1316,11 @@
     "transcribe": "Transcribe",
     "transcribingFile": "Transcribing {done}/{total}…",
     "transcriptionFailed": "Transcription failed: {error}"
+  },
+  "amdp": {
+    "scoreNone": "Not present",
+    "scoreMild": "Mild",
+    "scoreModerate": "Moderate",
+    "scoreSevere": "Severe"
   }
 }

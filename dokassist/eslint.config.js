@@ -23,9 +23,9 @@ export default tseslint.config(
     },
   },
 
-  // Svelte files: tell the TS parser about the svelte parser
+  // Svelte files (and rune modules, *.svelte.ts): tell the svelte parser to use the TS parser
   {
-    files: ['**/*.svelte'],
+    files: ['**/*.svelte', '**/*.svelte.ts'],
     languageOptions: {
       parserOptions: {
         parser: tseslint.parser,

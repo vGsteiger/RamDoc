@@ -410,7 +410,35 @@
     "exportSummaryFailed": "Patientenzusammenfassung konnte nicht exportiert werden",
     "exporting": "Wird exportiert...",
     "exportPdf": "Als PDF exportieren",
-    "duplicateAhv": "Ein Patient mit dieser AHV-Nummer existiert bereits."
+    "duplicateAhv": "Ein Patient mit dieser AHV-Nummer existiert bereits.",
+    "tabChats": "Chats",
+    "tabTreatmentPlan": "Behandlungsplan",
+    "tabDocuments": "Dokumente",
+    "ageYears": "{age} Jahre",
+    "ahvShort": "AHV",
+    "newChat": "Neuer Chat",
+    "patientActions": "Patientenaktionen",
+    "keyFacts": "Aktive Diagnosen und aktuelle Medikation",
+    "moreCount": "+{count} weitere",
+    "noChats": "Noch keine Chats zu diesem Patienten",
+    "noChatsHint": "Starten Sie einen Chat, um Fragen zur Akte zu stellen, Berichte zu entwerfen oder Sitzungen zusammenzufassen. Der Patient wird automatisch angehängt.",
+    "untitledChat": "Chat ohne Titel",
+    "updated": "Patient aktualisiert",
+    "activeDiagnoses": "Aktive Diagnosen",
+    "noActiveDiagnoses": "Keine aktiven Diagnosen",
+    "currentMedications": "Aktuelle Medikation",
+    "noCurrentMedications": "Keine aktuelle Medikation",
+    "recentSessions": "Letzte Sitzungen",
+    "incompleteNotes": "Offene Notizen",
+    "incompleteNotesHint": "Sitzungen ohne Notizen",
+    "viewAll": "Alle anzeigen",
+    "details": "Personalien",
+    "createdOn": "Erstellt am {date}",
+    "updatedOn": "aktualisiert am {date}",
+    "sortLabel": "Patienten sortieren",
+    "name": "Name",
+    "countOne": "{count} Patient",
+    "countMany": "{count} Patienten"
   },
   "email": {
     "title": "E-Mails",
@@ -501,7 +529,9 @@
     "amdpTitle": "AMDP-Befunderhebung",
     "saved": "Sitzung gespeichert",
     "markedCompleted": "Sitzung als abgeschlossen markiert",
-    "updateFailed": "Sitzung konnte nicht aktualisiert werden"
+    "updateFailed": "Sitzung konnte nicht aktualisiert werden",
+    "deleteSession": "Sitzung löschen",
+    "confirmDeleteNamed": "Die Sitzung «{type}» vom {date} löschen?"
   },
   "diagnoses": {
     "title": "Diagnosen",
@@ -524,7 +554,9 @@
     "addFirst": "Erste Diagnose erfassen",
     "icdCode": "ICD-10-Code",
     "diagnosedOnValue": "Diagnostiziert: {date}",
-    "resolvedOnValue": "Aufgelöst: {date}"
+    "resolvedOnValue": "Aufgelöst: {date}",
+    "deleteDiagnosis": "Diagnose löschen",
+    "confirmDeleteNamed": "Die Diagnose {code} «{name}» löschen?"
   },
   "medications": {
     "title": "Medikation",
@@ -568,7 +600,9 @@
     "replacementNotEnded": "Neues Medikament wurde erfasst, aber das ersetzte Medikament konnte nicht beendet werden: ",
     "suggestions": "Medikamentenvorschläge",
     "dateRangeFrom": "Von {date}",
-    "dateRangeTo": "bis {date}"
+    "dateRangeTo": "bis {date}",
+    "deleteMedication": "Medikament löschen",
+    "confirmDeleteNamed": "Das Medikament «{name}» löschen?"
   },
   "outcomeScores": {
     "title": "Outcome-Scores",
@@ -604,7 +638,12 @@
       "Severe": "Schwer"
     },
     "totalScoreLabel": "Gesamtpunktzahl",
-    "scoreValue": "Punktzahl: {score}"
+    "scoreValue": "Punktzahl: {score}",
+    "editScore": "Wert bearbeiten",
+    "deleteScore": "Wert löschen",
+    "confirmDeleteNamed": "Den {scale}-Wert vom {date} löschen?",
+    "changeSince": "{delta} seit {date}",
+    "scoreRange": "0 bis {max}"
   },
   "reports": {
     "title": "Berichte",
@@ -1197,7 +1236,12 @@
     "confirmDeleteGoal": "Möchten Sie dieses Ziel wirklich löschen?",
     "confirmDeleteIntervention": "Möchten Sie diese Intervention wirklich löschen?",
     "confirmDeletePlan": "Möchten Sie diesen Behandlungsplan wirklich löschen? Alle Ziele und Interventionen werden ebenfalls gelöscht.",
-    "targetDateValue": "Ziel: {date}"
+    "targetDateValue": "Ziel: {date}",
+    "deletePlan": "Behandlungsplan löschen",
+    "confirmDeletePlanNamed": "Den Behandlungsplan «{name}» löschen? Seine Ziele und Interventionen werden ebenfalls gelöscht.",
+    "confirmDeleteGoalNamed": "Das Ziel «{name}» löschen?",
+    "confirmDeleteInterventionNamed": "Die Intervention «{name}» löschen?",
+    "dateRange": "{start} – {end}"
   },
   "errors": {
     "copy": "Kopieren",
@@ -1272,5 +1316,11 @@
     "transcribe": "Transkribieren",
     "transcribingFile": "Transkribiere {done}/{total}…",
     "transcriptionFailed": "Transkription fehlgeschlagen: {error}"
+  },
+  "amdp": {
+    "scoreNone": "Nicht vorhanden",
+    "scoreMild": "Leicht",
+    "scoreModerate": "Mittel",
+    "scoreSevere": "Schwer"
   }
 }
