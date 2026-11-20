@@ -359,7 +359,7 @@ describe('EmailCompose — form validation', () => {
 // ---------------------------------------------------------------------------
 
 describe('EmailCompose — save draft', () => {
-  it('calls create_email with the correct payload and navigates away', async () => {
+  it('calls create_email with the correct payload and returns to the emails list', async () => {
     setupLoaded();
     mockInvoke.mockResolvedValueOnce(EMAIL); // create_email
 
@@ -381,7 +381,7 @@ describe('EmailCompose — save draft', () => {
           body: 'Hello Anna,',
         },
       });
-      expect(mockGoto).toHaveBeenCalledWith('/patients/patient-1/email');
+      expect(mockGoto).toHaveBeenCalledWith('/patients/patient-1/documents?type=emails');
     });
   });
 });

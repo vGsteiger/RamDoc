@@ -504,7 +504,11 @@
     "applyToBody": "Apply to body",
     "showReasoning": "Show reasoning",
     "hideReasoning": "Hide reasoning",
-    "reasoningLines": "lines"
+    "reasoningLines": "lines",
+    "backToDocuments": "Documents",
+    "deleteTitle": "Delete email",
+    "confirmDeleteNamed": "Delete the email draft \"{subject}\"?",
+    "noSubject": "(no subject)"
   },
   "sessions": {
     "title": "Sessions",
@@ -742,7 +746,10 @@
       "activityWriting": "Writing a suggestion",
       "apply": "Apply",
       "discard": "Discard",
-      "charsSelected": "{count} characters selected"
+      "charsSelected": "{count} characters selected",
+      "suggestionsFor": "Suggestion for the selection",
+      "suggestionsForAll": "Suggestion for the whole report",
+      "closeSuggestions": "Close suggestions"
     },
     "types": {
       "befundbericht": "Comprehensive diagnostic report with findings and assessment",
@@ -766,7 +773,15 @@
     "streamWillAppear": "The report appears here as it is generated...",
     "streamWaiting": "Waiting for the language model...",
     "streamEmpty": "No report content was generated.",
-    "fileChars": "({count} chars)"
+    "fileChars": "({count} chars)",
+    "editorMode": "Editor mode",
+    "backToDocuments": "Documents",
+    "generatedOn": "Generated {date}",
+    "modelName": "Model: {name}",
+    "deleteTitle": "Delete report",
+    "confirmDeleteNamed": "Delete the {type} from {date}?",
+    "editing": "Editing",
+    "unsavedHint": "Export is available after saving."
   },
   "files": {
     "title": "Files",
@@ -793,7 +808,68 @@
     "uploadArea": "File upload area",
     "loadingFile": "Loading file...",
     "previewNotAvailable": "Preview is not available for this file type",
-    "downloadToView": "Download to view"
+    "downloadToView": "Download to view",
+    "loadFailed": "Could not load the file: {error}",
+    "browse": "Browse files",
+    "dropHere": "Drop files to upload",
+    "dropCompact": "Drop files here, or",
+    "viewerDescription": "{type} · {size}",
+    "recording": "Dictation recording",
+    "openTranscribe": "Open to transcribe"
+  },
+  "documents": {
+    "title": "Documents",
+    "filterLabel": "Document type",
+    "filters": {
+      "all": "All",
+      "files": "Files",
+      "reports": "Reports",
+      "letters": "Letters",
+      "emails": "Emails"
+    },
+    "new": "New",
+    "newMenu": "Create a document",
+    "uploadFile": "Upload file",
+    "newReport": "New report",
+    "newLetter": "New letter",
+    "newEmail": "New email",
+    "kinds": {
+      "file": "File",
+      "report": "Report",
+      "letter": "Letter",
+      "email": "Email"
+    },
+    "status": {
+      "draft": "Draft",
+      "final": "Final",
+      "sent": "Sent"
+    },
+    "empty": {
+      "all": "No documents yet",
+      "files": "No files yet",
+      "reports": "No reports yet",
+      "letters": "No letters yet",
+      "emails": "No emails yet"
+    },
+    "emptyHint": {
+      "all": "Upload a file, or create a report, letter or email from the New menu.",
+      "files": "Drop files above, or choose Upload file from the New menu.",
+      "reports": "Reports are drafted in a chat with this patient attached.",
+      "letters": "Generate a referral, insurance or extension letter from the patient record.",
+      "emails": "Compose an email and save it as a draft or open it in your mail client."
+    },
+    "loading": "Loading documents...",
+    "partialError": "Some documents could not be loaded: {kinds}",
+    "open": "Open",
+    "edit": "Edit",
+    "view": "View",
+    "download": "Download",
+    "delete": "Delete",
+    "deleteTitle": "Delete document",
+    "confirmDelete": "Delete \"{name}\"?",
+    "deleteFailed": "Could not delete \"{name}\": {error}",
+    "to": "to {recipient}",
+    "modifiedOn": "Last changed {date}"
   },
   "literature": {
     "title": "Literature",
@@ -1123,7 +1199,25 @@
       "referral": "Formal referral letter to another physician or specialist",
       "insurance_authorization": "Request for insurance authorization for psychiatric-psychotherapeutic treatment",
       "therapy_extension": "Request for extension of approved therapy duration"
-    }
+    },
+    "loadingLetter": "Loading letter...",
+    "backToDocuments": "Documents",
+    "recipient": "Recipient",
+    "content": "Letter",
+    "saveChanges": "Save changes",
+    "saved": "Letter saved",
+    "copyText": "Copy text",
+    "copied": "Letter text copied",
+    "deleteTitle": "Delete letter",
+    "confirmDeleteNamed": "Delete the letter \"{subject}\"?",
+    "createdOn": "Created {date}",
+    "finalizedOn": "Finalized {date}",
+    "sentOn": "Sent {date}",
+    "readOnlyHint": "Finalized letters can no longer be edited.",
+    "settings": "Letter",
+    "sources": "Sources for the draft",
+    "draftSection": "Draft",
+    "generateFirstHint": "Generate a draft from the sources above, then review and save it."
   },
   "thinking": {
     "label": "Thinking",

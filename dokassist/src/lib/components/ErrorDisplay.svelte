@@ -2,7 +2,7 @@
   import type { AppError } from '$lib/api';
   import { t } from '$lib/translations';
   import { errorMessage } from '$lib/translations/labels';
-  import { Alert } from '$lib/components/ui';
+  import { Alert, Button } from '$lib/components/ui';
 
   interface Props {
     error: AppError | null;
@@ -29,27 +29,28 @@
 
 {#if error}
   <Alert tone="danger" title={$errorMessage(error.code, error.message)}>
-    <div class="flex items-start justify-between gap-4">
-      <div class="flex items-center gap-2 text-caption">
-        <span class="font-mono">{error.ref}</span>
-        <button
-          onclick={copyErrorRef}
-          class="underline hover:text-fg"
-          title={$t('errors.copyReference')}
-        >
+    <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+      <div class="flex min-w-0 items-center gap-1 text-caption">
+        <span class="truncate font-mono">{error.ref}</span>
+        <Button variant="ghost" size="sm" onclick={copyErrorRef} title={$t('errors.copyReference')}>
           {$t('errors.copy')}
-        </button>
+        </Button>
       </div>
       {#if showDetails}
-        <button onclick={() => (expanded = !expanded)} class="shrink-0 text-caption hover:text-fg">
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-expanded={expanded}
+          onclick={() => (expanded = !expanded)}
+        >
           {expanded ? $t('errors.hideDetails') : $t('errors.showDetails')}
-        </button>
+        </Button>
       {/if}
     </div>
 
     {#if showDetails && expanded}
       <div class="mt-3 border-t border-danger-line pt-3">
-        <dl class="space-y-1 text-caption">
+        <dl class="space-y-1 text-caption [overflow-wrap:anywhere]">
           <div class="flex gap-2">
             <dt>{$t('errors.errorCode')}</dt>
             <dd class="font-mono">{error.code}</dd>
@@ -63,9 +64,9 @@
             <dd class="font-mono">{error.ref}</dd>
           </div>
         </dl>
-        <button onclick={copyFullError} class="mt-3 text-caption underline hover:text-fg">
+        <Button variant="ghost" size="sm" class="-ml-2.5 mt-2" onclick={copyFullError}>
           {$t('errors.copyFullDetails')}
-        </button>
+        </Button>
       </div>
     {/if}
 

@@ -8,17 +8,30 @@
     DICTATION_EVENTS,
     type FileRecord,
   } from '$lib/api';
-  import { onDestroy } from 'svelte';
+  import { onDestroy, tick } from 'svelte';
   import { listen } from '@tauri-apps/api/event';
-  import { Hourglass, FileText } from 'lucide-svelte';
+  import { Download, FileText, X } from 'lucide-svelte';
   import { errorText } from '$lib/translations/labels';
+  import { Alert, Button, EmptyState, IconButton, ProgressBar } from '$lib/components/ui';
+  import { fileExtension, formatFileSize } from '$lib/components/documents/file-meta';
 
+  /*
+   * Full-size preview of a patient file in a modal overlay: strong scrim,
+   * focus moves in and is trapped, Esc or the scrim closes, and focus returns
+   * to whatever opened it. PDFs and images render inline; dictation
+   * recordings get an audio player plus their transcript, with an on-demand
+   * "Transcribe" for recordings that have none yet.
+   */
   interface Props {
     file: FileRecord | null;
     onClose?: () => void;
   }
 
   let { file, onClose }: Props = $props();
+
+  const titleId = $props.id();
+  let panel = $state<HTMLElement | null>(null);
+  let returnFocus: HTMLElement | null = null;
 
   let blobUrl = $state<string | null>(null);
   let isLoading = $state(false);
@@ -43,7 +56,7 @@
       blobUrl = URL.createObjectURL(blob);
     } catch (error) {
       console.error('Failed to load file:', error);
-      errorMessage = `Failed to load file: ${error}`;
+      errorMessage = $t('files.loadFailed').replace('{error}', String(error));
     } finally {
       isLoading = false;
     }
@@ -103,6 +116,41 @@
     onClose?.();
   }
 
+  function focusable(): HTMLElement[] {
+    if (!panel) return [];
+    return Array.from(
+      panel.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), audio[controls], iframe, [tabindex]:not([tabindex="-1"])'
+      )
+    );
+  }
+
+  function onKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      handleClose();
+      return;
+    }
+    if (event.key !== 'Tab' || !panel) return;
+    const targets = focusable();
+    if (targets.length === 0) {
+      event.preventDefault();
+      panel.focus();
+      return;
+    }
+    const first = targets[0];
+    const last = targets[targets.length - 1];
+    const active = document.activeElement;
+    if (event.shiftKey && (active === first || active === panel)) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
   onDestroy(() => {
     if (blobUrl) {
       URL.revokeObjectURL(blobUrl);
@@ -117,121 +165,134 @@
       loadTranscript();
     }
   });
+
+  // Move focus into the overlay when it opens and back to the opener on close.
+  $effect(() => {
+    if (file && panel) {
+      returnFocus ??= document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      void tick().then(() => panel?.querySelector<HTMLElement>('[data-viewer-close]')?.focus());
+    } else if (!file && returnFocus) {
+      returnFocus.focus();
+      returnFocus = null;
+    }
+  });
+
+  let transcribeLabel = $derived(
+    transcribeProgress
+      ? $t('dictation.transcribingFile')
+          .replace('{done}', String(transcribeProgress.done))
+          .replace('{total}', String(transcribeProgress.total))
+      : $t('dictation.transcribing')
+  );
 </script>
 
+<svelte:window onkeydown={file ? onKeydown : undefined} />
+
 {#if file}
-  <div
-    class="fixed inset-0 z-50 flex items-center justify-center bg-scrim-strong"
-    role="presentation"
-    onclick={handleClose}
-    onkeydown={(e) => e.key === 'Escape' && handleClose()}
-  >
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6">
+    <button
+      type="button"
+      class="fixed inset-0 bg-scrim-strong"
+      aria-label={$t('common.close')}
+      tabindex="-1"
+      onclick={handleClose}
+    ></button>
+
     <div
-      class="relative w-full h-full max-w-6xl max-h-[90vh] m-4"
+      bind:this={panel}
+      class="relative z-10 flex h-full max-h-full w-full max-w-6xl flex-col overflow-hidden rounded-card border border-line bg-surface-overlay shadow-modal focus:outline-none"
       role="dialog"
       aria-modal="true"
-      aria-label={file.filename}
+      aria-labelledby={titleId}
       tabindex="-1"
-      onclick={(e) => e.stopPropagation()}
-      onkeydown={(e) => e.stopPropagation()}
     >
-      <div
-        class="absolute top-0 left-0 right-0 bg-surface-sunken border-b border-line-subtle p-4 flex items-center justify-between rounded-t-card"
-      >
-        <div class="flex-1 min-w-0">
-          <h2 class="text-fg font-medium truncate" title={file.filename}>
+      <header class="flex shrink-0 items-center gap-3 border-b border-line-subtle px-4 py-2.5">
+        <div class="min-w-0 flex-1">
+          <h2 id={titleId} class="truncate text-heading text-fg" title={file.filename}>
             {file.filename}
           </h2>
+          <p class="text-caption text-fg-subtle" data-numeric>
+            {$t('files.viewerDescription')
+              .replace('{type}', fileExtension(file.filename) || file.mime_type)
+              .replace('{size}', formatFileSize(file.size_bytes))}
+          </p>
         </div>
+        <Button size="sm" onclick={handleDownload} disabled={!blobUrl}>
+          <Download size={14} aria-hidden="true" />
+          {$t('files.download')}
+        </Button>
+        <IconButton label={$t('common.close')} size="sm" onclick={handleClose} data-viewer-close>
+          <X size={16} aria-hidden="true" />
+        </IconButton>
+      </header>
 
-        <div class="flex items-center gap-2 ml-4">
-          <button
-            onclick={handleDownload}
-            class="h-8 px-3 bg-accent hover:bg-accent-hover text-on-accent rounded-control transition-colors"
-            disabled={!blobUrl}
-          >
-            {$t('files.download')}
-          </button>
-
-          <button
-            onclick={handleClose}
-            class="h-8 px-3 bg-surface-selected hover:bg-surface-selected text-fg-muted rounded-control transition-colors"
-          >
-            {$t('common.close')}
-          </button>
-        </div>
-      </div>
-
-      <div
-        class="absolute top-16 bottom-0 left-0 right-0 bg-surface-sunken rounded-b-card overflow-hidden"
-      >
+      <div class="min-h-0 flex-1 overflow-hidden bg-surface-sunken">
         {#if isLoading}
-          <div class="flex items-center justify-center h-full">
-            <div class="text-center">
-              <div class="mb-4 flex justify-center text-fg-muted">
-                <Hourglass size={48} />
-              </div>
-              <p class="text-fg-muted">{$t('files.loadingFile')}</p>
+          <div class="flex h-full items-center justify-center p-6">
+            <div class="w-full max-w-xs">
+              <ProgressBar label={$t('files.loadingFile')} />
             </div>
           </div>
         {:else if errorMessage}
-          <div class="flex items-center justify-center h-full">
-            <div class="bg-danger-subtle border border-danger-line rounded-card p-6 max-w-md">
-              <p class="text-danger-fg">{errorMessage}</p>
-            </div>
+          <div class="flex h-full items-center justify-center p-6">
+            <Alert tone="danger" class="max-w-md">{errorMessage}</Alert>
           </div>
         {:else if blobUrl}
           {#if file.mime_type === 'application/pdf'}
-            <iframe src={blobUrl} title={file.filename} class="w-full h-full"></iframe>
+            <iframe src={blobUrl} title={file.filename} class="h-full w-full"></iframe>
           {:else if file.mime_type.startsWith('image/')}
-            <div class="flex items-center justify-center h-full p-4 overflow-auto">
-              <img src={blobUrl} alt={file.filename} class="max-w-full max-h-full object-contain" />
+            <div class="flex h-full items-center justify-center overflow-auto p-4">
+              <img src={blobUrl} alt={file.filename} class="max-h-full max-w-full object-contain" />
             </div>
           {:else if isAudioMime(file.mime_type)}
-            <div class="flex flex-col h-full gap-4 p-6 overflow-auto">
-              <audio controls src={blobUrl} class="w-full shrink-0"></audio>
-              <div class="flex items-center justify-between gap-3">
-                <h3 class="text-heading font-semibold text-fg">{$t('dictation.transcript')}</h3>
-                {#if !transcript}
-                  <button
-                    onclick={transcribe}
-                    disabled={transcribing}
-                    class="h-8 px-3 bg-accent hover:bg-accent-hover disabled:opacity-50 text-on-accent rounded-control transition-colors"
-                  >
-                    {#if transcribing}
-                      {transcribeProgress
-                        ? $t('dictation.transcribingFile')
-                            .replace('{done}', String(transcribeProgress.done))
-                            .replace('{total}', String(transcribeProgress.total))
-                        : $t('dictation.transcribing')}
-                    {:else}
+            <div class="h-full overflow-auto bg-surface-overlay">
+              <div class="mx-auto flex max-w-measure flex-col gap-4 px-4 py-6 sm:px-6">
+                <audio controls src={blobUrl} class="w-full shrink-0"></audio>
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                  <h3 class="text-heading text-fg">{$t('dictation.transcript')}</h3>
+                  {#if !transcript}
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onclick={transcribe}
+                      disabled={transcribing}
+                    >
                       {$t('dictation.transcribe')}
-                    {/if}
-                  </button>
+                    </Button>
+                  {/if}
+                </div>
+                {#if transcribing}
+                  <div role="status" aria-live="polite">
+                    <ProgressBar
+                      value={transcribeProgress?.done ?? null}
+                      max={transcribeProgress?.total ?? 100}
+                      label={transcribeLabel}
+                      size="sm"
+                    />
+                  </div>
+                {/if}
+                {#if transcribeError}
+                  <Alert tone="danger">{transcribeError}</Alert>
+                {/if}
+                {#if transcript}
+                  <pre
+                    class="whitespace-pre-wrap rounded-card border border-line bg-surface-raised p-4 font-sans text-body text-fg">{transcript}</pre>
                 {/if}
               </div>
-              {#if transcribeError}
-                <p class="text-caption text-danger-fg">{transcribeError}</p>
-              {/if}
-              {#if transcript}
-                <pre
-                  class="whitespace-pre-wrap font-sans text-body text-fg bg-surface-sunken border border-line rounded-card p-4">{transcript}</pre>
-              {/if}
             </div>
           {:else}
-            <div class="flex items-center justify-center h-full">
-              <div class="text-center">
-                <div class="mb-4 flex justify-center text-fg-muted">
-                  <FileText size={48} />
-                </div>
-                <p class="text-fg-muted mb-4">{$t('files.previewNotAvailable')}</p>
-                <button
-                  onclick={handleDownload}
-                  class="h-8 px-3 bg-accent hover:bg-accent-hover text-on-accent rounded-control transition-colors"
-                >
-                  {$t('files.downloadToView')}
-                </button>
-              </div>
+            <div class="flex h-full items-center justify-center p-6">
+              <EmptyState
+                icon={FileText}
+                title={$t('files.previewNotAvailable')}
+                class="w-full max-w-md bg-surface-overlay"
+              >
+                {#snippet action()}
+                  <Button variant="primary" onclick={handleDownload}>
+                    {$t('files.downloadToView')}
+                  </Button>
+                {/snippet}
+              </EmptyState>
             </div>
           {/if}
         {/if}
