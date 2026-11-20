@@ -272,7 +272,9 @@
       "warningBody": "This will replace ALL current data with the backup. Type",
       "warningConfirm": "to confirm.",
       "restoring": "Restoring…",
-      "confirmRestore": "Confirm restore"
+      "confirmRestore": "Confirm restore",
+      "chooseFile": "Choose backup file",
+      "noFile": "No file chosen"
     },
     "needsRam": "Needs {gb}GB+ RAM",
     "modelSpecs": "Size: {size} • Minimum RAM: {ram}GB • Native context: {context}K",
@@ -287,7 +289,73 @@
     "contextWarm": "Warm context",
     "contextCold": "Cold context",
     "cacheStats": "{reused} reused · {evaluated} evaluated · {prefill}ms prefill",
-    "availableModelsHint": "Choose a model based on your system's available RAM. Your system has {ram} of RAM."
+    "availableModelsHint": "Choose a model based on your system's available RAM. Your system has {ram} of RAM.",
+    "nav": {
+      "label": "Settings sections",
+      "general": "General",
+      "practice": "Practice",
+      "models": "AI models",
+      "dictation": "Dictation",
+      "referenceData": "Reference data",
+      "importBackup": "Import & backup",
+      "updates": "Updates & about",
+      "dangerZone": "Danger zone"
+    },
+    "panes": {
+      "generalDesc": "Language and appearance.",
+      "practiceDesc": "Used for billing and patient documentation.",
+      "modelsDesc": "Local models write reports and letters, route tool calls and power literature search. Everything runs on this Mac.",
+      "referenceDataDesc": "Local reference databases. No patient data leaves this Mac.",
+      "importBackupDesc": "Bring patients in from a CSV file, and back up or restore the encrypted vault.",
+      "updatesDesc": "The installed version and new releases.",
+      "dangerZoneDesc": "Irreversible actions. Each one asks you to type a confirmation word."
+    },
+    "practice": {
+      "groupPractice": "Practice and therapist",
+      "groupContact": "Contact",
+      "groupBilling": "Billing",
+      "name": "Practice name",
+      "namePlaceholder": "Enter practice name",
+      "therapist": "Therapist name",
+      "therapistPlaceholder": "Enter your name",
+      "specialty": "Clinical specialty",
+      "specialtyPlaceholder": "e.g. clinical psychology, psychiatry",
+      "address": "Practice address",
+      "addressPlaceholder": "Street, postcode and town",
+      "phone": "Phone",
+      "email": "Email",
+      "zsr": "ZSR number",
+      "zsrHint": "For TARMED billing.",
+      "zsrPlaceholder": "ZSR number",
+      "canton": "Canton",
+      "cantonHint": "Sets the tax point value (Taxpunktwert).",
+      "cantonSelect": "Select canton",
+      "save": "Save changes",
+      "saved": "Saved",
+      "unsaved": "Unsaved changes",
+      "loadFailed": "Couldn't load the practice details."
+    },
+    "models": {
+      "writingStatus": "Writing model",
+      "writingStatusDesc": "Writes reports, letters and chat replies. Load another installed model below.",
+      "recommendedBadge": "Recommended",
+      "deleteTitle": "Delete {name}?",
+      "deleteMessage": "The model file is removed from this Mac. You can download it again later.",
+      "routerResident": "Router in memory",
+      "routerResidentDesc": "Unloading frees memory; the router loads again when it is needed.",
+      "routerNotLoaded": "Not loaded",
+      "diagnostics": "Expert diagnostics",
+      "diagnosticsDesc": "Runtime profile, active inference configuration and the last generation’s performance.",
+      "reportSampling": "Report sampling",
+      "retrieval": "Literature search",
+      "routing": "Tool routing"
+    },
+    "updates": {
+      "newVersion": "Version {version} is available",
+      "releaseNotes": "Release notes",
+      "upToDate": "You're up to date"
+    },
+    "typedConfirmLabel": "Confirmation word"
   },
   "auth": {
     "welcomeToRamDoc": "Welcome to RamDoc",
@@ -1489,7 +1557,8 @@
     "transcript": "Dictation transcript",
     "transcribe": "Transcribe",
     "transcribingFile": "Transcribing {done}/{total}…",
-    "transcriptionFailed": "Transcription failed: {error}"
+    "transcriptionFailed": "Transcription failed: {error}",
+    "deleteTitle": "Delete {name}?"
   },
   "amdp": {
     "scoreNone": "Not present",
