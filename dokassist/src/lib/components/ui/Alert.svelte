@@ -21,10 +21,10 @@
   } = $props();
 
   const tones: Record<Tone, string> = {
-    info: 'bg-info-subtle border-info-line text-info-fg',
-    success: 'bg-success-subtle border-success-line text-success-fg',
-    warning: 'bg-warning-subtle border-warning-line text-warning-fg',
-    danger: 'bg-danger-subtle border-danger-line text-danger-fg',
+    info: 'bg-info-subtle text-info-fg',
+    success: 'bg-success-subtle text-success-fg',
+    warning: 'bg-warning-subtle text-warning-fg',
+    danger: 'bg-danger-subtle text-danger-fg',
   };
 
   const icons = {
@@ -38,7 +38,7 @@
 </script>
 
 <div
-  class="flex gap-2.5 rounded-card border p-3 text-body {tones[tone]} {className}"
+  class="flex gap-2.5 rounded-card border border-transparent p-3 text-body {tones[tone]} {className}"
   role={tone === 'danger' ? 'alert' : 'status'}
   {...rest}
 >

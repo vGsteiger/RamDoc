@@ -12,7 +12,29 @@
     "lock": "Lock",
     "openNavigation": "Open navigation",
     "closeNavigation": "Close navigation",
-    "primaryNavigation": "Primary navigation"
+    "primaryNavigation": "Primary navigation",
+    "sidebar": "Sidebar",
+    "reference": "Reference",
+    "newChat": "New chat",
+    "search": "Search",
+    "collapseSidebar": "Collapse sidebar",
+    "expandSidebar": "Expand sidebar",
+    "skipToContent": "Skip to content",
+    "recentChats": "Recent chats",
+    "showAllChats": "Show all ({count})",
+    "showFewerChats": "Show fewer",
+    "untitledChat": "Untitled chat",
+    "chatActions": "Actions for “{title}”",
+    "renameChat": "Chat title",
+    "deleteChatTitle": "Delete chat",
+    "deleteChatMessage": "Delete the chat “{title}” and all its messages?",
+    "modelReady": "Model ready",
+    "modelLoading": "Loading model",
+    "modelNotLoaded": "Model not loaded",
+    "noModel": "No model installed",
+    "modelError": "Model failed to load",
+    "modelChecking": "Checking model",
+    "modelSettings": "AI model settings"
   },
   "settings": {
     "title": "Settings",
@@ -250,7 +272,9 @@
       "warningBody": "This will replace ALL current data with the backup. Type",
       "warningConfirm": "to confirm.",
       "restoring": "Restoring…",
-      "confirmRestore": "Confirm restore"
+      "confirmRestore": "Confirm restore",
+      "chooseFile": "Choose backup file",
+      "noFile": "No file chosen"
     },
     "needsRam": "Needs {gb}GB+ RAM",
     "modelSpecs": "Size: {size} • Minimum RAM: {ram}GB • Native context: {context}K",
@@ -265,7 +289,73 @@
     "contextWarm": "Warm context",
     "contextCold": "Cold context",
     "cacheStats": "{reused} reused · {evaluated} evaluated · {prefill}ms prefill",
-    "availableModelsHint": "Choose a model based on your system's available RAM. Your system has {ram} of RAM."
+    "availableModelsHint": "Choose a model based on your system's available RAM. Your system has {ram} of RAM.",
+    "nav": {
+      "label": "Settings sections",
+      "general": "General",
+      "practice": "Practice",
+      "models": "AI models",
+      "dictation": "Dictation",
+      "referenceData": "Reference data",
+      "importBackup": "Import & backup",
+      "updates": "Updates & about",
+      "dangerZone": "Danger zone"
+    },
+    "panes": {
+      "generalDesc": "Language and appearance.",
+      "practiceDesc": "Used for billing and patient documentation.",
+      "modelsDesc": "Local models write reports and letters, route tool calls and power literature search. Everything runs on this Mac.",
+      "referenceDataDesc": "Local reference databases. No patient data leaves this Mac.",
+      "importBackupDesc": "Bring patients in from a CSV file, and back up or restore the encrypted vault.",
+      "updatesDesc": "The installed version and new releases.",
+      "dangerZoneDesc": "Irreversible actions. Each one asks you to type a confirmation word."
+    },
+    "practice": {
+      "groupPractice": "Practice and therapist",
+      "groupContact": "Contact",
+      "groupBilling": "Billing",
+      "name": "Practice name",
+      "namePlaceholder": "Enter practice name",
+      "therapist": "Therapist name",
+      "therapistPlaceholder": "Enter your name",
+      "specialty": "Clinical specialty",
+      "specialtyPlaceholder": "e.g. clinical psychology, psychiatry",
+      "address": "Practice address",
+      "addressPlaceholder": "Street, postcode and town",
+      "phone": "Phone",
+      "email": "Email",
+      "zsr": "ZSR number",
+      "zsrHint": "For TARMED billing.",
+      "zsrPlaceholder": "ZSR number",
+      "canton": "Canton",
+      "cantonHint": "Sets the tax point value (Taxpunktwert).",
+      "cantonSelect": "Select canton",
+      "save": "Save changes",
+      "saved": "Saved",
+      "unsaved": "Unsaved changes",
+      "loadFailed": "Couldn't load the practice details."
+    },
+    "models": {
+      "writingStatus": "Writing model",
+      "writingStatusDesc": "Writes reports, letters and chat replies. Load another installed model below.",
+      "recommendedBadge": "Recommended",
+      "deleteTitle": "Delete {name}?",
+      "deleteMessage": "The model file is removed from this Mac. You can download it again later.",
+      "routerResident": "Router in memory",
+      "routerResidentDesc": "Unloading frees memory; the router loads again when it is needed.",
+      "routerNotLoaded": "Not loaded",
+      "diagnostics": "Expert diagnostics",
+      "diagnosticsDesc": "Runtime profile, active inference configuration and the last generation’s performance.",
+      "reportSampling": "Report sampling",
+      "retrieval": "Literature search",
+      "routing": "Tool routing"
+    },
+    "updates": {
+      "newVersion": "Version {version} is available",
+      "releaseNotes": "Release notes",
+      "upToDate": "You're up to date"
+    },
+    "typedConfirmLabel": "Confirmation word"
   },
   "auth": {
     "welcomeToRamDoc": "Welcome to RamDoc",
@@ -410,7 +500,35 @@
     "exportSummaryFailed": "Failed to export patient summary",
     "exporting": "Exporting...",
     "exportPdf": "Export PDF",
-    "duplicateAhv": "A patient with this AHV number already exists."
+    "duplicateAhv": "A patient with this AHV number already exists.",
+    "tabChats": "Chats",
+    "tabTreatmentPlan": "Treatment plan",
+    "tabDocuments": "Documents",
+    "ageYears": "{age} years",
+    "ahvShort": "AHV",
+    "newChat": "New chat",
+    "patientActions": "Patient actions",
+    "keyFacts": "Active diagnoses and current medications",
+    "moreCount": "+{count} more",
+    "noChats": "No chats about this patient yet",
+    "noChatsHint": "Start a chat to ask about the record, draft a report or summarise sessions. The patient is attached automatically.",
+    "untitledChat": "Untitled chat",
+    "updated": "Patient updated",
+    "activeDiagnoses": "Active diagnoses",
+    "noActiveDiagnoses": "No active diagnoses",
+    "currentMedications": "Current medications",
+    "noCurrentMedications": "No current medications",
+    "recentSessions": "Recent sessions",
+    "incompleteNotes": "Notes to finish",
+    "incompleteNotesHint": "Sessions without notes",
+    "viewAll": "View all",
+    "details": "Patient details",
+    "createdOn": "Created {date}",
+    "updatedOn": "updated {date}",
+    "sortLabel": "Sort patients",
+    "name": "Name",
+    "countOne": "{count} patient",
+    "countMany": "{count} patients"
   },
   "email": {
     "title": "Emails",
@@ -454,7 +572,11 @@
     "applyToBody": "Apply to body",
     "showReasoning": "Show reasoning",
     "hideReasoning": "Hide reasoning",
-    "reasoningLines": "lines"
+    "reasoningLines": "lines",
+    "backToDocuments": "Documents",
+    "deleteTitle": "Delete email",
+    "confirmDeleteNamed": "Delete the email draft \"{subject}\"?",
+    "noSubject": "(no subject)"
   },
   "sessions": {
     "title": "Sessions",
@@ -501,7 +623,9 @@
     "amdpTitle": "AMDP assessment",
     "saved": "Session saved",
     "markedCompleted": "Session marked as completed",
-    "updateFailed": "Failed to update session"
+    "updateFailed": "Failed to update session",
+    "deleteSession": "Delete session",
+    "confirmDeleteNamed": "Delete the session \"{type}\" of {date}?"
   },
   "diagnoses": {
     "title": "Diagnoses",
@@ -524,7 +648,9 @@
     "addFirst": "Add the first diagnosis",
     "icdCode": "ICD-10 code",
     "diagnosedOnValue": "Diagnosed: {date}",
-    "resolvedOnValue": "Resolved: {date}"
+    "resolvedOnValue": "Resolved: {date}",
+    "deleteDiagnosis": "Delete diagnosis",
+    "confirmDeleteNamed": "Delete the diagnosis {code} \"{name}\"?"
   },
   "medications": {
     "title": "Medications",
@@ -568,7 +694,9 @@
     "replacementNotEnded": "The new medication was recorded, but the replaced medication could not be ended: ",
     "suggestions": "Medication suggestions",
     "dateRangeFrom": "From {date}",
-    "dateRangeTo": "to {date}"
+    "dateRangeTo": "to {date}",
+    "deleteMedication": "Delete medication",
+    "confirmDeleteNamed": "Delete the medication \"{name}\"?"
   },
   "outcomeScores": {
     "title": "Outcome Scores",
@@ -604,7 +732,12 @@
       "Severe": "Severe"
     },
     "totalScoreLabel": "Total score",
-    "scoreValue": "Score: {score}"
+    "scoreValue": "Score: {score}",
+    "editScore": "Edit score",
+    "deleteScore": "Delete score",
+    "confirmDeleteNamed": "Delete the {scale} score of {date}?",
+    "changeSince": "{delta} since {date}",
+    "scoreRange": "0 to {max}"
   },
   "reports": {
     "title": "Reports",
@@ -681,7 +814,10 @@
       "activityWriting": "Writing a suggestion",
       "apply": "Apply",
       "discard": "Discard",
-      "charsSelected": "{count} characters selected"
+      "charsSelected": "{count} characters selected",
+      "suggestionsFor": "Suggestion for the selection",
+      "suggestionsForAll": "Suggestion for the whole report",
+      "closeSuggestions": "Close suggestions"
     },
     "types": {
       "befundbericht": "Comprehensive diagnostic report with findings and assessment",
@@ -705,7 +841,15 @@
     "streamWillAppear": "The report appears here as it is generated...",
     "streamWaiting": "Waiting for the language model...",
     "streamEmpty": "No report content was generated.",
-    "fileChars": "({count} chars)"
+    "fileChars": "({count} chars)",
+    "editorMode": "Editor mode",
+    "backToDocuments": "Documents",
+    "generatedOn": "Generated {date}",
+    "modelName": "Model: {name}",
+    "deleteTitle": "Delete report",
+    "confirmDeleteNamed": "Delete the {type} from {date}?",
+    "editing": "Editing",
+    "unsavedHint": "Export is available after saving."
   },
   "files": {
     "title": "Files",
@@ -732,7 +876,68 @@
     "uploadArea": "File upload area",
     "loadingFile": "Loading file...",
     "previewNotAvailable": "Preview is not available for this file type",
-    "downloadToView": "Download to view"
+    "downloadToView": "Download to view",
+    "loadFailed": "Could not load the file: {error}",
+    "browse": "Browse files",
+    "dropHere": "Drop files to upload",
+    "dropCompact": "Drop files here, or",
+    "viewerDescription": "{type} · {size}",
+    "recording": "Dictation recording",
+    "openTranscribe": "Open to transcribe"
+  },
+  "documents": {
+    "title": "Documents",
+    "filterLabel": "Document type",
+    "filters": {
+      "all": "All",
+      "files": "Files",
+      "reports": "Reports",
+      "letters": "Letters",
+      "emails": "Emails"
+    },
+    "new": "New",
+    "newMenu": "Create a document",
+    "uploadFile": "Upload file",
+    "newReport": "New report",
+    "newLetter": "New letter",
+    "newEmail": "New email",
+    "kinds": {
+      "file": "File",
+      "report": "Report",
+      "letter": "Letter",
+      "email": "Email"
+    },
+    "status": {
+      "draft": "Draft",
+      "final": "Final",
+      "sent": "Sent"
+    },
+    "empty": {
+      "all": "No documents yet",
+      "files": "No files yet",
+      "reports": "No reports yet",
+      "letters": "No letters yet",
+      "emails": "No emails yet"
+    },
+    "emptyHint": {
+      "all": "Upload a file, or create a report, letter or email from the New menu.",
+      "files": "Drop files above, or choose Upload file from the New menu.",
+      "reports": "Reports are drafted in a chat with this patient attached.",
+      "letters": "Generate a referral, insurance or extension letter from the patient record.",
+      "emails": "Compose an email and save it as a draft or open it in your mail client."
+    },
+    "loading": "Loading documents...",
+    "partialError": "Some documents could not be loaded: {kinds}",
+    "open": "Open",
+    "edit": "Edit",
+    "view": "View",
+    "download": "Download",
+    "delete": "Delete",
+    "deleteTitle": "Delete document",
+    "confirmDelete": "Delete \"{name}\"?",
+    "deleteFailed": "Could not delete \"{name}\": {error}",
+    "to": "to {recipient}",
+    "modifiedOn": "Last changed {date}"
   },
   "literature": {
     "title": "Literature",
@@ -761,21 +966,6 @@
     "medicationNoResults": "No matching medication found.",
     "medicationReferenceMissing": "Install the medication reference database to browse it here and make it available to the AI assistant.",
     "openSettings": "Open Settings"
-  },
-  "topbar": {
-    "searchPlaceholder": "Quick search... (Cmd+K for command palette)",
-    "searching": "Searching...",
-    "noResults": "No results for \"{query}\"",
-    "loadingModel": "Loading model…",
-    "modelLoaded": "Model loaded",
-    "modelDownloaded": "Model downloaded — click to load into memory",
-    "noModelDownloaded": "No model downloaded — click to go to Settings",
-    "typePatient": "Patient",
-    "typeFile": "File",
-    "typeSession": "Session",
-    "typeDiagnosis": "Diagnosis",
-    "typeMedication": "Medication",
-    "typeReport": "Report"
   },
   "chat": {
     "title": "Chat",
@@ -875,6 +1065,77 @@
       "list_medications": "Medications",
       "list_treatment_plans": "Treatment plans",
       "search": "Clinical record search"
+    },
+    "today": "Today",
+    "todayAppointments": "Appointments",
+    "todayNotesToFinish": "Notes to finish",
+    "todayNoAppointments": "No appointments today.",
+    "todayNoNotes": "All session notes are finished.",
+    "todayLoadError": "Today's overview could not be loaded.",
+    "summarize": "Summarize",
+    "open": "Open",
+    "summarizeFor": "Summarize for {name}",
+    "openSessionWith": "Open the session with {name}",
+    "summarizeAppointmentPrompt": "Prepare me for today's session with {name}: summarize the recent sessions, the current medication and any open points.",
+    "summarizeNotePrompt": "Help me finish the note for the session with {name} on {date}: summarize what is recorded so far and list what is still missing.",
+    "suggestions": "Suggestions",
+    "suggestedPrompts": {
+      "global1": "Summarize today's appointments and what I should prepare.",
+      "global2": "Which sessions still need a finished note?",
+      "global3": "Compare the interaction risks of sertraline and quetiapine.",
+      "global4": "Draft a short email to a GP requesting the latest lab results.",
+      "patient1": "Summarize the course of treatment so far.",
+      "patient2": "When was the medication last changed, and why?",
+      "patient3": "How have the outcome scores developed recently?",
+      "patient4": "Which treatment goals are still open?"
+    },
+    "askAbout": "Ask about {name}",
+    "attachedPatient": "Attached patient: {name}",
+    "removeAttachedPatient": "Remove {name} from this chat",
+    "closeContextPicker": "Close context",
+    "composerLabel": "Message",
+    "mode": "Answer mode",
+    "modeAssistant": "Assistant",
+    "modeRecords": "Records only · cited",
+    "recordsPlaceholder": "Ask the records (answers cite their sources)…",
+    "recordsHint": "Answers use only {name}'s records, with numbered citations. The query is audited; the answer is not saved in this chat.",
+    "recordsTurnLabel": "Records only · cited",
+    "recordsNotSaved": "Not saved in this chat",
+    "showPatientPanel": "Show patient context",
+    "hidePatientPanel": "Hide patient context",
+    "patientPanel": {
+      "title": "Patient context",
+      "age": "{age} years",
+      "born": "Born {date}",
+      "ahv": "AHV",
+      "diagnoses": "Active diagnoses",
+      "medications": "Current medication",
+      "scores": "Latest scores",
+      "sessions": "Recent sessions",
+      "none": "None recorded",
+      "openRecord": "Open record",
+      "allSessions": "All sessions",
+      "allDiagnoses": "All diagnoses",
+      "allMedications": "All medication",
+      "loadError": "The patient context could not be loaded.",
+      "close": "Close patient context"
+    },
+    "picker": {
+      "title": "Context",
+      "patientSearch": "Find patient",
+      "patientSearchPlaceholder": "Search patients",
+      "comparisonMode": "Compare patients",
+      "comparisonModeHint": "Comparison mode keeps multiple patient contexts explicit.",
+      "selectedPatients": "Selected patients",
+      "clearPatients": "Clear selected patients",
+      "sources": "Include in context",
+      "pin": "Pin source",
+      "unpin": "Unpin source",
+      "included": "Included",
+      "retrieved": "Retrieved",
+      "summarized": "Summarized",
+      "loading": "Refreshing context plan",
+      "noPatients": "No matching patients"
     }
   },
   "calendar": {
@@ -891,7 +1152,34 @@
     "markCompleted": "Mark as completed",
     "markCompletedAction": "Mark completed",
     "newSessionAt": "New session at {time} on {date}",
-    "markCompletedFor": "Mark session with {name} as completed"
+    "markCompletedFor": "Mark session with {name} as completed",
+    "day": "Day",
+    "agenda": "Agenda",
+    "viewLabel": "Calendar view",
+    "prevDay": "Previous day",
+    "nextDay": "Next day",
+    "prevWeek": "Previous week",
+    "nextWeek": "Next week",
+    "prevMonth": "Previous month",
+    "nextMonth": "Next month",
+    "weekendHidden": "{count} weekend sessions are not shown in the work week.",
+    "showAgenda": "Show agenda",
+    "noSessionsWeek": "No sessions this week",
+    "noSessionsDay": "No sessions on this day",
+    "noSessionsHint": "Pick a time slot or use New session to schedule one.",
+    "openSession": "Open session",
+    "more": "+{count} more",
+    "now": "Now",
+    "legend": "Status legend",
+    "sessionAt": "{date} at {time}",
+    "date": "Date",
+    "time": "Time",
+    "status": "Status",
+    "type": "Type",
+    "duration": "Duration",
+    "showDay": "Show {date}",
+    "sessionsCount": "{count} sessions",
+    "todayMarker": "Today"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -909,7 +1197,7 @@
   },
   "commandPalette": {
     "title": "Command Palette",
-    "placeholder": "Search actions, patients, or type to search...",
+    "placeholder": "Search patients, chats, records, or type a command…",
     "searching": "Searching...",
     "noResults": "No results found",
     "noQuery": "Type to search or select an action",
@@ -921,11 +1209,9 @@
     "categorySettings": "Settings",
     "categoryActions": "Actions",
     "categoryPatients": "Patients",
-    "categorySearchResults": "Search Results",
-    "navDashboard": "Go to Dashboard",
+    "categorySearchResults": "Records",
     "navPatients": "Go to Patients",
     "navCalendar": "Go to Calendar",
-    "navLiterature": "Go to Literature",
     "navChat": "Go to Chat",
     "navSettings": "Go to Settings",
     "newPatient": "New Patient",
@@ -941,7 +1227,10 @@
     "typeSession": "Session",
     "typeDiagnosis": "Diagnosis",
     "typeMedication": "Medication",
-    "typeReport": "Report"
+    "typeReport": "Report",
+    "newChat": "New chat",
+    "navReference": "Go to Reference",
+    "categoryChats": "Chats"
   },
   "letters": {
     "title": "Letters",
@@ -1005,7 +1294,25 @@
       "referral": "Formal referral letter to another physician or specialist",
       "insurance_authorization": "Request for insurance authorization for psychiatric-psychotherapeutic treatment",
       "therapy_extension": "Request for extension of approved therapy duration"
-    }
+    },
+    "loadingLetter": "Loading letter...",
+    "backToDocuments": "Documents",
+    "recipient": "Recipient",
+    "content": "Letter",
+    "saveChanges": "Save changes",
+    "saved": "Letter saved",
+    "copyText": "Copy text",
+    "copied": "Letter text copied",
+    "deleteTitle": "Delete letter",
+    "confirmDeleteNamed": "Delete the letter \"{subject}\"?",
+    "createdOn": "Created {date}",
+    "finalizedOn": "Finalized {date}",
+    "sentOn": "Sent {date}",
+    "readOnlyHint": "Finalized letters can no longer be edited.",
+    "settings": "Letter",
+    "sources": "Sources for the draft",
+    "draftSection": "Draft",
+    "generateFirstHint": "Generate a draft from the sources above, then review and save it."
   },
   "thinking": {
     "label": "Thinking",
@@ -1051,7 +1358,14 @@
     "rename": "Rename",
     "dismiss": "Dismiss notification",
     "preview": "Preview",
-    "export": "Export"
+    "export": "Export",
+    "moreActions": "More actions",
+    "more": "More",
+    "cannotUndo": "This cannot be undone.",
+    "progress": "Progress",
+    "unknown": "unknown",
+    "measurementOne": "measurement",
+    "measurementMany": "measurements"
   },
   "onboarding": {
     "skipForNow": "Skip for now",
@@ -1131,7 +1445,19 @@
         "searchDesc": "Find patients, sessions and notes with full-text search. Press Cmd+K to open it from anywhere.",
         "reportsTitle": "Report generation",
         "reportsDesc": "Generate clinical reports, letters and documentation with language model assistance. All data stays on your device."
-      }
+      },
+      "newChat": "Start a new chat",
+      "shortcutNewChat": "Cmd+N",
+      "shortcutNewPatient": "Cmd+Shift+N"
+    },
+    "stepsLabel": "Setup steps",
+    "stepOf": "Step {current} of {total}",
+    "stepDone": "(done)",
+    "steps": {
+      "practice": "Practice",
+      "model": "Language model",
+      "import": "Import",
+      "overview": "Overview"
     }
   },
   "treatmentPlans": {
@@ -1190,7 +1516,12 @@
     "confirmDeleteGoal": "Are you sure you want to delete this goal?",
     "confirmDeleteIntervention": "Are you sure you want to delete this intervention?",
     "confirmDeletePlan": "Are you sure you want to delete this treatment plan? This will also delete all goals and interventions.",
-    "targetDateValue": "Target: {date}"
+    "targetDateValue": "Target: {date}",
+    "deletePlan": "Delete treatment plan",
+    "confirmDeletePlanNamed": "Delete the treatment plan \"{name}\"? Its goals and interventions are deleted too.",
+    "confirmDeleteGoalNamed": "Delete the goal \"{name}\"?",
+    "confirmDeleteInterventionNamed": "Delete the intervention \"{name}\"?",
+    "dateRange": "{start} – {end}"
   },
   "errors": {
     "copy": "Copy",
@@ -1265,6 +1596,77 @@
     "transcript": "Dictation transcript",
     "transcribe": "Transcribe",
     "transcribingFile": "Transcribing {done}/{total}…",
-    "transcriptionFailed": "Transcription failed: {error}"
+    "transcriptionFailed": "Transcription failed: {error}",
+    "deleteTitle": "Delete {name}?"
+  },
+  "amdp": {
+    "scoreNone": "Not present",
+    "scoreMild": "Mild",
+    "scoreModerate": "Moderate",
+    "scoreSevere": "Severe"
+  },
+  "reference": {
+    "title": "Reference",
+    "description": "Medication information and your literature library, available offline.",
+    "tabsLabel": "Reference sections",
+    "medicationsTab": "Medications",
+    "literatureTab": "Literature",
+    "medicationsMissingTitle": "Medication reference not installed",
+    "medicationsStartTitle": "Search the medication reference",
+    "medicationsStartDesc": "Type at least two letters of an active ingredient or brand name.",
+    "medicationsNoResultsDesc": "Check the spelling, or search for the active ingredient instead of the brand name.",
+    "resultsCount": "{count} results",
+    "pinned": "Pinned for comparison",
+    "compare": "Compare",
+    "unpin": "Unpin",
+    "removeFromComparison": "Remove from comparison",
+    "compareHint": "Pinned. Select another substance to compare them side by side.",
+    "uploadDocuments": "Upload documents",
+    "acceptedFiles": "PDF or text files",
+    "searchTitle": "Search the library",
+    "searchDesc": "Finds matching passages in indexed documents, the same way chat and reports do.",
+    "searchAction": "Search",
+    "searchNeedsIndex": "Search becomes available once a document is indexed.",
+    "searchResultsFor": "{count} passages for “{query}”",
+    "clearSearch": "Clear search",
+    "searchNoResults": "No passages match this search.",
+    "passage": "Passage {n}",
+    "relevance": "{percent}% match",
+    "documentsTitle": "Documents",
+    "indexed": "Indexed",
+    "passages": "{count} passages",
+    "process": "Index now",
+    "editDescription": "Edit description",
+    "documentActions": "Actions for {name}",
+    "deleteTitle": "Delete document?",
+    "deleteMessage": "Delete “{name}” from the literature library?"
+  },
+  "modelCatalog": {
+    "descriptions": {
+      "gemma_4_31B_q4_0_it_gguf": "Largest dense Gemma 4 with Google's quantization-aware Q4_0 weights; strong multilingual writing with 256K context.",
+      "granite_4_2_30b_Q4_K_M_gguf": "IBM's enterprise model with officially evaluated German and French, reasoning mode and 128K context.",
+      "NVIDIA_Nemotron_3_5_Lightning_30B_A3B_Q4_0_gguf": "Fast hybrid Mamba-MoE with very long context for large records; supports German and French.",
+      "Qwen3_8_27B_UD_Q4_K_M_gguf": "Successor to Qwen 3.6 27B: stronger multilingual reasoning and tool use with 256K context.",
+      "gemma_4_26B_q4_0_it_gguf": "Google's quantization-aware Q4_0 release of the Gemma 4 MoE; better quality than post-training Q4_0 at the same size.",
+      "Ministral_3_14B_Instruct_2512_Q4_K_M_gguf": "Mistral's European mid-size model with particularly strong French and 256K context.",
+      "gemma_4_12b_it_qat_q4_0_gguf": "Mid-size dense Gemma 4 with quantization-aware weights and 256K context for 16 GB Macs.",
+      "Qwen3_5_9B_Q4_K_M_gguf": "Replaces Qwen3 8B: same footprint class with 256K instead of 32K context.",
+      "granite_4_2_8b_Q4_K_M_gguf": "Compact IBM model with evaluated German and French and a low-effort reasoning mode.",
+      "gemma_4_E4B_q4_0_it_gguf": "Quantization-aware release of the on-device Gemma 4 tier with 128K context.",
+      "NVIDIA_Nemotron_3_5_Bolt_E4B_UD_Q4_K_XL_gguf": "NVIDIA's reasoning-tuned Gemma 4 E4B for small Macs; 64K context.",
+      "gemma_4_E2B_q4_0_it_gguf": "Quantization-aware release of the smallest Gemma 4 for memory-constrained Macs; 128K context.",
+      "Qwen3_6_35B_A3B_UD_Q4_K_M_gguf": "Flagship long-context MoE for report generation, German clinical text, RAG, and tool use.",
+      "Qwen3_6_27B_Q4_K_M_gguf": "Dense Qwen 3.6 quality tier with strong multilingual reasoning and 256K-class context.",
+      "gemma_4_26B_A4B_it_Q4_0_gguf": "Memory-efficient multilingual MoE alternative with 256K context and over 140 languages.",
+      "gpt_oss_20b_MXFP4_gguf": "Compact reasoning and tool-use MoE; the official MXFP4 weights are designed for local use.",
+      "gemma_4_E4B_it_Q4_0_gguf": "New on-device Gemma tier with 128K context and a low 4.3 GiB model footprint.",
+      "gemma_4_E2B_it_Q4_0_gguf": "Newest ultra-small multilingual option with 128K context for memory-constrained Macs.",
+      "Qwen3_8B_Q4_K_M_gguf": "Established multilingual dense fallback with good quality at a 4.7 GiB footprint.",
+      "Phi_4_mini_instruct_Q4_K_M_gguf": "Fast compact alternative for English-leaning workloads and limited memory.",
+      "medgemma_1_5_4b_it_Q4_K_M_gguf": "Medical-domain instruction model for clinician-reviewed on-device drafting."
+    },
+    "disclaimers": {
+      "medgemma_1_5_4b_it_Q4_K_M_gguf": "Use for clinician-reviewed drafting only. This model is not validated for diagnosis or treatment decisions."
+    }
   }
 }

@@ -227,4 +227,22 @@ describe('ChatMessage', () => {
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
     expect(screen.getByText('Here is the answer.')).toBeInTheDocument();
   });
+
+  it('renders assistant markdown instead of raw markers', () => {
+    const content = 'Verlauf:\n\n- **Schlaf**: verbessert\n- **Antrieb**: reduziert';
+    const { container } = render(ChatMessage, {
+      props: { message: makeMsg({ role: 'assistant', content }) },
+    });
+    expect(container.querySelector('strong')).toHaveTextContent('Schlaf');
+    expect(container.querySelectorAll('li')).toHaveLength(2);
+    expect(container.textContent).not.toContain('**');
+  });
+
+  it('renders the user message as plain text, never as markdown', () => {
+    const { container } = render(ChatMessage, {
+      props: { message: makeMsg({ role: 'user', content: '**not bold**' }) },
+    });
+    expect(container.querySelector('strong')).toBeNull();
+    expect(screen.getByText('**not bold**')).toBeInTheDocument();
+  });
 });

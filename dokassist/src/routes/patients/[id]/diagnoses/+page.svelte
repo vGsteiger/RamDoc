@@ -12,7 +12,22 @@
   } from '$lib/api';
   import DiagnosisCard from '$lib/components/DiagnosisCard.svelte';
   import IcdSearch from '$lib/components/IcdSearch.svelte';
-  import { ListSkeleton } from '$lib/components/ui';
+  import {
+    Alert,
+    Button,
+    ConfirmDialog,
+    Dialog,
+    EmptyState,
+    Field,
+    Input,
+    ListSkeleton,
+    PageShell,
+    SectionHeader,
+    Select,
+    Textarea,
+  } from '$lib/components/ui';
+  import { usePatientWorkspace } from '$lib/components/patient/state.svelte';
+  import { Plus, Stethoscope } from 'lucide-svelte';
   import { get } from 'svelte/store';
   import { t } from '$lib/translations';
 
@@ -33,11 +48,13 @@
   let saving = $state(false);
   let editingId = $state<string | null>(null);
 
-  const statusOptions = [
-    { value: 'active', label: get(t)('diagnoses.active') },
-    { value: 'remission', label: get(t)('diagnoses.remission') },
-    { value: 'resolved', label: get(t)('diagnoses.resolved') },
-  ];
+  // Stored values; only the labels are translated.
+  const statusOptions = ['active', 'remission', 'resolved'];
+  const workspace = usePatientWorkspace();
+
+  let formError = $state<string | null>(null);
+  let deleting = $state<Diagnosis | null>(null);
+  let confirmOpen = $state(false);
 
   onMount(async () => {
     await loadDiagnoses();
@@ -73,14 +90,17 @@
     showAddForm = true;
   }
 
-  async function handleDelete(diagnosisId: string) {
-    if (!confirm(get(t)('diagnoses.confirmDelete'))) {
-      return;
-    }
+  function askDelete(diagnosis: Diagnosis) {
+    deleting = diagnosis;
+    confirmOpen = true;
+  }
 
+  async function confirmDelete() {
+    if (!deleting) return;
     try {
-      await deleteDiagnosis(diagnosisId);
+      await deleteDiagnosis(deleting.id);
       await loadDiagnoses();
+      void workspace()?.refreshRecords();
     } catch (err) {
       error =
         get(t)('common.deleteFailed') + ': ' + (err instanceof Error ? err.message : String(err));
@@ -92,13 +112,13 @@
     event.preventDefault();
 
     if (!selectedCode || !selectedDescription) {
-      error = get(t)('diagnoses.selectRequired');
+      formError = get(t)('diagnoses.selectRequired');
       return;
     }
 
     try {
       saving = true;
-      error = null;
+      formError = null;
 
       if (editingId) {
         // Update existing diagnosis
@@ -128,8 +148,9 @@
       // Reset form
       resetForm();
       await loadDiagnoses();
+      void workspace()?.refreshRecords();
     } catch (err) {
-      error =
+      formError =
         get(t)('common.saveFailed') + ': ' + (err instanceof Error ? err.message : String(err));
       console.error('Failed to save diagnosis:', err);
     } finally {
@@ -137,8 +158,14 @@
     }
   }
 
+  function openNew() {
+    resetForm();
+    showAddForm = true;
+  }
+
   function resetForm() {
     showAddForm = false;
+    formError = null;
     editingId = null;
     selectedCode = '';
     selectedDescription = '';
@@ -149,148 +176,106 @@
   }
 </script>
 
-<div class="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
-  <div class="flex justify-between items-center mb-6">
-    <h1 class="text-display font-semibold text-fg">{$t('diagnoses.title')}</h1>
-    <button
-      class="h-8 px-3 bg-accent text-on-accent rounded-control hover:bg-accent-hover transition-colors"
-      onclick={() => {
-        if (showAddForm) {
-          resetForm();
-        } else {
-          showAddForm = true;
-        }
-      }}
-    >
-      {showAddForm ? $t('common.cancel') : `+ ${$t('diagnoses.newDiagnosis')}`}
-    </button>
-  </div>
+<PageShell>
+  <SectionHeader title={$t('diagnoses.title')}>
+    {#snippet actions()}
+      <Button size="sm" onclick={openNew}>
+        <Plus size={14} aria-hidden="true" />
+        {$t('diagnoses.newDiagnosis')}
+      </Button>
+    {/snippet}
+  </SectionHeader>
 
   {#if error}
-    <div class="bg-danger-subtle border border-danger-line text-danger-fg p-4 rounded-card mb-6">
-      {error}
-    </div>
-  {/if}
-
-  {#if showAddForm}
-    <div class="bg-surface-raised border border-line rounded-card p-6 mb-6">
-      <h2 class="text-heading font-semibold text-fg mb-4">
-        {editingId ? $t('diagnoses.editDiagnosis') : $t('diagnoses.addDiagnosis')}
-      </h2>
-      <form onsubmit={handleSubmit} class="space-y-4">
-        <div>
-          <p class="block text-body font-medium text-fg-muted mb-1">{$t('diagnoses.icdCode')} *</p>
-          <IcdSearch onSelect={handleIcdSelect} />
-          {#if selectedCode}
-            <div class="mt-2 p-3 bg-surface-selected rounded-card border border-line">
-              <span class="font-mono text-body text-accent-fg">{selectedCode}</span>
-              <span class="text-body text-fg-muted ml-2">— {selectedDescription}</span>
-            </div>
-          {/if}
-        </div>
-
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label for="diagnosed-date" class="block text-body font-medium text-fg-muted mb-1">
-              {$t('diagnoses.diagnosedOn')} *
-            </label>
-            <input
-              id="diagnosed-date"
-              type="date"
-              bind:value={diagnosedDate}
-              required
-              class="w-full px-3 py-2 bg-surface-raised border border-line rounded-control text-fg focus:outline-none focus:ring-2 focus:ring-accent/30"
-            />
-          </div>
-
-          <div>
-            <label for="status" class="block text-body font-medium text-fg-muted mb-1">
-              {$t('diagnoses.status')} *
-            </label>
-            <select
-              id="status"
-              bind:value={status}
-              required
-              class="w-full px-3 py-2 bg-surface-raised border border-line rounded-control text-fg focus:outline-none focus:ring-2 focus:ring-accent/30"
-            >
-              {#each statusOptions as option}
-                <option value={option.value}>{option.label}</option>
-              {/each}
-            </select>
-          </div>
-        </div>
-
-        {#if status === 'resolved'}
-          <div>
-            <label for="resolved-date" class="block text-body font-medium text-fg-muted mb-1">
-              {$t('diagnoses.resolvedOn')}
-            </label>
-            <input
-              id="resolved-date"
-              type="date"
-              bind:value={resolvedDate}
-              class="w-full px-3 py-2 bg-surface-raised border border-line rounded-control text-fg focus:outline-none focus:ring-2 focus:ring-accent/30"
-            />
-          </div>
-        {/if}
-
-        <div>
-          <label for="notes" class="block text-body font-medium text-fg-muted mb-1">
-            {$t('common.notes')}
-          </label>
-          <textarea
-            id="notes"
-            bind:value={notes}
-            rows="3"
-            placeholder={$t('diagnoses.notesPlaceholder')}
-            class="w-full px-3 py-2 bg-surface-raised border border-line rounded-control text-fg focus:outline-none focus:ring-2 focus:ring-accent/30 resize-none"
-          ></textarea>
-        </div>
-
-        <div class="flex justify-end gap-3 pt-4">
-          <button
-            type="button"
-            onclick={resetForm}
-            class="h-8 px-3 bg-surface-hover text-fg-muted rounded-control hover:bg-surface-selected transition-colors"
-            disabled={saving}
-          >
-            {$t('common.cancel')}
-          </button>
-          <button
-            type="submit"
-            class="h-8 px-3 bg-accent text-on-accent rounded-control hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={saving}
-          >
-            {saving ? $t('common.saving') : editingId ? $t('common.update') : $t('common.add')}
-          </button>
-        </div>
-      </form>
-    </div>
+    <Alert tone="danger" class="mb-4">{error}</Alert>
   {/if}
 
   {#if loading}
     <ListSkeleton variant="file" count={4} />
   {:else if diagnoses.length === 0}
-    <div class="text-center py-12">
-      <p class="text-fg-muted mb-4">{$t('diagnoses.noDiagnoses')}</p>
-      {#if !showAddForm}
-        <button
-          class="h-8 px-3 bg-accent text-on-accent rounded-control hover:bg-accent-hover transition-colors"
-          onclick={() => (showAddForm = true)}
-        >
-          {$t('diagnoses.addFirst')}
-        </button>
-      {/if}
-    </div>
+    <EmptyState icon={Stethoscope} title={$t('diagnoses.noDiagnoses')}>
+      {#snippet action()}
+        <Button onclick={openNew}>{$t('diagnoses.addFirst')}</Button>
+      {/snippet}
+    </EmptyState>
   {:else}
-    <div class="grid gap-4">
+    <div class="card-surface rounded-panel">
       {#each diagnoses as diagnosis (diagnosis.id)}
         <DiagnosisCard
           {diagnosis}
           onEdit={() => handleEdit(diagnosis)}
-          onDelete={() => handleDelete(diagnosis.id)}
+          onDelete={() => askDelete(diagnosis)}
         />
       {/each}
     </div>
   {/if}
-</div>
+</PageShell>
+
+<Dialog
+  bind:open={showAddForm}
+  size="lg"
+  title={editingId ? $t('diagnoses.editDiagnosis') : $t('diagnoses.addDiagnosis')}
+  onClose={resetForm}
+>
+  <form id="diagnosis-form" onsubmit={handleSubmit} class="space-y-4">
+    {#if formError}
+      <Alert tone="danger">{formError}</Alert>
+    {/if}
+    <Field label={$t('diagnoses.icdCode')} for="icd-search" required>
+      <IcdSearch id="icd-search" onSelect={handleIcdSelect} />
+      {#if selectedCode}
+        <p
+          class="mt-2 flex min-w-0 items-baseline gap-2 rounded-control border border-line-subtle bg-surface-sunken px-2.5 py-1.5"
+        >
+          <span class="shrink-0 font-mono text-label text-fg">{selectedCode}</span>
+          <span class="min-w-0 text-label text-fg-muted">{selectedDescription}</span>
+        </p>
+      {/if}
+    </Field>
+
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <Field label={$t('diagnoses.diagnosedOn')} for="diagnosed-date" required>
+        <Input id="diagnosed-date" type="date" bind:value={diagnosedDate} required />
+      </Field>
+      <Field label={$t('diagnoses.status')} for="status" required>
+        <Select id="status" bind:value={status} required>
+          {#each statusOptions as option (option)}
+            <option value={option}>{$t(`diagnoses.${option}`)}</option>
+          {/each}
+        </Select>
+      </Field>
+    </div>
+
+    {#if status === 'resolved'}
+      <Field label={$t('diagnoses.resolvedOn')} for="resolved-date">
+        <Input id="resolved-date" type="date" bind:value={resolvedDate} />
+      </Field>
+    {/if}
+
+    <Field label={$t('common.notes')} for="notes">
+      <Textarea
+        id="notes"
+        bind:value={notes}
+        rows={3}
+        placeholder={$t('diagnoses.notesPlaceholder')}
+      />
+    </Field>
+  </form>
+
+  {#snippet footer()}
+    <Button onclick={resetForm} disabled={saving}>{$t('common.cancel')}</Button>
+    <Button type="submit" variant="primary" form="diagnosis-form" loading={saving}>
+      {editingId ? $t('common.update') : $t('common.add')}
+    </Button>
+  {/snippet}
+</Dialog>
+
+<ConfirmDialog
+  bind:open={confirmOpen}
+  tone="danger"
+  title={$t('diagnoses.deleteDiagnosis')}
+  message={$t('diagnoses.confirmDeleteNamed')
+    .replace('{code}', deleting?.icd10_code ?? '')
+    .replace('{name}', deleting?.description ?? '')}
+  onConfirm={confirmDelete}
+/>

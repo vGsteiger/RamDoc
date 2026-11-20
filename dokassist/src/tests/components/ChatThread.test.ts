@@ -439,4 +439,145 @@ describe('ChatThread', () => {
 
     expect(screen.getByRole('status')).toHaveTextContent('Thinking');
   });
+
+  describe('records-only mode', () => {
+    const RECORDS_PATIENT = { id: 'patient-1', name: 'Ada Lovelace' };
+    const MANIFEST_ENTRY = {
+      citation: 'E1',
+      unit_id: 'u1',
+      patient_id: 'patient-1',
+      record_kind: 'session',
+      record_id: 'session-9',
+      section: 'notes',
+      revision: 'r1',
+      tier: 'hot',
+      label: 'Psychotherapy',
+      occurred_at: '2026-11-10',
+      char_start: 0,
+      char_end: 40,
+      text_sha256: 'x',
+      tokens: 10,
+      prompt_token_start: 0,
+      prompt_token_end: 10,
+      protected_spans: [],
+      selection: {},
+      selection_reasons: ['lexical match'],
+    };
+    const HISTORY_ANSWER = {
+      answer: 'Sleep improved after the dose change [E1].',
+      manifest: { entries: [MANIFEST_ENTRY], omitted: [], prompt_tokens: 100, token_budget: 6000 },
+      audit: {
+        citations: [{ citation: 'E1', in_manifest: true, traceable: true }],
+        unsupported_citations: [],
+        stale_citations: [],
+      },
+    };
+
+    function mockCommands(extra: Record<string, unknown> = {}) {
+      mockInvoke.mockImplementation((cmd) => {
+        if (cmd === 'get_chat_messages') return Promise.resolve([]);
+        if (cmd === 'get_engine_status') return Promise.resolve(ENGINE_LOADED);
+        if (cmd in extra) return Promise.resolve(extra[cmd]);
+        return Promise.resolve(null);
+      });
+    }
+
+    it('offers no mode switch without an attached patient', async () => {
+      mockCommands();
+      render(ChatThread, { props: { sessionId: 'sess1', scope: 'global' } });
+      await waitFor(() => expect(screen.getByRole('textbox')).not.toBeDisabled());
+      expect(screen.queryByRole('radiogroup', { name: 'Answer mode' })).not.toBeInTheDocument();
+    });
+
+    it('sends records-only questions to the audited history query, not the agent', async () => {
+      mockCommands({ query_patient_history: HISTORY_ANSWER });
+      render(ChatThread, {
+        props: { sessionId: 'sess1', scope: 'patient', recordsPatient: RECORDS_PATIENT },
+      });
+      await waitFor(() => expect(screen.getByRole('textbox')).not.toBeDisabled());
+      expect(screen.getByRole('radio', { name: 'Assistant' })).toBeChecked();
+
+      await fireEvent.click(screen.getByRole('radio', { name: 'Records only · cited' }));
+      expect(screen.getByRole('radio', { name: 'Records only · cited' })).toBeChecked();
+      expect(screen.getByText(/Answers use only Ada Lovelace's records/)).toBeInTheDocument();
+
+      const textarea = screen.getByRole<HTMLTextAreaElement>('textbox');
+      textarea.value = 'How is her sleep?';
+      await fireEvent.input(textarea);
+      await fireEvent.click(screen.getByRole('button', { name: /Send/i }));
+
+      await waitFor(() =>
+        expect(mockInvoke).toHaveBeenCalledWith('query_patient_history', {
+          patientId: 'patient-1',
+          question: 'How is her sleep?',
+          systemPrompt: undefined,
+          thinkingEffort: 'medium',
+        })
+      );
+      expect(mockInvoke).not.toHaveBeenCalledWith('run_agent_turn', expect.anything());
+
+      // The inline citation, then the same source in the evidence list.
+      const [citation] = await screen.findAllByRole('link', {
+        name: 'Open Psychotherapy from 2026-11-10',
+      });
+      expect(citation).toHaveTextContent('1');
+      expect(citation).toHaveAttribute(
+        'href',
+        expect.stringContaining('patients/patient-1/sessions/session-9')
+      );
+      expect(screen.getByText('How is her sleep?')).toBeInTheDocument();
+      expect(screen.getByText('Not saved in this chat')).toBeInTheDocument();
+    });
+
+    it('switching back to Assistant runs the agent turn again', async () => {
+      mockCommands({
+        run_agent_turn: { session_id: 'sess1', final_answer: '', tool_calls_made: [] },
+      });
+      render(ChatThread, {
+        props: {
+          sessionId: 'sess1',
+          scope: 'patient',
+          recordsPatient: RECORDS_PATIENT,
+          mode: 'records',
+        },
+      });
+      await waitFor(() => expect(screen.getByRole('textbox')).not.toBeDisabled());
+      await fireEvent.click(screen.getByRole('radio', { name: 'Assistant' }));
+
+      const textarea = screen.getByRole<HTMLTextAreaElement>('textbox');
+      textarea.value = 'Draft a letter';
+      await fireEvent.input(textarea);
+      await fireEvent.click(screen.getByRole('button', { name: /Send/i }));
+
+      await waitFor(() =>
+        expect(mockInvoke).toHaveBeenCalledWith('run_agent_turn', expect.anything())
+      );
+      expect(mockInvoke).not.toHaveBeenCalledWith('query_patient_history', expect.anything());
+    });
+  });
+
+  it('creates the session for a fresh chat when the first message is sent', async () => {
+    mockInvoke.mockImplementation((cmd) => {
+      if (cmd === 'get_engine_status') return Promise.resolve(ENGINE_LOADED);
+      if (cmd === 'run_agent_turn') return new Promise(() => {});
+      return Promise.resolve([]);
+    });
+    const oncreatesession = vi.fn().mockResolvedValue('new-sess');
+    render(ChatThread, { props: { sessionId: null, scope: 'global', oncreatesession } });
+    await waitFor(() => expect(screen.getByRole('textbox')).not.toBeDisabled());
+    expect(mockInvoke).not.toHaveBeenCalledWith('get_chat_messages', expect.anything());
+
+    const textarea = screen.getByRole<HTMLTextAreaElement>('textbox');
+    textarea.value = 'First question';
+    await fireEvent.input(textarea);
+    await fireEvent.click(screen.getByRole('button', { name: /Send/i }));
+
+    await waitFor(() => expect(oncreatesession).toHaveBeenCalledWith('First question'));
+    await waitFor(() =>
+      expect(mockInvoke).toHaveBeenCalledWith(
+        'run_agent_turn',
+        expect.objectContaining({ sessionId: 'new-sess', userMessage: 'First question' })
+      )
+    );
+  });
 });

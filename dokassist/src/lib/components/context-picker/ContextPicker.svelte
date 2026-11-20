@@ -1,5 +1,8 @@
 <script lang="ts">
+  import { Pin, X } from 'lucide-svelte';
   import { getPatient, globalSearch, type Patient } from '$lib/api';
+  import { fmt } from '$lib/format';
+  import { Button, IconButton, Input, ListRow } from '$lib/components/ui';
   import {
     createContextPlan,
     refreshContextPlan,
@@ -24,6 +27,9 @@
     disabled?: boolean;
     lockedPatientId?: string;
     onplanchange?: (plan: ContextPlan) => void;
+    /** Shows a close button in the header (when rendered in a popover). */
+    onclose?: () => void;
+    closeLabel?: string;
   }
 
   let {
@@ -34,6 +40,8 @@
     disabled = false,
     lockedPatientId = undefined,
     onplanchange,
+    onclose = undefined,
+    closeLabel = undefined,
   }: Props = $props();
 
   let patients = $state<Patient[]>([]);
@@ -107,81 +115,84 @@
   }
 </script>
 
-<section
-  class="w-full rounded-card border border-line bg-surface-raised p-3 sm:p-4"
-  aria-labelledby="context-picker-title"
->
-  <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-    <div>
+<section class="@container w-full min-w-0" aria-labelledby="context-picker-title">
+  <div class="flex items-start justify-between gap-3">
+    <div class="min-w-0">
       <h2 id="context-picker-title" class="text-heading text-fg">{labels.title}</h2>
-      <p class="mt-1 text-caption text-fg-muted">{labels.comparisonModeHint}</p>
+      <p class="mt-0.5 text-caption text-fg-muted">{labels.comparisonModeHint}</p>
     </div>
-    {#if !lockedPatientId}<button
-        type="button"
-        class="min-h-10 rounded-control border border-line px-3 text-body text-fg hover:bg-surface-hover disabled:opacity-50"
-        aria-pressed={value.comparisonMode}
-        {disabled}
-        onclick={() => update(setComparisonMode(value, !value.comparisonMode))}
-        >{labels.comparisonMode}</button
-      >{/if}
+    <div class="flex shrink-0 items-center gap-1">
+      {#if !lockedPatientId}
+        <Button
+          size="sm"
+          variant={value.comparisonMode ? 'secondary' : 'ghost'}
+          aria-pressed={value.comparisonMode}
+          {disabled}
+          onclick={() => update(setComparisonMode(value, !value.comparisonMode))}
+          >{labels.comparisonMode}</Button
+        >
+      {/if}
+      {#if onclose && closeLabel}
+        <IconButton label={closeLabel} size="sm" onclick={onclose}><X size={16} /></IconButton>
+      {/if}
+    </div>
   </div>
 
-  <div class="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.8fr)]">
-    <div>
+  <div class="mt-3 grid gap-4 @xl:grid-cols-[minmax(0,1fr)_minmax(12rem,0.8fr)]">
+    <div class="min-w-0">
       <label for="context-picker-search" class="field-label">{labels.patientSearch}</label>
-      <input
+      <Input
         id="context-picker-search"
         type="search"
         bind:value={query}
         {disabled}
         placeholder={labels.patientSearchPlaceholder}
-        class="min-h-10 w-full rounded-control border border-line bg-surface-raised px-3 text-body text-fg focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25 disabled:bg-surface-sunken"
       />
-      <div class="mt-2 max-h-40 overflow-y-auto rounded-control border border-line">
+      <div class="mt-2 max-h-40 overflow-y-auto rounded-control border border-line-subtle py-0.5">
         {#if loadingPatients}
-          <p class="p-3 text-body text-fg-muted">{labels.loading}</p>
+          <p class="px-3 py-2 text-label text-fg-muted">{labels.loading}</p>
         {:else if matches.length === 0}
-          <p class="p-3 text-body text-fg-muted">{labels.noPatients}</p>
+          <p class="px-3 py-2 text-label text-fg-muted">{labels.noPatients}</p>
         {:else}
           {#each matches.slice(0, 20) as patient (patient.id)}
-            <button
-              type="button"
-              class="flex min-h-10 w-full items-center justify-between gap-3 px-3 text-left text-body text-fg hover:bg-surface-hover disabled:opacity-50"
+            <ListRow
+              title={`${patient.first_name} ${patient.last_name}`}
+              meta={patient.date_of_birth ? $fmt.date(patient.date_of_birth) : undefined}
               disabled={disabled || (!!lockedPatientId && patient.id !== lockedPatientId)}
               onclick={() => choose(patient)}
-            >
-              <span class="truncate">{patient.first_name} {patient.last_name}</span>
-              {#if patient.date_of_birth}<span class="shrink-0 text-caption text-fg-subtle"
-                  >{patient.date_of_birth}</span
-                >{/if}
-            </button>
+            />
           {/each}
         {/if}
       </div>
     </div>
 
-    <div>
+    <div class="min-w-0">
       <p class="field-label">{labels.selectedPatients}</p>
-      <div class="flex min-h-10 flex-wrap gap-2" aria-live="polite">
+      <div class="flex min-h-control flex-wrap gap-1.5" aria-live="polite">
         {#each value.selectedPatients as patient (patient.id)}
-          <button
-            type="button"
-            class="min-h-9 max-w-full truncate rounded-full border border-accent-line bg-accent-subtle px-3 text-label text-accent-fg hover:bg-surface-selected disabled:opacity-50"
+          <Button
+            size="sm"
+            class="max-w-full"
             disabled={disabled || patient.id === lockedPatientId}
             onclick={() => update(removeContextPatient(value, patient.id), true)}
             aria-label={`${labels.clearPatients}: ${patient.first_name} ${patient.last_name}`}
-            >{patient.first_name} {patient.last_name} ×</button
           >
+            <span class="min-w-0 truncate">{patient.first_name} {patient.last_name}</span>
+            <X size={12} class="shrink-0 text-fg-subtle" aria-hidden="true" />
+          </Button>
         {/each}
       </div>
     </div>
   </div>
 
-  <fieldset class="mt-4 border-t border-line-subtle pt-4" {disabled}>
-    <legend class="text-heading text-fg">{labels.sources}</legend>
-    <div class="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+  <fieldset class="mt-4 border-t border-line-subtle pt-3" {disabled}>
+    <legend class="sr-only">{labels.sources}</legend>
+    <p class="mb-2 text-label font-medium text-fg" aria-hidden="true">{labels.sources}</p>
+    <div class="grid gap-1.5 @md:grid-cols-2 @2xl:grid-cols-3">
       {#each value.sources as item (item.kind)}
-        <div class="flex min-h-12 items-center gap-2 rounded-control border border-line px-3">
+        <div
+          class="flex min-h-control items-center gap-2 rounded-control border border-line-subtle pl-2.5 pr-1"
+        >
           <input
             id={`context-source-${item.kind}`}
             type="checkbox"
@@ -190,27 +201,33 @@
             onchange={() => update(toggleContextSource(value, item.kind), true)}
           />
           <label
-            class="min-w-0 flex-1 truncate text-body text-fg"
+            class="min-w-0 flex-1 truncate text-label text-fg"
             for={`context-source-${item.kind}`}>{sourceLabel(item.kind)}</label
           >
-          <button
-            type="button"
-            class="min-h-9 min-w-9 rounded-control px-2 text-caption text-fg-muted hover:bg-surface-hover"
+          <IconButton
+            size="sm"
             aria-pressed={item.pinned}
-            aria-label={item.pinned
+            label={item.pinned
               ? `${labels.unpin}: ${sourceLabel(item.kind)}`
               : `${labels.pin}: ${sourceLabel(item.kind)}`}
             onclick={() => update(togglePinnedContextSource(value, item.kind), true)}
-            >{item.pinned ? '★' : '☆'}</button
           >
+            <Pin
+              size={14}
+              fill={item.pinned ? 'currentColor' : 'none'}
+              class={item.pinned ? 'text-fg' : ''}
+              aria-hidden="true"
+            />
+          </IconButton>
         </div>
       {/each}
     </div>
   </fieldset>
 
   <div
-    class="mt-4 flex flex-wrap gap-x-4 gap-y-1 border-t border-line-subtle pt-3 text-caption text-fg-muted"
+    class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-caption text-fg-subtle"
     aria-live="polite"
+    data-numeric
   >
     <span>{labels.included}: {value.planning.included.length}</span>
     <span>{labels.retrieved}: {value.planning.retrieved}</span>

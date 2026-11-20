@@ -1,379 +1,115 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { globalSearch, lockApp, type SearchResult, type Patient } from '$lib/api';
+  import {
+    globalSearch,
+    listPatients,
+    lockApp,
+    type ChatSession,
+    type Patient,
+    type SearchResult,
+  } from '$lib/api';
   import { t } from '$lib/translations';
+  import { fmt } from '$lib/format';
   import { authStatus } from '$lib/stores/auth';
   import { themePreference } from '$lib/stores/theme';
   import { language } from '$lib/stores/language';
+  import { chatSessions, refreshChatSessions } from '$lib/stores/chat-sessions';
+  import { chatSessionHref, NEW_CHAT_URL } from '$lib/shell';
+  import { HighlightedSnippet, Kbd } from '$lib/components/ui';
   import {
-    Search,
-    UserPlus,
-    Calendar,
-    LayoutDashboard,
-    Users,
     BookOpen,
-    MessageSquare,
-    Settings,
-    Lock,
-    Moon,
-    Sun,
-    Monitor,
+    Calendar,
+    FileText,
     Globe,
+    Lock,
+    MessageSquare,
+    Monitor,
+    Moon,
+    Search,
+    Settings,
+    SquarePen,
+    Sun,
+    User,
+    UserPlus,
+    Users,
   } from 'lucide-svelte';
 
+  /*
+   * Cmd+K: one place for search and commands (D2 removed the top bar).
+   * Groups: actions, navigation, recent chats, patients, record search
+   * (FTS via globalSearch) and preferences. The input is an ARIA combobox
+   * driving a listbox; arrow keys move the active option, Enter runs it,
+   * Esc closes. Record snippets render through HighlightedSnippet, so the
+   * backend's <mark> tags highlight instead of being printed or stripped.
+   */
   interface Props {
     isOpen: boolean;
     onClose: () => void;
+    /** Optional preloaded patients; otherwise loaded when the palette opens. */
     patients?: Patient[];
   }
 
-  let { isOpen = $bindable(), onClose, patients = [] }: Props = $props();
+  let { isOpen = $bindable(), onClose, patients = undefined }: Props = $props();
 
-  interface Action {
+  type Group = 'actions' | 'navigation' | 'chats' | 'patients' | 'records' | 'preferences';
+
+  interface Item {
     id: string;
+    group: Group;
     label: string;
-    category: 'navigation' | 'action' | 'settings';
+    secondary?: string;
     icon: typeof Search;
-    handler: () => void | Promise<void>;
     shortcut?: string;
+    result?: SearchResult;
+    run: () => void | Promise<void>;
   }
 
+  const listId = $props.id();
   let searchQuery = $state('');
   let selectedIndex = $state(0);
   let isSearching = $state(false);
   let searchResults = $state<SearchResult[]>([]);
+  let loadedPatients = $state<Patient[]>([]);
   let inputRef = $state<HTMLInputElement | null>(null);
+  let listRef = $state<HTMLElement | null>(null);
   let searchTimeout: ReturnType<typeof setTimeout> | null = null;
+  let searchVersion = 0;
 
-  // Define available actions
-  let actions = $derived<Action[]>([
-    {
-      id: 'nav-dashboard',
-      label: $t('commandPalette.navDashboard'),
-      category: 'navigation',
-      icon: LayoutDashboard,
-      handler: () => {
-        goto('/dashboard');
-        onClose();
-      },
-    },
-    {
-      id: 'nav-patients',
-      label: $t('commandPalette.navPatients'),
-      category: 'navigation',
-      icon: Users,
-      handler: () => {
-        goto('/patients');
-        onClose();
-      },
-    },
-    {
-      id: 'nav-calendar',
-      label: $t('commandPalette.navCalendar'),
-      category: 'navigation',
-      icon: Calendar,
-      handler: () => {
-        goto('/calendar');
-        onClose();
-      },
-    },
-    {
-      id: 'nav-literature',
-      label: $t('commandPalette.navLiterature'),
-      category: 'navigation',
-      icon: BookOpen,
-      handler: () => {
-        goto('/literature');
-        onClose();
-      },
-    },
-    {
-      id: 'nav-chat',
-      label: $t('commandPalette.navChat'),
-      category: 'navigation',
-      icon: MessageSquare,
-      handler: () => {
-        goto('/chat');
-        onClose();
-      },
-    },
-    {
-      id: 'nav-settings',
-      label: $t('commandPalette.navSettings'),
-      category: 'navigation',
-      icon: Settings,
-      handler: () => {
-        goto('/settings');
-        onClose();
-      },
-    },
-    {
-      id: 'action-new-patient',
-      label: $t('commandPalette.newPatient'),
-      category: 'action',
-      icon: UserPlus,
-      handler: () => {
-        goto('/patients/new');
-        onClose();
-      },
-      shortcut: 'Cmd+N',
-    },
-    {
-      id: 'action-lock',
-      label: $t('commandPalette.lockApp'),
-      category: 'action',
-      icon: Lock,
-      handler: async () => {
-        await lockApp();
-        authStatus.set('locked');
-        goto('/unlock');
-        onClose();
-      },
-    },
-    {
-      id: 'settings-theme-light',
-      label: $t('commandPalette.themeLight'),
-      category: 'settings',
-      icon: Sun,
-      handler: () => {
-        themePreference.set('light');
-        onClose();
-      },
-    },
-    {
-      id: 'settings-theme-dark',
-      label: $t('commandPalette.themeDark'),
-      category: 'settings',
-      icon: Moon,
-      handler: () => {
-        themePreference.set('dark');
-        onClose();
-      },
-    },
-    {
-      id: 'settings-theme-system',
-      label: $t('commandPalette.themeSystem'),
-      category: 'settings',
-      icon: Monitor,
-      handler: () => {
-        themePreference.set('system');
-        onClose();
-      },
-    },
-    {
-      id: 'settings-lang-en',
-      label: $t('commandPalette.langEnglish'),
-      category: 'settings',
-      icon: Globe,
-      handler: () => {
-        language.set('en');
-        onClose();
-      },
-    },
-    {
-      id: 'settings-lang-de',
-      label: $t('commandPalette.langGerman'),
-      category: 'settings',
-      icon: Globe,
-      handler: () => {
-        language.set('de');
-        onClose();
-      },
-    },
-  ]);
+  let allPatients = $derived(patients ?? loadedPatients);
 
-  // Filter actions and search results based on query
-  let filteredItems = $derived(() => {
-    const query = searchQuery.toLowerCase().trim();
-
-    if (!query) {
-      // Show all actions when no query
-      return { actions, patients: [], searchResults: [] };
-    }
-
-    // Filter actions by label
-    const filteredActions = actions.filter((action) => action.label.toLowerCase().includes(query));
-
-    // Filter patients by name (client-side)
-    const filteredPatients = patients.filter(
-      (p) =>
-        p.first_name.toLowerCase().includes(query) ||
-        p.last_name.toLowerCase().includes(query) ||
-        (p.ahv_number ?? '').includes(query)
-    );
-
-    return {
-      actions: filteredActions,
-      patients: filteredPatients,
-      searchResults,
-    };
-  });
-
-  // Combined list of all items for keyboard navigation
-  let allItems = $derived(() => {
-    const items = filteredItems();
-    const combined: Array<
-      | { type: 'action'; item: Action }
-      | { type: 'patient'; item: Patient }
-      | { type: 'search'; item: SearchResult }
-    > = [];
-
-    items.actions.forEach((action) => combined.push({ type: 'action', item: action }));
-    items.patients.forEach((patient) => combined.push({ type: 'patient', item: patient }));
-    items.searchResults.forEach((result) => combined.push({ type: 'search', item: result }));
-
-    return combined;
-  });
-
-  // Handle search input with debouncing
-  function handleSearchInput(e: Event) {
-    const query = (e.target as HTMLInputElement).value;
-    searchQuery = query;
-    selectedIndex = 0;
-
-    if (searchTimeout) clearTimeout(searchTimeout);
-
-    if (!query.trim()) {
-      searchResults = [];
-      isSearching = false;
-      return;
-    }
-
-    // Clear stale results if query is too short
-    if (query.length < 2) {
-      searchResults = [];
-      isSearching = false;
-      return;
-    }
-
-    // Only trigger FTS5 search if query is long enough
-    searchTimeout = setTimeout(async () => {
-      isSearching = true;
-      try {
-        searchResults = await globalSearch(query, 10);
-      } catch (err) {
-        console.error('Search error:', err);
-        searchResults = [];
-      } finally {
-        isSearching = false;
-      }
-    }, 300);
-  }
-
-  // Close only when the backdrop itself is clicked, not a click inside the dialog
-  function handleBackdropClick(e: MouseEvent) {
-    if (e.target === e.currentTarget) {
-      onClose();
-    }
-  }
-
-  // Handle keyboard navigation. Bound on the dialog so it also covers focus
-  // landing on the dialog container rather than the search input.
-  function handleKeydown(e: KeyboardEvent) {
-    const items = allItems();
-
-    // Guard against empty items
-    if (items.length === 0) {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onClose();
-      }
-      return;
-    }
-
-    switch (e.key) {
-      case 'ArrowDown':
-        e.preventDefault();
-        selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
-        break;
-      case 'ArrowUp':
-        e.preventDefault();
-        selectedIndex = Math.max(selectedIndex - 1, 0);
-        break;
-      case 'Enter':
-        e.preventDefault();
-        if (items[selectedIndex]) {
-          executeItem(items[selectedIndex]);
-        }
-        break;
-      case 'Escape':
-        e.preventDefault();
-        onClose();
-        break;
-    }
-  }
-
-  // Execute the selected item
-  async function executeItem(
-    item:
-      | { type: 'action'; item: Action }
-      | { type: 'patient'; item: Patient }
-      | { type: 'search'; item: SearchResult }
-  ) {
-    try {
-      if (item.type === 'action') {
-        await item.item.handler();
-      } else if (item.type === 'patient') {
-        goto(`/patients/${item.item.id}`);
-        onClose();
-      } else if (item.type === 'search') {
-        navigateToSearchResult(item.item);
-      }
-    } catch (error) {
-      console.error('Failed to execute action:', error);
-      // Optionally show a toast notification here
-    }
-  }
-
-  // Navigate to search result
-  function navigateToSearchResult(result: SearchResult) {
+  function go(path: string) {
     onClose();
+    void goto(path);
+  }
+
+  function patientName(p: Patient) {
+    return `${p.first_name} ${p.last_name}`.trim();
+  }
+
+  function chatSecondary(session: ChatSession) {
+    const date = $fmt.relativeDate(session.updated_at);
+    const name = session.patient_id ? $chatSessions.patientNames[session.patient_id] : undefined;
+    return name ? `${name} · ${date}` : date;
+  }
+
+  function resultPath(result: SearchResult): string {
     switch (result.result_type) {
       case 'patient':
-        goto(`/patients/${result.entity_id}`);
-        break;
+        return `/patients/${result.entity_id}`;
       case 'file':
-        goto(`/patients/${result.patient_id}/files`);
-        break;
+        return `/patients/${result.patient_id}/files`;
       case 'session':
-        goto(`/patients/${result.patient_id}/sessions`);
-        break;
+        return `/patients/${result.patient_id}/sessions/${result.entity_id}`;
       case 'diagnosis':
-        goto(`/patients/${result.patient_id}/diagnoses`);
-        break;
+        return `/patients/${result.patient_id}/diagnoses`;
       case 'medication':
-        goto(`/patients/${result.patient_id}/medications`);
-        break;
+        return `/patients/${result.patient_id}/medications`;
       case 'report':
-        goto(`/patients/${result.patient_id}/reports/${result.entity_id}`);
-        break;
+        return `/patients/${result.patient_id}/reports/${result.entity_id}`;
       default:
-        goto(`/patients/${result.patient_id}`);
+        return `/patients/${result.patient_id}`;
     }
   }
-
-  // Focus input when opened
-  $effect(() => {
-    if (isOpen) {
-      setTimeout(() => inputRef?.focus(), 50);
-      searchQuery = '';
-      selectedIndex = 0;
-      searchResults = [];
-    }
-  });
-
-  // Sanitize HTML snippet to only allow <mark> tags from FTS5
-  function sanitizeSnippet(snippet: string): string {
-    // Replace all tags except <mark> and </mark> with escaped versions
-    return snippet.replace(/<(?!\/?(mark)>)/g, '&lt;').replace(/(?<!<\/(mark))>/g, '&gt;');
-  }
-
-  let categoryLabel = $derived<Record<string, string>>({
-    navigation: $t('commandPalette.categoryNavigation'),
-    action: $t('commandPalette.categoryAction'),
-    settings: $t('commandPalette.categorySettings'),
-  });
 
   let typeLabel = $derived<Record<string, string>>({
     patient: $t('commandPalette.typePatient'),
@@ -383,182 +119,448 @@
     medication: $t('commandPalette.typeMedication'),
     report: $t('commandPalette.typeReport'),
   });
+
+  let commands = $derived<Item[]>([
+    {
+      id: 'action-new-chat',
+      group: 'actions',
+      label: $t('commandPalette.newChat'),
+      icon: SquarePen,
+      shortcut: '⌘N',
+      run: () => go(NEW_CHAT_URL),
+    },
+    {
+      id: 'action-new-patient',
+      group: 'actions',
+      label: $t('commandPalette.newPatient'),
+      icon: UserPlus,
+      shortcut: '⇧⌘N',
+      run: () => go('/patients/new'),
+    },
+    {
+      id: 'action-lock',
+      group: 'actions',
+      label: $t('commandPalette.lockApp'),
+      icon: Lock,
+      run: async () => {
+        await lockApp();
+        authStatus.set('locked');
+        go('/unlock');
+      },
+    },
+    {
+      id: 'nav-chat',
+      group: 'navigation',
+      label: $t('commandPalette.navChat'),
+      icon: MessageSquare,
+      run: () => go('/chat'),
+    },
+    {
+      id: 'nav-patients',
+      group: 'navigation',
+      label: $t('commandPalette.navPatients'),
+      icon: Users,
+      run: () => go('/patients'),
+    },
+    {
+      id: 'nav-calendar',
+      group: 'navigation',
+      label: $t('commandPalette.navCalendar'),
+      icon: Calendar,
+      run: () => go('/calendar'),
+    },
+    {
+      id: 'nav-reference',
+      group: 'navigation',
+      label: $t('commandPalette.navReference'),
+      icon: BookOpen,
+      run: () => go('/reference'),
+    },
+    {
+      id: 'nav-settings',
+      group: 'navigation',
+      label: $t('commandPalette.navSettings'),
+      icon: Settings,
+      run: () => go('/settings'),
+    },
+    {
+      id: 'pref-theme-light',
+      group: 'preferences',
+      label: $t('commandPalette.themeLight'),
+      icon: Sun,
+      run: () => {
+        themePreference.set('light');
+        onClose();
+      },
+    },
+    {
+      id: 'pref-theme-dark',
+      group: 'preferences',
+      label: $t('commandPalette.themeDark'),
+      icon: Moon,
+      run: () => {
+        themePreference.set('dark');
+        onClose();
+      },
+    },
+    {
+      id: 'pref-theme-system',
+      group: 'preferences',
+      label: $t('commandPalette.themeSystem'),
+      icon: Monitor,
+      run: () => {
+        themePreference.set('system');
+        onClose();
+      },
+    },
+    {
+      id: 'pref-lang-en',
+      group: 'preferences',
+      label: $t('commandPalette.langEnglish'),
+      icon: Globe,
+      run: () => {
+        language.set('en');
+        onClose();
+      },
+    },
+    {
+      id: 'pref-lang-de',
+      group: 'preferences',
+      label: $t('commandPalette.langGerman'),
+      icon: Globe,
+      run: () => {
+        language.set('de');
+        onClose();
+      },
+    },
+  ]);
+
+  const GROUP_ORDER: Group[] = [
+    'actions',
+    'navigation',
+    'chats',
+    'patients',
+    'records',
+    'preferences',
+  ];
+
+  let items = $derived.by<Item[]>(() => {
+    const query = searchQuery.toLowerCase().trim();
+    const matches = (text: string) => text.toLowerCase().includes(query);
+
+    const commandItems = query ? commands.filter((c) => matches(c.label)) : commands;
+
+    const chats = $chatSessions.sessions
+      .filter(
+        (s) =>
+          !query ||
+          matches(s.title) ||
+          (s.patient_id && matches($chatSessions.patientNames[s.patient_id] ?? ''))
+      )
+      .slice(0, query ? 8 : 5)
+      .map<Item>((s) => ({
+        id: `chat-${s.id}`,
+        group: 'chats',
+        label: s.title.trim() || $t('nav.untitledChat'),
+        secondary: chatSecondary(s),
+        icon: MessageSquare,
+        run: () => go(chatSessionHref(s)),
+      }));
+
+    const patientItems = query
+      ? allPatients
+          .filter(
+            (p) => matches(patientName(p)) || (p.ahv_number ?? '').toLowerCase().includes(query)
+          )
+          .slice(0, 8)
+          .map<Item>((p) => ({
+            id: `patient-${p.id}`,
+            group: 'patients',
+            label: patientName(p),
+            secondary: $fmt.date(p.date_of_birth),
+            icon: User,
+            run: () => go(`/patients/${p.id}`),
+          }))
+      : [];
+
+    const recordItems = searchResults.map<Item>((r, i) => ({
+      id: `record-${r.result_type}-${r.entity_id}-${i}`,
+      group: 'records',
+      label: r.title,
+      icon: r.result_type === 'patient' ? User : FileText,
+      result: r,
+      run: () => go(resultPath(r)),
+    }));
+
+    const all = [...commandItems, ...chats, ...patientItems, ...recordItems];
+    return GROUP_ORDER.flatMap((group) => all.filter((item) => item.group === group));
+  });
+
+  // Items grouped for rendering, each keeping its index in the flat list.
+  let groups = $derived(
+    GROUP_ORDER.map((group) => ({
+      group,
+      entries: items
+        .map((item, index) => ({ item, index }))
+        .filter(({ item }) => item.group === group),
+    })).filter((g) => g.entries.length > 0)
+  );
+
+  let groupLabel = $derived<Record<Group, string>>({
+    actions: $t('commandPalette.categoryActions'),
+    navigation: $t('commandPalette.categoryNavigation'),
+    chats: $t('commandPalette.categoryChats'),
+    patients: $t('commandPalette.categoryPatients'),
+    records: $t('commandPalette.categorySearchResults'),
+    preferences: $t('commandPalette.categorySettings'),
+  });
+
+  // Keep the active option in range as the list changes.
+  $effect(() => {
+    if (selectedIndex >= items.length) selectedIndex = Math.max(0, items.length - 1);
+  });
+
+  function optionId(index: number) {
+    return `${listId}-option-${index}`;
+  }
+
+  function handleSearchInput(e: Event) {
+    const query = (e.target as HTMLInputElement).value;
+    searchQuery = query;
+    selectedIndex = 0;
+
+    if (searchTimeout) clearTimeout(searchTimeout);
+    const version = ++searchVersion;
+
+    // FTS only for two or more characters; shorter queries clear stale hits.
+    if (query.trim().length < 2) {
+      searchResults = [];
+      isSearching = false;
+      return;
+    }
+
+    searchTimeout = setTimeout(async () => {
+      isSearching = true;
+      try {
+        const results = await globalSearch(query, 10);
+        if (version === searchVersion) searchResults = results;
+      } catch (err) {
+        console.error('Search error:', err);
+        if (version === searchVersion) searchResults = [];
+      } finally {
+        if (version === searchVersion) isSearching = false;
+      }
+    }, 250);
+  }
+
+  // Close only when the backdrop itself is clicked, not a click inside the dialog
+  function handleBackdropClick(e: MouseEvent) {
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  }
+
+  function scrollActiveIntoView() {
+    queueMicrotask(() => {
+      listRef
+        ?.querySelector(`#${CSS.escape(optionId(selectedIndex))}`)
+        ?.scrollIntoView?.({ block: 'nearest' });
+    });
+  }
+
+  // Bound on the dialog so it also covers focus landing on the dialog
+  // container rather than the search input.
+  function handleKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      onClose();
+      return;
+    }
+    if (items.length === 0) return;
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
+        scrollActiveIntoView();
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        selectedIndex = Math.max(selectedIndex - 1, 0);
+        scrollActiveIntoView();
+        break;
+      case 'Home':
+        if (e.target !== inputRef) {
+          e.preventDefault();
+          selectedIndex = 0;
+        }
+        break;
+      case 'End':
+        if (e.target !== inputRef) {
+          e.preventDefault();
+          selectedIndex = items.length - 1;
+        }
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (items[selectedIndex]) void execute(items[selectedIndex]);
+        break;
+    }
+  }
+
+  async function execute(item: Item) {
+    try {
+      await item.run();
+    } catch (error) {
+      console.error('Failed to execute command:', error);
+    }
+  }
+
+  // Reset and load fresh data each time the palette opens.
+  $effect(() => {
+    if (!isOpen) return;
+    searchQuery = '';
+    selectedIndex = 0;
+    searchResults = [];
+    const timer = setTimeout(() => inputRef?.focus(), 50);
+    if ($authStatus === 'unlocked') {
+      void refreshChatSessions();
+      if (!patients) {
+        listPatients()
+          .then((list) => (loadedPatients = list))
+          .catch((error) => console.error('Failed to load patients:', error));
+      }
+    }
+    return () => clearTimeout(timer);
+  });
 </script>
 
 {#if isOpen}
-  <!-- Backdrop -->
   <div
-    class="fixed inset-0 bg-black/50 z-50 flex items-start justify-center pt-32"
+    class="fixed inset-0 z-50 flex items-start justify-center bg-scrim pt-[12vh]"
     onclick={handleBackdropClick}
     role="presentation"
   >
-    <!-- Command Palette Modal -->
     <div
-      class="bg-surface-raised rounded-card shadow-modal w-full max-w-2xl mx-4 overflow-hidden"
+      class="mx-4 flex max-h-[76vh] w-full max-w-2xl flex-col overflow-hidden rounded-card border border-line bg-surface-overlay shadow-modal"
       role="dialog"
       aria-modal="true"
       aria-label={$t('commandPalette.title')}
       tabindex="-1"
       onkeydown={handleKeydown}
     >
-      <!-- Search Input -->
-      <div class="flex items-center gap-3 px-4 py-3 border-b border-line">
-        <Search class="text-fg-muted shrink-0" size={20} />
+      <div class="flex h-12 shrink-0 items-center gap-2.5 border-b border-line-subtle px-4">
+        <Search class="shrink-0 text-fg-subtle" size={16} aria-hidden="true" />
+        <!-- A borderless combobox input: the dialog is the field here, so the
+             bordered Input primitive does not fit. -->
         <input
           bind:this={inputRef}
           type="text"
+          role="combobox"
+          aria-expanded="true"
+          aria-controls="{listId}-list"
+          aria-autocomplete="list"
+          aria-activedescendant={items.length ? optionId(selectedIndex) : undefined}
+          aria-label={$t('commandPalette.placeholder')}
           placeholder={$t('commandPalette.placeholder')}
-          class="flex-1 bg-transparent text-fg focus:outline-none"
+          class="min-w-0 flex-1 bg-transparent text-body text-fg placeholder:text-fg-subtle focus:outline-none"
           value={searchQuery}
           oninput={handleSearchInput}
         />
-        <kbd
-          class="px-2 py-1 text-caption font-semibold text-fg-muted bg-surface-hover border border-line rounded-control"
-        >
-          ESC
-        </kbd>
+        <Kbd class="shrink-0">esc</Kbd>
       </div>
 
-      <!-- Results -->
-      <div class="max-h-96 overflow-y-auto">
-        {#if isSearching}
-          <div class="px-4 py-8 text-center text-body text-fg-muted">
-            {$t('commandPalette.searching')}
-          </div>
-        {:else if allItems().length === 0}
-          <div class="px-4 py-8 text-center text-body text-fg-muted">
-            {searchQuery.trim() ? $t('commandPalette.noResults') : $t('commandPalette.noQuery')}
-          </div>
+      <div
+        bind:this={listRef}
+        id="{listId}-list"
+        role="listbox"
+        aria-label={$t('commandPalette.title')}
+        class="min-h-0 flex-1 overflow-y-auto p-1.5"
+      >
+        {#if items.length === 0}
+          <p class="px-3 py-8 text-center text-body text-fg-muted">
+            {isSearching ? $t('commandPalette.searching') : $t('commandPalette.noResults')}
+          </p>
         {:else}
-          <!-- Actions -->
-          {#if filteredItems().actions.length > 0}
-            <div class="py-2">
-              <div class="px-4 py-2 text-caption font-semibold text-fg-muted uppercase">
-                {$t('commandPalette.categoryActions')}
+          {#each groups as group (group.group)}
+            <div role="group" aria-labelledby="{listId}-{group.group}" class="pb-1">
+              <div
+                id="{listId}-{group.group}"
+                class="px-2 pb-1 pt-2 text-caption font-medium text-fg-subtle"
+              >
+                {groupLabel[group.group]}
               </div>
-              {#each filteredItems().actions as action, index}
-                {@const Icon = action.icon}
-                {@const globalIndex = index}
+              {#each group.entries as { item, index } (item.id)}
+                {@const Icon = item.icon}
+                {@const selected = index === selectedIndex}
+                <!-- Options are buttons so a pointer click runs them; keyboard
+                     focus stays in the combobox input (aria-activedescendant). -->
                 <button
                   type="button"
-                  class="w-full flex items-center gap-3 h-8 px-3 hover:bg-surface-hover transition-colors"
-                  class:bg-surface-selected={selectedIndex === globalIndex}
-                  onclick={() => executeItem({ type: 'action', item: action })}
+                  role="option"
+                  id={optionId(index)}
+                  tabindex="-1"
+                  aria-selected={selected}
+                  class="flex w-full items-center gap-2.5 rounded-control px-2 text-left transition-colors duration-150 ease-standard {item.result
+                    ? 'min-h-row py-1.5'
+                    : 'h-control'} {selected ? 'bg-surface-selected' : 'hover:bg-surface-hover'}"
+                  onmousemove={() => (selectedIndex = index)}
+                  onclick={() => void execute(item)}
                 >
-                  <Icon size={18} class="text-fg-muted shrink-0" />
-                  <span class="flex-1 text-left text-body text-fg">
-                    {action.label}
-                  </span>
-                  {#if action.shortcut}
-                    <kbd
-                      class="px-2 py-1 text-caption font-semibold text-fg-muted bg-surface-hover border border-line rounded-control shrink-0"
-                    >
-                      {action.shortcut}
-                    </kbd>
-                  {/if}
-                  <span class="text-caption text-fg-subtle shrink-0">
-                    {categoryLabel[action.category]}
-                  </span>
-                </button>
-              {/each}
-            </div>
-          {/if}
-
-          <!-- Patients -->
-          {#if filteredItems().patients.length > 0}
-            <div class="py-2 border-t border-line">
-              <div class="px-4 py-2 text-caption font-semibold text-fg-muted uppercase">
-                {$t('commandPalette.categoryPatients')}
-              </div>
-              {#each filteredItems().patients as patient, index}
-                {@const globalIndex = filteredItems().actions.length + index}
-                <button
-                  type="button"
-                  class="w-full flex items-center gap-3 h-8 px-3 hover:bg-surface-hover transition-colors"
-                  class:bg-surface-selected={selectedIndex === globalIndex}
-                  onclick={() => executeItem({ type: 'patient', item: patient })}
-                >
-                  <Users size={18} class="text-fg-muted shrink-0" />
-                  <span class="flex-1 text-left text-body text-fg">
-                    {patient.first_name}
-                    {patient.last_name}
-                  </span>
-                  <span class="text-caption text-fg-subtle shrink-0">
-                    {patient.ahv_number}
-                  </span>
-                </button>
-              {/each}
-            </div>
-          {/if}
-
-          <!-- Search Results -->
-          {#if searchResults.length > 0}
-            <div class="py-2 border-t border-line">
-              <div class="px-4 py-2 text-caption font-semibold text-fg-muted uppercase">
-                {$t('commandPalette.categorySearchResults')}
-              </div>
-              {#each searchResults as result, index}
-                {@const globalIndex =
-                  filteredItems().actions.length + filteredItems().patients.length + index}
-                <button
-                  type="button"
-                  class="w-full text-left px-3 py-2 hover:bg-surface-hover transition-colors"
-                  class:bg-surface-selected={selectedIndex === globalIndex}
-                  onclick={() => executeItem({ type: 'search', item: result })}
-                >
-                  <div class="flex items-center justify-between gap-2 mb-1">
-                    <span class="text-caption font-medium text-accent-fg shrink-0">
-                      {typeLabel[result.result_type] ?? result.result_type}
+                  <Icon size={16} class="shrink-0 text-fg-subtle" aria-hidden="true" />
+                  {#if item.result}
+                    {@const r = item.result}
+                    <span class="min-w-0 flex-1">
+                      <span class="flex items-baseline gap-2">
+                        <span class="truncate text-body text-fg">{r.title}</span>
+                        <span class="shrink-0 text-caption text-fg-subtle">
+                          {typeLabel[r.result_type] ?? r.result_type}
+                        </span>
+                      </span>
+                      {#if r.snippet}
+                        <HighlightedSnippet
+                          snippet={r.snippet}
+                          class="line-clamp-1 text-caption text-fg-muted"
+                        />
+                      {/if}
                     </span>
-                    <span class="text-caption text-fg-subtle shrink-0">
-                      {result.patient_name}
+                    <span class="shrink-0 text-right text-caption text-fg-subtle">
+                      <span class="block">{r.patient_name}</span>
+                      {#if r.date}<span class="block">{$fmt.date(r.date)}</span>{/if}
                     </span>
-                  </div>
-                  <div class="text-body text-fg truncate">
-                    {result.title}
-                  </div>
-                  {#if result.snippet}
-                    <div class="text-caption text-fg-muted line-clamp-1 mt-0.5">
-                      {@html sanitizeSnippet(result.snippet)}
-                    </div>
+                  {:else}
+                    <span class="min-w-0 flex-1 truncate text-body text-fg">{item.label}</span>
+                    {#if item.secondary}
+                      <span class="max-w-[45%] shrink-0 truncate text-caption text-fg-subtle">
+                        {item.secondary}
+                      </span>
+                    {/if}
+                    {#if item.shortcut}
+                      <Kbd class="shrink-0">{item.shortcut}</Kbd>
+                    {/if}
                   {/if}
                 </button>
               {/each}
             </div>
+          {/each}
+          {#if isSearching}
+            <p class="px-2 py-2 text-caption text-fg-subtle">{$t('commandPalette.searching')}</p>
           {/if}
         {/if}
       </div>
 
-      <!-- Footer -->
       <div
-        class="px-4 py-2 border-t border-line bg-surface-sunken flex items-center justify-between text-caption text-fg-muted"
+        class="flex shrink-0 items-center gap-4 border-t border-line-subtle px-4 py-2 text-caption text-fg-subtle"
       >
-        <div class="flex items-center gap-4">
-          <div class="flex items-center gap-1">
-            <kbd
-              class="px-2 py-1 text-caption font-semibold bg-surface-raised border border-line rounded-control"
-            >
-              ↑↓
-            </kbd>
-            <span>{$t('commandPalette.navigate')}</span>
-          </div>
-          <div class="flex items-center gap-1">
-            <kbd
-              class="px-2 py-1 text-caption font-semibold bg-surface-raised border border-line rounded-control"
-            >
-              ↵
-            </kbd>
-            <span>{$t('commandPalette.select')}</span>
-          </div>
-        </div>
-        <div class="flex items-center gap-1">
-          <span>{$t('commandPalette.openWith')}</span>
-          <kbd
-            class="px-2 py-1 text-caption font-semibold bg-surface-raised border border-line rounded-control"
-          >
-            Cmd+K
-          </kbd>
-        </div>
+        <span class="flex items-center gap-1.5">
+          <Kbd>↑↓</Kbd>{$t('commandPalette.navigate')}
+        </span>
+        <span class="flex items-center gap-1.5">
+          <Kbd>↵</Kbd>{$t('commandPalette.select')}
+        </span>
+        <span class="ml-auto flex items-center gap-1.5">
+          <Kbd>⌘K</Kbd>{$t('commandPalette.openWith')}
+        </span>
       </div>
     </div>
   </div>

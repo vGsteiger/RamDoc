@@ -20,7 +20,21 @@
   import { thinkingEffort } from '$lib/stores/thinking';
   import { get } from 'svelte/store';
   import ThinkingEffortSelect from '$lib/components/ThinkingEffortSelect.svelte';
-  import { ThinkingIndicator } from '$lib/components/ui';
+  import {
+    Alert,
+    Button,
+    Field,
+    Input,
+    ListSkeleton,
+    PageShell,
+    SectionHeader,
+    Select,
+    Textarea,
+    ThinkingIndicator,
+  } from '$lib/components/ui';
+  import { ArrowLeft } from 'lucide-svelte';
+  import StickyActionBar from '$lib/components/documents/StickyActionBar.svelte';
+  import { documentsUrl } from '$lib/components/documents/documents';
   import { stripThinkTags } from '$lib/llm/strip-think';
 
   const patientId = $derived(page.params.id!);
@@ -177,218 +191,175 @@
         content: editableContent,
       });
 
-      goto(`/patients/${patientId}`);
+      goto(documentsUrl(patientId, 'letters'));
     } catch (err) {
       error = String(err);
       isSaving = false;
     }
   }
 
-  function handleCancel() {
-    goto(`/patients/${patientId}`);
-  }
+  let hasDraft = $derived(Boolean(generatedContent || editableContent || isGenerating));
 </script>
 
-<div class="max-w-4xl mx-auto p-6">
-  <div class="mb-6">
-    <button onclick={handleCancel} class="text-accent-fg hover:text-accent-fg mb-4">
-      {$t('letters.backToLetters')}
-    </button>
-    <h1 class="text-display font-semibold text-fg">{$t('letters.newLetterTitle')}</h1>
-  </div>
+<PageShell width="prose" title={$t('letters.newLetterTitle')}>
+  {#snippet breadcrumb()}
+    <a
+      href={documentsUrl(patientId, 'letters')}
+      class="inline-flex items-center gap-1 text-fg-subtle hover:text-fg"
+    >
+      <ArrowLeft size={12} aria-hidden="true" />
+      {$t('letters.backToDocuments')}
+    </a>
+  {/snippet}
 
   {#if isLoading}
-    <div class="text-center py-8">
-      <p class="text-fg-muted">{$t('letters.loading')}</p>
-    </div>
-  {:else if error}
-    <div class="bg-danger-subtle border border-danger-line rounded-card p-4 mb-6">
-      <p class="text-danger-fg">{error}</p>
-    </div>
+    <p class="sr-only">{$t('letters.loading')}</p>
+    <ListSkeleton count={4} />
+  {:else if error && !patient}
+    <Alert tone="danger">{error}</Alert>
   {:else}
-    <div class="space-y-6">
-      <!-- Letter Type Selection -->
-      <div>
-        <label for="letter-type" class="block text-body font-medium text-fg-muted mb-2">
-          {$t('letters.selectType')}
-        </label>
-        <select
-          id="letter-type"
-          bind:value={letterType}
-          class="w-full px-3 py-2 border border-line rounded-control focus:ring-2 focus:ring-accent/30"
-        >
-          <option value="referral">{$t('letters.types.referral')}</option>
-          <option value="insurance_authorization"
-            >{$t('letters.types.insurance_authorization')}</option
-          >
-          <option value="therapy_extension">{$t('letters.types.therapy_extension')}</option>
-        </select>
-        <p class="text-body text-fg-muted mt-1">
-          {$t(`letters.typeDescriptions.${letterType}`)}
-        </p>
-      </div>
+    {#if error}
+      <Alert tone="danger" class="mb-4">{error}</Alert>
+    {/if}
 
-      <!-- Language Selection -->
-      <div>
-        <label for="letter-language" class="block text-body font-medium text-fg-muted mb-2">
-          {$t('letters.selectLanguage')}
-        </label>
-        <select
-          id="letter-language"
-          bind:value={letterLanguage}
-          class="w-full px-3 py-2 border border-line rounded-control focus:ring-2 focus:ring-accent/30"
+    <section class="space-y-4">
+      <SectionHeader title={$t('letters.settings')} />
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field
+          label={$t('letters.selectType')}
+          for="letter-type"
+          hint={$t(`letters.typeDescriptions.${letterType}`)}
         >
-          <option value="de">Deutsch</option>
-          <option value="fr">Français</option>
-        </select>
-      </div>
+          <Select id="letter-type" bind:value={letterType}>
+            <option value="referral">{$t('letters.types.referral')}</option>
+            <option value="insurance_authorization"
+              >{$t('letters.types.insurance_authorization')}</option
+            >
+            <option value="therapy_extension">{$t('letters.types.therapy_extension')}</option>
+          </Select>
+        </Field>
 
-      <!-- Recipient Information -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label for="letter-recipient-name" class="block text-body font-medium text-fg-muted mb-2">
-            {$t('letters.recipientName')}
-          </label>
-          <input
+        <Field label={$t('letters.selectLanguage')} for="letter-language">
+          <Select id="letter-language" bind:value={letterLanguage}>
+            <option value="de">Deutsch</option>
+            <option value="fr">Français</option>
+          </Select>
+        </Field>
+
+        <Field label={$t('letters.recipientName')} for="letter-recipient-name">
+          <Input
             id="letter-recipient-name"
-            type="text"
             bind:value={recipientName}
             placeholder={$t('letters.recipientNamePlaceholder')}
-            class="w-full px-3 py-2 border border-line rounded-control focus:ring-2 focus:ring-accent/30"
           />
-        </div>
+        </Field>
 
-        <div>
-          <label for="letter-subject" class="block text-body font-medium text-fg-muted mb-2">
-            {$t('letters.subject')}
-          </label>
-          <input
+        <Field label={$t('letters.subject')} for="letter-subject">
+          <Input
             id="letter-subject"
-            type="text"
             bind:value={subject}
             placeholder={$t('letters.subjectPlaceholder')}
-            class="w-full px-3 py-2 border border-line rounded-control focus:ring-2 focus:ring-accent/30"
           />
-        </div>
+        </Field>
       </div>
 
-      <div>
-        <label
-          for="letter-recipient-address"
-          class="block text-body font-medium text-fg-muted mb-2"
-        >
-          {$t('letters.recipientAddress')}
-        </label>
-        <textarea
+      <Field label={$t('letters.recipientAddress')} for="letter-recipient-address">
+        <Textarea
           id="letter-recipient-address"
           bind:value={recipientAddress}
           placeholder={$t('letters.recipientAddressPlaceholder')}
-          rows="2"
-          class="w-full px-3 py-2 border border-line rounded-control focus:ring-2 focus:ring-accent/30"
-        ></textarea>
-      </div>
+          rows={2}
+        />
+      </Field>
+    </section>
 
-      <!-- Patient Context -->
-      <div>
-        <label for="letter-patient-context" class="block text-body font-medium text-fg-muted mb-2">
-          {$t('letters.patientContext')}
-          <span class="text-fg-muted text-caption">{$t('letters.patientContextHint')}</span>
-        </label>
-        <textarea
+    <section class="mt-section space-y-4">
+      <SectionHeader title={$t('letters.sources')} />
+      <Field
+        label={$t('letters.patientContext')}
+        for="letter-patient-context"
+        hint={$t('letters.patientContextHint')}
+      >
+        <Textarea
           id="letter-patient-context"
           bind:value={patientContext}
-          rows="6"
-          class="w-full px-3 py-2 border border-line rounded-control focus:ring-2 focus:ring-accent/30 font-mono text-body"
-        ></textarea>
-      </div>
+          rows={6}
+          class="font-mono text-label"
+        />
+      </Field>
 
-      <!-- Clinical Summary -->
-      <div>
-        <label for="letter-clinical-summary" class="block text-body font-medium text-fg-muted mb-2">
-          {$t('letters.clinicalSummary')}
-        </label>
-        <textarea
+      <Field label={$t('letters.clinicalSummary')} for="letter-clinical-summary">
+        <Textarea
           id="letter-clinical-summary"
           bind:value={clinicalSummary}
           placeholder={$t('letters.clinicalSummaryPlaceholder')}
-          rows="4"
-          class="w-full px-3 py-2 border border-line rounded-control focus:ring-2 focus:ring-accent/30"
-        ></textarea>
-      </div>
+          rows={4}
+        />
+      </Field>
+    </section>
 
-      <!-- Generate Button -->
-      <div class="flex flex-wrap items-center gap-4">
-        <ThinkingEffortSelect disabled={isGenerating} />
-        <button
-          onclick={handleGenerate}
-          disabled={isGenerating}
-          class="px-6 py-3 bg-accent text-on-accent rounded-control hover:bg-accent-hover disabled:bg-surface-selected disabled:cursor-not-allowed"
-        >
-          {isGenerating ? $t('letters.generating') : $t('letters.generate')}
-        </button>
-
-        {#if editableContent}
-          <button
-            onclick={handleGenerate}
-            disabled={isGenerating}
-            class="px-6 py-3 bg-surface-selected text-fg-muted rounded-control hover:bg-surface-selected disabled:bg-surface-hover disabled:cursor-not-allowed"
-          >
-            {$t('letters.regenerate')}
-          </button>
-        {/if}
-      </div>
-
-      <!-- Generated Content -->
-      {#if generatedContent || editableContent || isGenerating}
-        <div>
-          <label for="letter-generated" class="block text-body font-medium text-fg-muted mb-2">
-            {$t('letters.generatedLetter')}
-            {#if isGenerating && activityStartedAt}
-              <span class="ml-2 inline-flex align-middle">
-                <ThinkingIndicator
-                  startedAt={activityStartedAt}
-                  label={$t('letters.activityWriting')}
-                />
-              </span>
-            {/if}
-          </label>
-          <p class="text-body text-fg-muted mb-2">{$t('letters.reviewBeforeSaving')}</p>
-          {#if isGenerating}
-            <textarea
-              id="letter-generated"
-              value={generatedContent}
-              rows="20"
-              readonly
-              class="w-full px-3 py-2 border border-line rounded-control focus:ring-2 focus:ring-accent/30 font-mono text-body bg-surface-sunken"
-            ></textarea>
-          {:else}
-            <textarea
-              id="letter-generated"
-              bind:value={editableContent}
-              rows="20"
-              class="w-full px-3 py-2 border border-line rounded-control focus:ring-2 focus:ring-accent/30 font-mono text-body"
-            ></textarea>
+    <section class="mt-section space-y-3">
+      <SectionHeader title={$t('letters.draftSection')}>
+        {#snippet actions()}
+          {#if isGenerating && activityStartedAt}
+            <span role="status" aria-live="polite">
+              <ThinkingIndicator
+                startedAt={activityStartedAt}
+                label={$t('letters.activityWriting')}
+              />
+            </span>
           {/if}
-        </div>
+        {/snippet}
+      </SectionHeader>
 
-        <!-- Save/Cancel Buttons -->
-        <div class="flex gap-4">
-          <button
-            onclick={handleSave}
-            disabled={isSaving}
-            class="px-6 py-3 bg-success text-on-success rounded-control hover:bg-success-hover disabled:bg-surface-selected disabled:cursor-not-allowed"
-          >
-            {isSaving ? $t('common.loading') : $t('common.save')}
-          </button>
-
-          <button
-            onclick={handleCancel}
-            class="px-6 py-3 bg-surface-selected text-fg-muted rounded-control hover:bg-surface-selected"
-          >
-            {$t('common.cancel')}
-          </button>
-        </div>
+      {#if hasDraft}
+        <p class="text-label text-fg-muted">{$t('letters.reviewBeforeSaving')}</p>
+        {#if isGenerating}
+          <Textarea
+            id="letter-generated"
+            value={generatedContent}
+            rows={20}
+            readonly
+            class="bg-surface-sunken leading-relaxed"
+            aria-label={$t('letters.generatedLetter')}
+          />
+        {:else}
+          <Textarea
+            id="letter-generated"
+            bind:value={editableContent}
+            rows={20}
+            class="leading-relaxed"
+            aria-label={$t('letters.generatedLetter')}
+          />
+        {/if}
+      {:else}
+        <p class="text-label text-fg-subtle">{$t('letters.generateFirstHint')}</p>
       {/if}
-    </div>
+    </section>
+
+    <StickyActionBar>
+      {#snippet start()}
+        <Button variant="ghost" href={documentsUrl(patientId, 'letters')}>
+          {$t('common.cancel')}
+        </Button>
+      {/snippet}
+      <ThinkingEffortSelect disabled={isGenerating} />
+      <Button
+        variant={editableContent ? 'secondary' : 'primary'}
+        onclick={handleGenerate}
+        disabled={isGenerating}
+      >
+        {isGenerating
+          ? $t('letters.generating')
+          : editableContent
+            ? $t('letters.regenerate')
+            : $t('letters.generate')}
+      </Button>
+      {#if editableContent}
+        <Button variant="primary" onclick={handleSave} disabled={isSaving || isGenerating}>
+          {isSaving ? $t('common.loading') : $t('common.save')}
+        </Button>
+      {/if}
+    </StickyActionBar>
   {/if}
-</div>
+</PageShell>

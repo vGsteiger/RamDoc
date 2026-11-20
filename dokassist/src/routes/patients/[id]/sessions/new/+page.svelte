@@ -10,6 +10,15 @@
   import { insertDictation } from '$lib/dictation';
   import { get } from 'svelte/store';
   import { t } from '$lib/translations';
+  import {
+    Alert,
+    Button,
+    Field,
+    Input,
+    PageShell,
+    SectionHeader,
+    Select,
+  } from '$lib/components/ui';
 
   const patientId = $derived(page.params.id);
 
@@ -84,126 +93,84 @@
   }
 </script>
 
-<div class="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
-  <h1 class="text-display font-semibold text-fg mb-6">{$t('sessions.newSessionTitle')}</h1>
+<PageShell>
+  <div>
+    <SectionHeader title={$t('sessions.newSessionTitle')} />
 
-  {#if error}
-    <div class="bg-danger-subtle border border-danger-line text-danger-fg p-4 rounded-card mb-6">
-      {error}
-    </div>
-  {/if}
+    {#if error}
+      <Alert tone="danger" class="mb-4">{error}</Alert>
+    {/if}
 
-  <form onsubmit={handleSubmit} class="space-y-6">
-    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      <div class="col-span-1 sm:col-span-2">
-        <label for="session-type" class="block text-body font-medium text-fg-muted mb-1">
-          {$t('sessions.sessionType')} *
-        </label>
-        <select
-          id="session-type"
-          bind:value={sessionType}
-          required
-          class="w-full px-3 py-2 bg-surface-raised border border-line rounded-control text-fg focus:outline-none focus:ring-2 focus:ring-accent/30"
-        >
-          {#each sessionTypes as type}
-            <option value={type}>{$sessionTypeLabel(type)}</option>
-          {/each}
-        </select>
+    <form onsubmit={handleSubmit} class="space-y-4">
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field label={$t('sessions.sessionType')} for="session-type" required class="sm:col-span-2">
+          <Select id="session-type" bind:value={sessionType} required>
+            {#each sessionTypes as type (type)}
+              <option value={type}>{$sessionTypeLabel(type)}</option>
+            {/each}
+          </Select>
+        </Field>
+
+        <Field label={$t('sessions.date')} for="session-date" required>
+          <Input id="session-date" type="date" bind:value={sessionDate} required />
+        </Field>
+
+        <Field label={$t('sessions.timeOptional')} for="session-time">
+          <Input id="session-time" type="time" bind:value={sessionTime} />
+        </Field>
+
+        <Field label={$t('sessions.duration')} for="duration">
+          <Input
+            id="duration"
+            type="number"
+            bind:value={durationMinutes}
+            min="0"
+            step="5"
+            placeholder="50"
+          />
+        </Field>
       </div>
 
       <div>
-        <label for="duration" class="block text-body font-medium text-fg-muted mb-1">
-          {$t('sessions.duration')}
-        </label>
-        <input
-          id="duration"
-          type="number"
-          bind:value={durationMinutes}
-          min="0"
-          step="5"
-          placeholder="50"
-          class="w-full px-3 py-2 bg-surface-raised border border-line rounded-control text-fg focus:outline-none focus:ring-2 focus:ring-accent/30"
-        />
+        <div class="mb-1 flex items-center justify-between gap-2">
+          <label for="notes" class="text-label font-medium text-fg">
+            {$t('common.notes')} <span class="text-fg-muted" aria-hidden="true">*</span>
+          </label>
+          <DictationButton
+            onTranscript={(text) => (notes = insertDictation(notesEl, notes, text))}
+          />
+        </div>
+        <!-- Raw textarea on purpose: dictation inserts at the caret, so it needs
+             the element (bind:this), which the Textarea primitive does not expose. -->
+        <textarea
+          id="notes"
+          bind:this={notesEl}
+          bind:value={notes}
+          required
+          rows="8"
+          placeholder={$t('sessions.notesPlaceholderDetailed')}
+          class="w-full resize-y rounded-control border border-line bg-surface-raised px-2.5 py-2 text-body text-fg transition-colors duration-150 ease-standard focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/25 focus-visible:outline-none"
+        ></textarea>
       </div>
-    </div>
 
-    <div>
-      <label for="session-date" class="block text-body font-medium text-fg-muted mb-1">
-        {$t('sessions.date')} *
+      <label class="flex cursor-pointer items-center gap-2">
+        <input type="checkbox" bind:checked={showAMDP} class="size-4 accent-current" />
+        <span class="text-body text-fg">{$t('sessions.amdpToggle')}</span>
       </label>
-      <input
-        id="session-date"
-        type="date"
-        bind:value={sessionDate}
-        required
-        class="w-full px-3 py-2 bg-surface-raised border border-line rounded-control text-fg focus:outline-none focus:ring-2 focus:ring-accent/30"
-      />
-    </div>
 
-    <div>
-      <label for="session-time" class="block text-body font-medium text-fg-muted mb-1">
-        {$t('sessions.timeOptional')}
-      </label>
-      <input
-        id="session-time"
-        type="time"
-        bind:value={sessionTime}
-        class="w-full px-3 py-2 bg-surface-raised border border-line rounded-control text-fg focus:outline-none focus:ring-2 focus:ring-accent/30"
-      />
-    </div>
+      {#if showAMDP}
+        <section class="rounded-card border border-line p-4" aria-labelledby="amdp-title">
+          <h2 id="amdp-title" class="mb-3 text-heading text-fg">{$t('sessions.amdpTitle')}</h2>
+          <AMDPForm categories={amdpCategories} onScoreChange={handleAMDPScoreChange} />
+        </section>
+      {/if}
 
-    <div>
-      <div class="flex items-center justify-between gap-2 mb-1">
-        <label for="notes" class="block text-body font-medium text-fg-muted">
-          {$t('common.notes')} *
-        </label>
-        <DictationButton onTranscript={(text) => (notes = insertDictation(notesEl, notes, text))} />
+      <div class="flex justify-end gap-2 border-t border-line-subtle pt-4">
+        <Button onclick={handleCancel} disabled={saving}>{$t('common.cancel')}</Button>
+        <Button type="submit" variant="primary" loading={saving}>
+          {$t('sessions.saveSession')}
+        </Button>
       </div>
-      <textarea
-        id="notes"
-        bind:this={notesEl}
-        bind:value={notes}
-        required
-        rows="8"
-        placeholder={$t('sessions.notesPlaceholderDetailed')}
-        class="w-full px-3 py-2 bg-surface-raised border border-line rounded-control text-fg focus:outline-none focus:ring-2 focus:ring-accent/30 resize-none"
-      ></textarea>
-    </div>
-
-    <div>
-      <label class="flex items-center gap-2 cursor-pointer">
-        <input
-          type="checkbox"
-          bind:checked={showAMDP}
-          class="w-4 h-4 bg-surface-selected border-line rounded-control text-accent-fg focus:ring-2 focus:ring-accent/30"
-        />
-        <span class="text-body font-medium text-fg-muted">{$t('sessions.amdpToggle')}</span>
-      </label>
-    </div>
-
-    {#if showAMDP}
-      <div class="border border-line rounded-card p-4">
-        <h2 class="text-heading font-semibold text-fg mb-4">{$t('sessions.amdpTitle')}</h2>
-        <AMDPForm categories={amdpCategories} onScoreChange={handleAMDPScoreChange} />
-      </div>
-    {/if}
-
-    <div class="flex justify-end gap-3 pt-4 border-t border-line">
-      <button
-        type="button"
-        onclick={handleCancel}
-        class="h-8 px-3 bg-surface-hover text-fg-muted rounded-control hover:bg-surface-selected transition-colors"
-        disabled={saving}
-      >
-        {$t('common.cancel')}
-      </button>
-      <button
-        type="submit"
-        class="h-8 px-3 bg-accent text-on-accent rounded-control hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        disabled={saving}
-      >
-        {saving ? $t('common.saving') : $t('sessions.saveSession')}
-      </button>
-    </div>
-  </form>
-</div>
+    </form>
+  </div>
+</PageShell>

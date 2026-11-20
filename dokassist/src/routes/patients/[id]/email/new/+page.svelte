@@ -20,12 +20,24 @@
   } from '$lib/api';
   import { thinkingEffort } from '$lib/stores/thinking';
   import ErrorDisplay from '$lib/components/ErrorDisplay.svelte';
-  import { ThinkingIndicator } from '$lib/components/ui';
+  import {
+    Alert,
+    Button,
+    Field,
+    Input,
+    PageShell,
+    StatusIndicator,
+    Textarea,
+    ThinkingIndicator,
+  } from '$lib/components/ui';
+  import { ArrowLeft, ChevronDown, ChevronRight } from 'lucide-svelte';
+  import StickyActionBar from '$lib/components/documents/StickyActionBar.svelte';
+  import { documentsUrl } from '$lib/components/documents/documents';
   import { t } from '$lib/translations';
 
   let patientId = $derived(page.params.id!);
 
-  let patient: Patient | null = $state(null);
+  let patient = $state<Patient | null>(null);
   let recipientEmail = $state('');
   let subject = $state('');
   let body = $state('');
@@ -121,7 +133,7 @@
       };
 
       await createEmail(input);
-      await goto(`/patients/${patientId}/email`);
+      await goto(documentsUrl(patientId, 'emails'));
     } catch (e) {
       error = parseError(e);
     } finally {
@@ -159,7 +171,7 @@
       window.location.href = mailtoLink;
 
       setTimeout(() => {
-        goto(`/patients/${patientId}/email`);
+        goto(documentsUrl(patientId, 'emails'));
       }, 500);
     } catch (e) {
       error = parseError(e);
@@ -199,186 +211,161 @@
     unlistenDone?.();
     unlistenError?.();
   });
+
+  function applyDraft() {
+    body = aiDraft;
+    aiDraft = '';
+    aiThinking = '';
+    rawDraft = '';
+  }
+
+  let patientLine = $derived(
+    patient ? `${$t('email.forPatient')} ${patient.first_name} ${patient.last_name}` : undefined
+  );
 </script>
 
-<div class="p-8 max-w-4xl mx-auto">
-  <div class="mb-6">
-    <h2 class="text-display font-semibold text-fg mb-2">{$t('email.compose')}</h2>
-    {#if patient}
-      <p class="text-fg-muted">
-        {$t('email.forPatient')}
-        {patient.first_name}
-        {patient.last_name}
-      </p>
-    {/if}
-  </div>
+<PageShell width="prose" title={$t('email.compose')} description={patientLine}>
+  {#snippet breadcrumb()}
+    <a
+      href={documentsUrl(patientId, 'emails')}
+      class="inline-flex items-center gap-1 text-fg-subtle hover:text-fg"
+    >
+      <ArrowLeft size={12} aria-hidden="true" />
+      {$t('email.backToDocuments')}
+    </a>
+  {/snippet}
 
   {#if error}
-    <div class="mb-6">
+    <div class="mb-4">
       <ErrorDisplay {error} showDetails={true} />
     </div>
   {/if}
 
-  <div class="bg-surface-sunken rounded-card p-6 border border-line space-y-4">
-    <div>
-      <label for="recipient" class="block text-body font-medium text-fg-muted mb-2">
-        {$t('email.to')}
-      </label>
-      <input
+  <div class="space-y-4">
+    <Field label={$t('email.to')} for="recipient">
+      <Input
         id="recipient"
         type="email"
         bind:value={recipientEmail}
         placeholder="recipient@example.com"
-        class="w-full px-3 py-2 bg-surface-raised border border-line rounded-control text-fg focus:outline-none focus:ring-2 focus:ring-accent/30"
       />
-    </div>
+    </Field>
 
-    <div>
-      <label for="subject" class="block text-body font-medium text-fg-muted mb-2">
-        {$t('email.subject')}
-      </label>
-      <input
-        id="subject"
-        type="text"
-        bind:value={subject}
-        placeholder={$t('email.subjectPlaceholder')}
-        class="w-full px-3 py-2 bg-surface-raised border border-line rounded-control text-fg focus:outline-none focus:ring-2 focus:ring-accent/30"
-      />
-    </div>
+    <Field label={$t('email.subject')} for="subject">
+      <Input id="subject" bind:value={subject} placeholder={$t('email.subjectPlaceholder')} />
+    </Field>
 
-    <div>
-      <label for="body" class="block text-body font-medium text-fg-muted mb-2">
-        {$t('email.message')}
-      </label>
-      <textarea
+    <Field label={$t('email.message')} for="body">
+      <Textarea
         id="body"
         bind:value={body}
         placeholder={$t('email.messagePlaceholder')}
-        rows="15"
-        class="w-full px-3 py-2 bg-surface-raised border border-line rounded-control text-fg focus:outline-none focus:ring-2 focus:ring-accent/30 font-mono"
-      ></textarea>
-    </div>
+        rows={15}
+        class="leading-relaxed"
+      />
+    </Field>
 
-    <div class="border-t border-line pt-4">
-      <button
+    <section class="rounded-card border border-line">
+      <Button
+        variant="ghost"
+        full
+        class="justify-start rounded-card"
+        aria-expanded={showAiPanel}
+        aria-controls="email-ai-panel"
         onclick={() => (showAiPanel = !showAiPanel)}
-        class="text-body text-accent-fg hover:underline"
       >
+        {#if showAiPanel}
+          <ChevronDown size={14} aria-hidden="true" />
+        {:else}
+          <ChevronRight size={14} aria-hidden="true" />
+        {/if}
         {$t('email.aiAssist')}
-      </button>
+      </Button>
 
       {#if showAiPanel}
-        <div class="mt-3 space-y-3">
+        <div id="email-ai-panel" class="space-y-3 border-t border-line-subtle p-4">
           {#if aiError}
-            <p class="text-body text-danger-fg">{aiError}</p>
+            <Alert tone="danger">{aiError}</Alert>
           {/if}
 
-          <div>
-            <label for="ai-prompt" class="block text-body font-medium text-fg-muted mb-1">
-              {$t('email.aiPromptLabel')}
-            </label>
-            <textarea
-              id="ai-prompt"
-              bind:value={aiPrompt}
-              rows="3"
-              class="w-full px-3 py-2 bg-surface-raised border border-line rounded-control text-fg focus:outline-none focus:ring-2 focus:ring-accent/30"
-            ></textarea>
-          </div>
+          <Field label={$t('email.aiPromptLabel')} for="ai-prompt">
+            <Textarea id="ai-prompt" bind:value={aiPrompt} rows={3} />
+          </Field>
 
           {#if engineStatus?.is_loaded}
-            <button
-              onclick={handleGenerateDraft}
-              disabled={isGenerating}
-              class="h-8 px-3 bg-accent text-on-accent rounded-control hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
+            <Button size="sm" onclick={handleGenerateDraft} disabled={isGenerating}>
               {isGenerating ? $t('email.generating') : $t('email.generateDraft')}
-            </button>
+            </Button>
           {:else}
-            <p class="text-body text-fg-muted">{$t('email.modelNotLoaded')}</p>
+            <StatusIndicator tone="warn" label={$t('email.modelNotLoaded')} />
           {/if}
 
           {#if aiDraft || isGenerating}
-            <div class="mt-3 space-y-2">
-              <div class="flex items-center justify-between">
-                <span class="text-body font-medium text-fg-muted">{$t('email.generatedDraft')}</span
+            <div class="space-y-2">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <span class="text-label font-medium text-fg-muted"
+                  >{$t('email.generatedDraft')}</span
                 >
                 {#if isGenerating && activityStartedAt}
-                  <ThinkingIndicator
-                    startedAt={activityStartedAt}
-                    label={$t('email.activityWriting')}
-                  />
+                  <span role="status" aria-live="polite">
+                    <ThinkingIndicator
+                      startedAt={activityStartedAt}
+                      label={$t('email.activityWriting')}
+                    />
+                  </span>
                 {/if}
                 {#if aiDraft && !isGenerating}
-                  <button
-                    onclick={() => {
-                      body = aiDraft;
-                      aiDraft = '';
-                      aiThinking = '';
-                      rawDraft = '';
-                    }}
-                    class="text-body h-7 px-2.5 bg-accent text-on-accent rounded-control hover:bg-accent-hover transition-colors"
-                  >
-                    {$t('email.applyToBody')}
-                  </button>
+                  <Button size="sm" onclick={applyDraft}>{$t('email.applyToBody')}</Button>
                 {/if}
               </div>
-              <textarea
+              <Textarea
                 readonly
                 value={aiDraft}
-                rows="8"
-                class="w-full px-3 py-2 bg-surface-raised border border-line rounded-control text-fg font-mono text-body focus:outline-none"
-              ></textarea>
+                rows={8}
+                class="bg-surface-sunken"
+                aria-label={$t('email.generatedDraft')}
+              />
             </div>
           {/if}
 
           {#if aiThinking}
-            <div class="mt-2">
-              <button
+            <div>
+              <Button
+                variant="ghost"
+                size="sm"
+                class="-ml-2.5"
+                aria-expanded={showThinking}
                 onclick={() => (showThinking = !showThinking)}
-                class="text-caption text-fg-subtle hover:underline"
               >
                 {showThinking ? $t('email.hideReasoning') : $t('email.showReasoning')} ({aiThinking.split(
                   '\n'
                 ).length}
                 {$t('email.reasoningLines')})
-              </button>
+              </Button>
               {#if showThinking}
                 <pre
-                  class="mt-2 p-3 bg-surface-sunken border border-line rounded-card text-caption text-fg-muted whitespace-pre-wrap overflow-auto max-h-48">{aiThinking}</pre>
+                  class="mt-2 max-h-48 overflow-auto whitespace-pre-wrap rounded-card border border-line bg-surface-sunken p-3 text-caption text-fg-muted">{aiThinking}</pre>
               {/if}
             </div>
           {/if}
         </div>
       {/if}
-    </div>
+    </section>
 
-    <div class="flex justify-between items-center pt-4 border-t border-line">
-      <a
-        href={`/patients/${patientId}/email`}
-        class="px-4 py-2 text-fg-muted hover:text-fg transition-colors"
-      >
+    <p class="text-label text-fg-subtle">{$t('email.mailClientHint')}</p>
+  </div>
+
+  <StickyActionBar>
+    {#snippet start()}
+      <Button variant="ghost" href={documentsUrl(patientId, 'emails')}>
         {$t('common.cancel')}
-      </a>
-      <div class="flex space-x-3">
-        <button
-          onclick={handleSaveDraft}
-          disabled={isSaving || isGenerating}
-          class="h-8 px-3 bg-surface-selected text-fg-muted rounded-control hover:bg-surface-selected transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isSaving ? $t('email.saving') : $t('email.saveDraft')}
-        </button>
-        <button
-          onclick={handleSendEmail}
-          disabled={isSaving || isGenerating}
-          class="h-8 px-3 bg-accent text-on-accent rounded-control hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isSaving ? $t('email.opening') : $t('email.openMailClient')}
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <div class="mt-4 text-body text-fg-subtle">
-    <p>{$t('email.mailClientHint')}</p>
-  </div>
-</div>
+      </Button>
+    {/snippet}
+    <Button onclick={handleSaveDraft} disabled={isSaving || isGenerating}>
+      {isSaving ? $t('email.saving') : $t('email.saveDraft')}
+    </Button>
+    <Button variant="primary" onclick={handleSendEmail} disabled={isSaving || isGenerating}>
+      {isSaving ? $t('email.opening') : $t('email.openMailClient')}
+    </Button>
+  </StickyActionBar>
+</PageShell>

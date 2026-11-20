@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { Input } from '$lib/components/ui';
+  import { t } from '$lib/translations';
 
   interface ICD10Entry {
     code: string;
@@ -9,9 +11,11 @@
   interface Props {
     onSelect: (code: string, description: string) => void;
     placeholder?: string;
+    id?: string;
   }
 
-  let { onSelect, placeholder = 'ICD-10 Code suchen...' }: Props = $props();
+  let { onSelect, placeholder = undefined, id = undefined }: Props = $props();
+  const listId = $props.id();
 
   let icd10Data: ICD10Entry[] = $state([]);
   let searchQuery = $state('');
@@ -86,31 +90,48 @@
 </script>
 
 <div class="relative">
-  <input
+  <Input
+    {id}
     type="text"
+    role="combobox"
+    autocomplete="off"
+    aria-autocomplete="list"
+    aria-expanded={showDropdown && filteredResults.length > 0}
+    aria-controls={listId}
+    aria-activedescendant={showDropdown && filteredResults.length > 0
+      ? `${listId}-${selectedIndex}`
+      : undefined}
     bind:value={searchQuery}
     onkeydown={handleKeydown}
     onblur={handleBlur}
     onfocus={() => {
       if (filteredResults.length > 0) showDropdown = true;
     }}
-    {placeholder}
-    class="w-full px-4 py-2 bg-surface-raised border border-line rounded-control text-fg focus:outline-none focus:ring-2 focus:ring-accent/30"
+    placeholder={placeholder ?? $t('diagnoses.search')}
   />
 
   {#if showDropdown && filteredResults.length > 0}
     <div
-      class="absolute z-10 w-full mt-1 bg-surface-raised border border-line rounded-card shadow-popover max-h-64 overflow-y-auto"
+      id={listId}
+      role="listbox"
+      class="absolute z-10 mt-1 max-h-64 w-full overflow-y-auto rounded-card border border-line bg-surface-overlay p-1 shadow-popover"
     >
-      {#each filteredResults as entry, index}
+      {#each filteredResults as entry, index (`${entry.code}-${index}`)}
         <button
           type="button"
-          class="w-full h-8 px-3 text-left hover:bg-surface-hover transition-colors flex gap-2"
-          class:bg-surface-selected={index === selectedIndex}
+          role="option"
+          id="{listId}-{index}"
+          aria-selected={index === selectedIndex}
+          tabindex="-1"
+          class="flex h-control w-full items-center gap-2 rounded-control px-2 text-left transition-colors duration-150 ease-standard hover:bg-surface-hover {index ===
+          selectedIndex
+            ? 'bg-surface-selected'
+            : ''}"
+          onmousedown={(e) => e.preventDefault()}
           onclick={() => handleSelect(entry)}
         >
-          <span class="font-mono text-body text-accent-fg shrink-0">{entry.code}</span>
-          <span class="text-body text-fg-muted">{entry.description}</span>
+          <span class="w-14 shrink-0 font-mono text-label text-fg">{entry.code}</span>
+          <span class="min-w-0 truncate text-label text-fg-muted">{entry.description}</span>
         </button>
       {/each}
     </div>

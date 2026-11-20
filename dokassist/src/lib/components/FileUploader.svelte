@@ -7,10 +7,11 @@
     AUDIO_EXTENSIONS,
     type FileRecord,
   } from '$lib/api';
-  import { Paperclip } from 'lucide-svelte';
+  import { Upload } from 'lucide-svelte';
   import { t } from '$lib/translations';
   import { errorText } from '$lib/translations/labels';
   import { addToast } from '$lib/stores/toast';
+  import { Alert, Button, ProgressBar } from '$lib/components/ui';
 
   const accept = ['.pdf', '.png', '.jpg', '.jpeg', '.docx']
     .concat(AUDIO_EXTENSIONS.map((ext) => `.${ext}`))
@@ -19,10 +20,13 @@
   interface Props {
     patientId: string;
     onUpload?: (file: FileRecord) => void;
+    /** `compact` is a single-line drop strip for list pages. */
+    variant?: 'dropzone' | 'compact';
   }
 
-  let { patientId, onUpload }: Props = $props();
+  let { patientId, onUpload, variant = 'dropzone' }: Props = $props();
 
+  let input = $state<HTMLInputElement | null>(null);
   let isDragging = $state(false);
   let isUploading = $state(false);
   let uploadProgress = $state(0);
@@ -34,6 +38,11 @@
     'image/jpeg',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   ];
+
+  /** Opens the native file picker (used by the Documents "New ▾ Upload file" item). */
+  export function browse() {
+    input?.click();
+  }
 
   function handleDragOver(event: DragEvent) {
     event.preventDefault();
@@ -120,11 +129,15 @@
   }
 </script>
 
-<div class="space-y-4">
+<div class="space-y-2">
+  <!-- The whole area is a drop target; the visible "Browse" control is the
+       keyboard path, so the native input itself stays hidden. -->
   <div
-    class="relative border-2 border-dashed rounded-card p-8 transition-colors {isDragging
-      ? 'border-accent bg-accent-subtle'
-      : 'border-line bg-surface-sunken'}"
+    class="relative flex items-center rounded-card border border-dashed transition-colors duration-150 ease-standard {isDragging
+      ? 'border-line-strong bg-surface-selected'
+      : 'border-line bg-surface-raised'} {variant === 'compact'
+      ? 'min-h-row flex-wrap gap-x-2 gap-y-1 px-3 py-2'
+      : 'flex-col justify-center px-6 py-8 text-center'}"
     role="region"
     aria-label={$t('files.uploadArea')}
     ondragover={handleDragOver}
@@ -132,44 +145,42 @@
     ondrop={handleDrop}
   >
     <input
+      bind:this={input}
       type="file"
-      class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+      class="sr-only"
+      tabindex="-1"
+      aria-hidden="true"
       multiple
       {accept}
       onchange={handleFileInput}
     />
 
-    <div class="text-center pointer-events-none">
-      <div class="mb-4 flex justify-center text-fg-muted">
-        <Paperclip size={48} />
-      </div>
-      <p class="text-fg-muted font-medium mb-2">
-        {$t('files.dropOrBrowse')}
-      </p>
-      <p class="text-body text-fg-subtle">
+    {#if variant === 'compact'}
+      <Upload size={16} class="shrink-0 text-fg-subtle" aria-hidden="true" />
+      <span class="text-label text-fg-muted">
+        {isDragging ? $t('files.dropHere') : $t('files.dropCompact')}
+      </span>
+      <Button variant="ghost" size="sm" class="-ml-1" onclick={browse}>
+        {$t('files.browse')}
+      </Button>
+      <span class="min-w-0 basis-full truncate text-caption text-fg-subtle sm:basis-auto sm:pl-1">
         {$t('files.supportedTypes')}
+      </span>
+    {:else}
+      <Upload size={20} class="mb-3 text-fg-subtle" aria-hidden="true" />
+      <p class="text-heading text-fg">
+        {isDragging ? $t('files.dropHere') : $t('files.dropOrBrowse')}
       </p>
-    </div>
+      <p class="mt-1 max-w-measure text-label text-fg-muted">{$t('files.supportedTypes')}</p>
+      <Button class="mt-3" onclick={browse}>{$t('files.browse')}</Button>
+    {/if}
   </div>
 
   {#if isUploading}
-    <div class="bg-surface-sunken rounded-card p-4">
-      <div class="flex items-center justify-between mb-2">
-        <span class="text-body text-fg-muted">{$t('files.uploading')}</span>
-        <span class="text-body text-fg-muted">{uploadProgress}%</span>
-      </div>
-      <div class="w-full bg-surface-selected rounded-full h-2">
-        <div
-          class="bg-accent h-2 rounded-full transition-colors duration-300"
-          style="width: {uploadProgress}%"
-        ></div>
-      </div>
-    </div>
+    <ProgressBar value={uploadProgress} label={$t('files.uploading')} showValue size="sm" />
   {/if}
 
   {#if errorMessage}
-    <div class="bg-danger-subtle border border-danger-line rounded-card p-4">
-      <p class="text-body text-danger-fg">{errorMessage}</p>
-    </div>
+    <Alert tone="danger">{errorMessage}</Alert>
   {/if}
 </div>

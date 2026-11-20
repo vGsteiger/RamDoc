@@ -6,7 +6,7 @@
   import { createPatient, parseError, type CreatePatient, type UpdatePatient } from '$lib/api';
   import PatientForm from '$lib/components/PatientForm.svelte';
   import { addToast } from '$lib/stores/toast';
-  import { Alert, Card, PageHeader } from '$lib/components/ui';
+  import { Alert, Card, PageShell } from '$lib/components/ui';
 
   let isSubmitting = $state(false);
   let error = $state('');
@@ -38,16 +38,12 @@
   }
 </script>
 
-<div class="p-8">
-  <div class="max-w-3xl mx-auto">
-    <PageHeader title={$t('patients.newPatient')} />
+<PageShell title={$t('patients.newPatient')} width="form">
+  {#if error}
+    <Alert tone="danger" class="mb-4">{error}</Alert>
+  {/if}
 
-    {#if error}
-      <Alert tone="danger" class="mb-4">{error}</Alert>
-    {/if}
-
-    <Card>
-      <PatientForm on:submit={handleSubmit} on:cancel={handleCancel} {isSubmitting} />
-    </Card>
-  </div>
-</div>
+  <Card>
+    <PatientForm on:submit={handleSubmit} on:cancel={handleCancel} {isSubmitting} />
+  </Card>
+</PageShell>

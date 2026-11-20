@@ -5,7 +5,9 @@
   import { checkAuth, resetApp } from '$lib/api';
   import { cancelResetPath } from '$lib/auth-routes';
   import { t } from '$lib/translations';
-  import { AlertTriangle, RotateCcw } from 'lucide-svelte';
+  import { RotateCcw } from 'lucide-svelte';
+  import AuthCard from '$lib/components/AuthCard.svelte';
+  import { Alert, Button, Field, Input } from '$lib/components/ui';
 
   let confirmation = $state('');
   let isResetting = $state(false);
@@ -38,67 +40,44 @@
   }
 </script>
 
-<div class="min-h-screen bg-surface-sunken text-fg flex items-center justify-center p-8">
-  <main
-    class="max-w-md w-full rounded-card border border-danger-line bg-surface-raised p-8 shadow-modal space-y-6"
-  >
-    <div class="text-center space-y-3">
-      <div
-        class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-danger-subtle text-danger-fg"
-      >
-        <AlertTriangle size={24} aria-hidden="true" />
-      </div>
-      <h1 class="text-display font-semibold">{$t('auth.resetTitle')}</h1>
-      <p class="text-body text-fg-muted">{$t('auth.resetDescription')}</p>
-    </div>
-
-    <div
-      class="rounded-card border border-danger-line bg-danger-subtle p-4 text-body text-danger-fg"
-    >
-      {$t('auth.resetWarning')}
-    </div>
+<AuthCard title={$t('auth.resetTitle')} description={$t('auth.resetDescription')} tone="danger">
+  <div class="space-y-5">
+    <Alert tone="danger">{$t('auth.resetWarning')}</Alert>
 
     {#if error}
-      <p
-        class="rounded-card border border-danger-line/50 bg-danger-subtle p-4 text-body text-danger-fg"
-        role="alert"
-      >
-        {error}
-      </p>
+      <Alert tone="danger">{error}</Alert>
     {/if}
 
-    <label for="reset-confirmation" class="block text-body font-medium text-fg-muted">
-      {$t('auth.resetPrompt')}
-    </label>
-    <input
-      id="reset-confirmation"
-      bind:value={confirmation}
-      autocomplete="off"
-      class="mt-2 w-full rounded-card border border-line bg-surface-raised px-4 py-3 text-fg outline-none focus:ring-2 focus:ring-danger/30"
-      placeholder="RESET"
-    />
+    <Field label={$t('auth.resetPrompt')} for="reset-confirmation">
+      <Input
+        id="reset-confirmation"
+        controlSize="lg"
+        bind:value={confirmation}
+        autocomplete="off"
+        autocapitalize="off"
+        spellcheck="false"
+        placeholder="RESET"
+        class="font-mono"
+      />
+    </Field>
 
     <div class="flex gap-3">
-      <button
-        type="button"
-        onclick={handleCancel}
-        class="inline-flex items-center justify-center flex-1 rounded-card border border-line h-8 px-3 text-center text-body font-medium text-fg-muted hover:bg-surface-hover"
-      >
+      <Button size="lg" class="flex-1" onclick={handleCancel}>
         {$t('common.cancel')}
-      </button>
-      <button
+      </Button>
+      <Button
+        variant="danger-solid"
+        size="lg"
+        class="flex-1"
         onclick={handleReset}
         disabled={confirmation !== 'RESET' || isResetting}
-        class="flex-1 rounded-card bg-danger h-8 px-3 text-body font-medium text-on-danger hover:bg-danger disabled:cursor-not-allowed disabled:bg-surface-selected"
       >
         {#if isResetting}
           {$t('auth.resetting')}
         {:else}
-          <span class="inline-flex items-center gap-2"
-            ><RotateCcw size={16} aria-hidden="true" />{$t('auth.resetAction')}</span
-          >
+          <RotateCcw size={16} aria-hidden="true" />{$t('auth.resetAction')}
         {/if}
-      </button>
+      </Button>
     </div>
-  </main>
-</div>
+  </div>
+</AuthCard>

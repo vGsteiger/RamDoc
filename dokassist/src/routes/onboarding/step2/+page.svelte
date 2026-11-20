@@ -9,12 +9,13 @@
     ChevronRight,
     ChevronLeft,
     Download,
-    Check,
     Cpu,
     Gauge,
     HardDrive,
     Target,
   } from 'lucide-svelte';
+  import OnboardingFrame from '$lib/components/OnboardingFrame.svelte';
+  import { Alert, Button, Card, ProgressBar, Spinner } from '$lib/components/ui';
 
   let recommended = $state<ModelChoice | null>(null);
   let error = $state<string | null>(null);
@@ -83,145 +84,110 @@
   }
 </script>
 
-<div class="min-h-screen bg-surface flex items-center justify-center p-8">
-  <div class="max-w-3xl w-full">
-    <div class="mb-8 text-center">
-      <h1 class="text-display font-semibold text-fg mb-2">{$t('onboarding.step2.title')}</h1>
-      <p class="text-fg-muted">{$t('onboarding.step2.subtitle')}</p>
-      <div class="flex items-center justify-center gap-2 mt-4">
-        <div class="h-2 w-16 bg-accent rounded-full"></div>
-        <div class="h-2 w-16 bg-accent rounded-full"></div>
-        <div class="h-2 w-16 bg-surface-selected rounded-full"></div>
-        <div class="h-2 w-16 bg-surface-selected rounded-full"></div>
-      </div>
+<OnboardingFrame
+  step={2}
+  title={$t('onboarding.step2.title')}
+  subtitle={$t('onboarding.step2.subtitle')}
+>
+  {#if error}
+    <Alert tone="danger" class="mb-6">{error}</Alert>
+  {/if}
+
+  {#if isLoading}
+    <div class="flex justify-center py-12">
+      <Spinner label={$t('onboarding.step2.loading')} />
     </div>
-
-    {#if error}
-      <div class="bg-danger-subtle border border-danger-line rounded-card p-4 mb-6">
-        <p class="text-danger-fg text-body">{error}</p>
-      </div>
-    {/if}
-
-    {#if isLoading}
-      <div class="text-center py-12">
-        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-accent mx-auto"></div>
-        <p class="mt-4 text-fg-muted">{$t('onboarding.step2.loading')}</p>
-      </div>
-    {:else if recommended}
-      <div class="bg-surface-raised border border-line-subtle rounded-card p-8 space-y-6">
-        <div class="text-center">
-          <div class="inline-block p-4 bg-surface-hover rounded-card mb-4">
-            <Cpu size={48} class="text-fg-subtle" />
-          </div>
-          <h2 class="text-display font-semibold text-fg mb-2">{recommended.name}</h2>
-          <p class="text-fg-muted">{$t('onboarding.step2.recommendedForSystem')}</p>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div class="bg-surface-hover rounded-card p-4 text-center">
-            <HardDrive size={24} class="text-fg-muted mx-auto mb-2" />
-            <p class="text-fg-muted text-body mb-1">{$t('onboarding.step2.size')}</p>
-            <p class="text-fg font-semibold">{formatBytes(recommended.size_bytes)}</p>
-          </div>
-
-          <div class="bg-surface-hover rounded-card p-4 text-center">
-            <Gauge size={24} class="text-fg-muted mx-auto mb-2" />
-            <p class="text-fg-muted text-body mb-1">{$t('onboarding.step2.speed')}</p>
-            <p class="text-fg font-semibold">
-              {recommended.name.includes('30B')
-                ? $t('onboarding.step2.speedGood')
-                : $t('onboarding.step2.speedFast')}
-            </p>
-          </div>
-
-          <div class="bg-surface-hover rounded-card p-4 text-center">
-            <Target size={24} class="text-fg-muted mx-auto mb-2" />
-            <p class="text-fg-muted text-body mb-1">{$t('onboarding.step2.quality')}</p>
-            <p class="text-fg font-semibold">
-              {recommended.name.includes('30B')
-                ? $t('onboarding.step2.qualityExcellent')
-                : $t('onboarding.step2.qualityVeryGood')}
-            </p>
-          </div>
-        </div>
-
-        <div class="bg-accent-subtle border border-accent-line rounded-card p-4">
-          <p class="text-accent-fg text-body">
-            <strong>{$t('onboarding.step2.aboutModelLabel')}</strong>
-            {$t('onboarding.step2.aboutModel')}
+  {:else if recommended}
+    <Card padding="none">
+      <div class="flex items-start gap-3 p-5">
+        <Cpu size={20} class="mt-0.5 shrink-0 text-fg-subtle" aria-hidden="true" />
+        <div class="min-w-0">
+          <h2 class="text-title text-fg">{recommended.name}</h2>
+          <p class="mt-0.5 text-label text-fg-muted">
+            {$t('onboarding.step2.recommendedForSystem')}
           </p>
         </div>
+      </div>
+
+      <dl class="grid grid-cols-3 border-y border-line-subtle">
+        <div class="px-5 py-3">
+          <dt class="flex items-center gap-1.5 text-caption text-fg-muted">
+            <HardDrive size={14} aria-hidden="true" />
+            {$t('onboarding.step2.size')}
+          </dt>
+          <dd class="mt-1 text-body font-medium text-fg" data-numeric>
+            {formatBytes(recommended.size_bytes)}
+          </dd>
+        </div>
+        <div class="border-l border-line-subtle px-5 py-3">
+          <dt class="flex items-center gap-1.5 text-caption text-fg-muted">
+            <Gauge size={14} aria-hidden="true" />
+            {$t('onboarding.step2.speed')}
+          </dt>
+          <dd class="mt-1 text-body font-medium text-fg">
+            {recommended.name.includes('30B')
+              ? $t('onboarding.step2.speedGood')
+              : $t('onboarding.step2.speedFast')}
+          </dd>
+        </div>
+        <div class="border-l border-line-subtle px-5 py-3">
+          <dt class="flex items-center gap-1.5 text-caption text-fg-muted">
+            <Target size={14} aria-hidden="true" />
+            {$t('onboarding.step2.quality')}
+          </dt>
+          <dd class="mt-1 text-body font-medium text-fg">
+            {recommended.name.includes('30B')
+              ? $t('onboarding.step2.qualityExcellent')
+              : $t('onboarding.step2.qualityVeryGood')}
+          </dd>
+        </div>
+      </dl>
+
+      <div class="space-y-4 p-5">
+        <p class="text-body text-fg-muted">
+          <span class="font-medium text-fg">{$t('onboarding.step2.aboutModelLabel')}</span>
+          {$t('onboarding.step2.aboutModel')}
+        </p>
 
         {#if isDownloading}
-          <div class="space-y-4">
-            <div class="flex items-center justify-between text-body text-fg-muted">
-              <span>{$t('onboarding.step2.downloading')}</span>
-              <span>{downloadProgress}%</span>
-            </div>
-            <div class="w-full bg-surface-hover rounded-full h-3 overflow-hidden">
-              <div
-                class="bg-accent h-full transition-colors duration-300 ease-out"
-                style="width: {downloadProgress}%"
-              ></div>
-            </div>
-            <p class="text-center text-fg-muted text-body">
-              {$t('onboarding.step2.downloadHint')}
-            </p>
+          <div class="space-y-2">
+            <ProgressBar
+              value={downloadProgress}
+              label={$t('onboarding.step2.downloading')}
+              showValue
+            />
+            <p class="text-caption text-fg-muted">{$t('onboarding.step2.downloadHint')}</p>
           </div>
         {:else if isComplete}
-          <div
-            class="bg-success-subtle border border-success-line rounded-card p-4 flex items-center gap-3"
-          >
-            <div
-              class="flex-shrink-0 w-10 h-10 bg-success rounded-full flex items-center justify-center"
-            >
-              <Check size={24} class="text-on-success" />
-            </div>
-            <div>
-              <p class="text-success-fg font-semibold">{$t('onboarding.step2.downloadComplete')}</p>
-              <p class="text-fg-muted text-body">{$t('onboarding.step2.modelReady')}</p>
-            </div>
-          </div>
+          <Alert tone="success" title={$t('onboarding.step2.downloadComplete')}>
+            {$t('onboarding.step2.modelReady')}
+          </Alert>
         {/if}
       </div>
+    </Card>
+  {/if}
 
-      <div class="flex justify-between items-center mt-8">
-        <button
-          onclick={handleBack}
-          disabled={isDownloading}
-          class="px-6 py-3 border border-line bg-surface-raised hover:bg-surface-hover disabled:bg-surface-hover disabled:cursor-not-allowed text-fg font-medium rounded-control transition-colors flex items-center gap-2"
-        >
-          <ChevronLeft size={20} />
-          {$t('common.back')}
-        </button>
+  {#snippet actions()}
+    {#if !isLoading && recommended}
+      <Button onclick={handleBack} disabled={isDownloading}>
+        <ChevronLeft size={16} aria-hidden="true" />
+        {$t('common.back')}
+      </Button>
 
-        <div class="flex gap-3">
-          {#if !isComplete && !isDownloading}
-            <button
-              onclick={handleContinue}
-              class="px-6 py-3 text-fg-muted hover:text-fg font-medium transition-colors"
-            >
-              {$t('onboarding.skipForNow')}
-            </button>
-
-            <button
-              onclick={handleDownload}
-              class="px-6 py-3 bg-accent hover:bg-accent-hover text-on-accent font-medium rounded-control transition-colors flex items-center gap-2"
-            >
-              <Download size={20} />
-              {$t('onboarding.step2.downloadModel')}
-            </button>
-          {:else if isComplete}
-            <button
-              onclick={handleContinue}
-              class="px-6 py-3 bg-accent hover:bg-accent-hover text-on-accent font-medium rounded-control transition-colors flex items-center gap-2"
-            >
-              {$t('common.continue')}
-              <ChevronRight size={20} />
-            </button>
-          {/if}
-        </div>
+      <div class="flex flex-wrap gap-2">
+        {#if !isComplete && !isDownloading}
+          <Button variant="ghost" onclick={handleContinue}>{$t('onboarding.skipForNow')}</Button>
+          <Button variant="primary" onclick={handleDownload}>
+            <Download size={16} aria-hidden="true" />
+            {$t('onboarding.step2.downloadModel')}
+          </Button>
+        {:else if isComplete}
+          <Button variant="primary" onclick={handleContinue}>
+            {$t('common.continue')}
+            <ChevronRight size={16} aria-hidden="true" />
+          </Button>
+        {/if}
       </div>
     {/if}
-  </div>
-</div>
+  {/snippet}
+</OnboardingFrame>

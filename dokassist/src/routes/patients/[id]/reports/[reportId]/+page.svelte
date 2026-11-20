@@ -17,17 +17,29 @@
   import EnhancedReportEditor from '$lib/components/EnhancedReportEditor.svelte';
   import ErrorDisplay from '$lib/components/ErrorDisplay.svelte';
   import { t } from '$lib/translations';
-  import { get } from 'svelte/store';
-  import { marked } from 'marked';
+  import { fmt } from '$lib/format';
+  import { ArrowLeft, Download, Pencil, Trash2 } from 'lucide-svelte';
+  import {
+    Button,
+    ConfirmDialog,
+    ListSkeleton,
+    Markdown,
+    Menu,
+    PageShell,
+    type MenuItem,
+  } from '$lib/components/ui';
+  import { documentsUrl, parseTimestamp } from '$lib/components/documents/documents';
+  import StickyActionBar from '$lib/components/documents/StickyActionBar.svelte';
 
   let patientId = $derived(page.params.id!);
   let reportId = $derived(page.params.reportId!);
 
-  let report: Report | null = $state(null);
+  let report = $state<Report | null>(null);
   let editMode = $state(false);
   let editableContent = $state('');
   let loading = $state(true);
   let error: AppError | null = $state(null);
+  let confirmDeleteOpen = $state(false);
 
   async function loadReport() {
     try {
@@ -57,25 +69,12 @@
   }
 
   async function handleDeleteReport() {
-    if (!confirm(get(t)('reports.confirmDelete'))) {
-      return;
-    }
     try {
       await deleteReport(reportId);
-      await goto(`/patients/${patientId}/reports`);
+      await goto(documentsUrl(patientId, 'reports'));
     } catch (e) {
       error = parseError(e);
     }
-  }
-
-  function formatDate(dateStr: string): string {
-    return new Date(dateStr).toLocaleDateString('de-DE', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
   }
 
   async function handleExportPdf() {
@@ -134,99 +133,107 @@
     }
   }
 
+  function cancelEdit() {
+    editMode = false;
+    editableContent = report?.content ?? '';
+  }
+
+  let generatedAt = $derived(report ? parseTimestamp(report.generated_at) : null);
+  let typeLabel = $derived(report ? $reportTypeLabel(report.report_type) : '');
+
+  let description = $derived(
+    report
+      ? [
+          $t('reports.generatedOn').replace('{date}', $fmt.dateTime(generatedAt)),
+          report.model_name ? $t('reports.modelName').replace('{name}', report.model_name) : '',
+        ]
+          .filter(Boolean)
+          .join(' · ')
+      : undefined
+  );
+
+  let moreItems = $derived<MenuItem[]>([
+    {
+      label: $t('reports.delete'),
+      icon: Trash2,
+      danger: true,
+      onSelect: () => (confirmDeleteOpen = true),
+    },
+  ]);
+
   onMount(() => {
     loadReport();
   });
 </script>
 
-<div class="p-8">
-  <div class="max-w-5xl mx-auto">
-    {#if loading}
-      <div class="text-fg-muted">{$t('reports.loading')}</div>
-    {:else if error}
-      <ErrorDisplay {error} showDetails={true} />
-    {:else if report}
-      <div class="mb-6">
-        <div class="flex items-center justify-between mb-4">
-          <div>
-            <h2 class="text-display font-semibold text-fg">
-              {$reportTypeLabel(report.report_type)}
-            </h2>
-            <p class="text-body text-fg-muted mt-1">
-              {$t('reports.generated')}
-              {formatDate(report.generated_at)}
-            </p>
-            {#if report.model_name}
-              <p class="text-caption text-fg-subtle mt-1">
-                {$t('reports.model')}
-                {report.model_name}
-              </p>
-            {/if}
-          </div>
-          <a href={`/patients/${patientId}/reports`} class="text-body text-fg-muted hover:text-fg">
-            {$t('reports.backToReports')}
-          </a>
-        </div>
+<PageShell width="prose" title={report ? typeLabel : undefined} {description}>
+  {#snippet breadcrumb()}
+    <a
+      href={documentsUrl(patientId, 'reports')}
+      class="inline-flex items-center gap-1 text-fg-subtle hover:text-fg"
+    >
+      <ArrowLeft size={12} aria-hidden="true" />
+      {$t('reports.backToDocuments')}
+    </a>
+  {/snippet}
 
-        <div class="flex space-x-4 mb-6">
-          {#if !editMode}
-            <button
-              onclick={() => (editMode = true)}
-              class="h-8 px-3 bg-accent text-on-accent rounded-control hover:bg-accent-hover transition-colors"
-            >
-              {$t('reports.edit')}
-            </button>
-          {:else}
-            <button
-              onclick={saveChanges}
-              class="h-8 px-3 bg-success text-on-success rounded-control hover:bg-success-hover transition-colors"
-            >
-              {$t('reports.save')}
-            </button>
-            <button
-              onclick={() => {
-                editMode = false;
-                editableContent = report?.content ?? '';
-              }}
-              class="h-8 px-3 bg-surface-hover text-fg-muted rounded-control hover:bg-surface-selected transition-colors"
-            >
-              {$t('reports.cancel')}
-            </button>
-          {/if}
-          <button
-            onclick={handleExportPdf}
-            disabled={editMode}
-            class="h-8 px-3 bg-accent text-on-accent rounded-control hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {$t('reports.exportPDF')}
-          </button>
-          <button
-            onclick={handleExportDocx}
-            disabled={editMode}
-            class="h-8 px-3 bg-accent text-on-accent rounded-control hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {$t('reports.exportDOCX')}
-          </button>
-          <button
-            onclick={handleDeleteReport}
-            class="h-8 px-3 bg-danger-subtle text-danger-fg rounded-control hover:bg-danger-subtle/40 transition-colors"
-          >
-            {$t('reports.delete')}
-          </button>
-        </div>
+  {#if loading}
+    <p class="sr-only">{$t('reports.loading')}</p>
+    <ListSkeleton count={3} />
+  {:else if error && !report}
+    <ErrorDisplay {error} showDetails={true} />
+  {:else if report}
+    {#if error}
+      <div class="mb-4">
+        <ErrorDisplay {error} showDetails={true} />
       </div>
-
-      {#if editMode}
-        <div class="h-[600px]">
-          <EnhancedReportEditor bind:content={editableContent} />
-        </div>
-      {:else}
-        <div class="bg-surface-raised rounded-card p-6 border border-line">
-          <div class="prose prose-gray dark:prose-invert max-w-none">
-            {@html marked(report.content)}
-          </div>
-        </div>
-      {/if}
     {/if}
-  </div>
-</div>
+
+    {#if editMode}
+      <EnhancedReportEditor bind:content={editableContent} />
+    {:else}
+      <article class="card-surface rounded-panel px-5 py-4 sm:px-8 sm:py-6">
+        <Markdown source={report.content} headingOffset={1} />
+      </article>
+    {/if}
+
+    <StickyActionBar>
+      {#snippet start()}
+        {#if !editMode}
+          <Menu items={moreItems} size="md" label={$t('common.moreActions')} align="start" />
+        {:else}
+          <span class="text-label text-fg-muted">{$t('reports.unsavedHint')}</span>
+        {/if}
+      {/snippet}
+      <Button onclick={handleExportPdf} disabled={editMode}>
+        <Download size={14} aria-hidden="true" />
+        {$t('reports.exportPDF')}
+      </Button>
+      <Button onclick={handleExportDocx} disabled={editMode}>
+        <Download size={14} aria-hidden="true" />
+        {$t('reports.exportDOCX')}
+      </Button>
+      {#if !editMode}
+        <Button variant="primary" onclick={() => (editMode = true)}>
+          <Pencil size={14} aria-hidden="true" />
+          {$t('reports.edit')}
+        </Button>
+      {:else}
+        <Button variant="ghost" onclick={cancelEdit}>{$t('reports.cancel')}</Button>
+        <Button variant="primary" onclick={saveChanges}>{$t('reports.save')}</Button>
+      {/if}
+    </StickyActionBar>
+  {/if}
+</PageShell>
+
+{#if report}
+  <ConfirmDialog
+    bind:open={confirmDeleteOpen}
+    tone="danger"
+    title={$t('reports.deleteTitle')}
+    message={$t('reports.confirmDeleteNamed')
+      .replace('{type}', typeLabel)
+      .replace('{date}', $fmt.date(generatedAt))}
+    onConfirm={handleDeleteReport}
+  />
+{/if}

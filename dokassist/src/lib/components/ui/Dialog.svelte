@@ -88,11 +88,10 @@
 
 {#if open}
   <div class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:p-8">
-    <!-- The scrim is a plain black wash in both themes; tinting it with a
-         token would make it read as a surface. -->
+    <!-- The scrim token is a dark wash whose opacity differs per theme. -->
     <button
       type="button"
-      class="fixed inset-0 bg-black/25 dark:bg-black/55"
+      class="fixed inset-0 bg-scrim"
       aria-label={$t('common.close')}
       data-dialog-dismiss
       onclick={close}

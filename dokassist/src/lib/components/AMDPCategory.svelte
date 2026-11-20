@@ -10,9 +10,9 @@
   let { category, onScoreChange }: Props = $props();
 </script>
 
-<div class="bg-surface-raised rounded-card p-4 border border-line">
-  <h3 class="text-heading font-semibold text-fg mb-3">{category.name}</h3>
-  <div class="space-y-1">
+<div>
+  <h3 class="mb-2 text-heading text-fg">{category.name}</h3>
+  <div class="space-y-0.5">
     {#each category.items as item (item.code)}
       <AMDPItem {item} {onScoreChange} />
     {/each}

@@ -38,6 +38,23 @@
   import DictationButton from '$lib/components/DictationButton.svelte';
   import { insertDictation } from '$lib/dictation';
   import { t } from '$lib/translations';
+  import { fmt } from '$lib/format';
+  import { ChevronLeft, Pencil, Plus, Trash2 } from 'lucide-svelte';
+  import {
+    Button,
+    ConfirmDialog,
+    Dialog,
+    EmptyState,
+    Field,
+    Input,
+    Markdown,
+    Menu,
+    PageShell,
+    SectionHeader,
+    Select,
+    Spinner,
+    Textarea,
+  } from '$lib/components/ui';
 
   const patientId = $derived(page.params.id!);
   const sessionId = $derived(page.params.sessionId!);
@@ -301,339 +318,274 @@ ${activeDiagnoses ? `Aktive Diagnosen:\n${activeDiagnoses}` : ''}
     }
   }
 
-  function formatDate(dateStr: string): string {
-    try {
-      const date = new Date(dateStr);
-      return date.toLocaleDateString('de-CH', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-      });
-    } catch {
-      return dateStr;
-    }
+  // Persisted (German) session types offered in the editor; an older free-text
+  // value that is not in the list stays selectable, so editing never changes it.
+  const SESSION_TYPES = [
+    'Erstgespräch',
+    'Verlaufskontrolle',
+    'Krisenintervention',
+    'Psychotherapie',
+    'Medikamentenanpassung',
+    'Andere',
+  ];
+  let sessionTypeOptions = $derived(
+    editedSessionType && !SESSION_TYPES.includes(editedSessionType)
+      ? [editedSessionType, ...SESSION_TYPES]
+      : SESSION_TYPES
+  );
+  let scoreFormOpen = $derived(showAddForm || editingScore !== null);
+  let deletingScore = $state<OutcomeScore | null>(null);
+  let showDeleteScore = $state(false);
+
+  function askDeleteScore(score: OutcomeScore) {
+    deletingScore = score;
+    showDeleteScore = true;
   }
 
-  function formatDateTime(dateStr: string): string {
-    try {
-      const date = new Date(dateStr);
-      return date.toLocaleString('de-CH', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-    } catch {
-      return dateStr;
-    }
+  async function confirmDeleteScore() {
+    if (deletingScore) await handleDeleteScore(deletingScore.id);
+  }
+
+  function cancelEdit() {
+    isEditing = false;
+    showSummaryEditor = false;
+    editedNotes = session?.notes || '';
+    editedDuration = session?.duration_minutes || null;
+    editedSessionType = session?.session_type || '';
+    editedSessionDate = session?.session_date || '';
+    editableSummary = session?.clinical_summary || '';
   }
 </script>
 
-<div class="p-8">
-  <div class="max-w-4xl mx-auto">
+<PageShell>
+  <div>
     {#if isLoading}
-      <div class="flex justify-center items-center py-12">
-        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-accent"></div>
-      </div>
+      <div class="flex justify-center py-12"><Spinner label={$t('common.loading')} /></div>
     {:else if !session}
-      <div class="text-center py-12">
-        <p class="text-fg-muted">{$t('common.notFound')}</p>
-      </div>
+      <EmptyState title={$t('common.notFound')} />
     {:else}
-      <div class="mb-6">
-        <button
-          onclick={() => goto(`/patients/${patientId}/sessions`)}
-          class="text-accent-fg hover:underline"
-        >
-          ← {$t('common.back')}
-        </button>
-      </div>
+      <Button size="sm" variant="ghost" href={`/patients/${patientId}/sessions`} class="-ml-2 mb-2">
+        <ChevronLeft size={14} aria-hidden="true" />
+        {$t('sessions.title')}
+      </Button>
+
+      <SectionHeader
+        title={$sessionTypeLabel(session.session_type)}
+        description={[
+          $fmt.date(session.session_date),
+          session.duration_minutes ? $fmt.duration(session.duration_minutes) : '',
+        ]
+          .filter(Boolean)
+          .join(' · ')}
+      >
+        {#snippet actions()}
+          {#if !isEditing}
+            <Button size="sm" onclick={() => (isEditing = true)}>
+              <Pencil size={14} aria-hidden="true" />
+              {$t('common.edit')}
+            </Button>
+          {/if}
+          <Menu
+            size="sm"
+            items={[
+              {
+                label: $t('sessions.deleteSession'),
+                icon: Trash2,
+                danger: true,
+                disabled: isDeleting,
+                onSelect: () => (showDeleteConfirm = true),
+              },
+            ]}
+          />
+        {/snippet}
+      </SectionHeader>
 
       {#if error}
-        <div class="mb-6">
+        <div class="mb-4">
           <ErrorDisplay {error} />
         </div>
       {/if}
 
-      <!-- Session Detail Card -->
-      <div class="bg-surface-raised rounded-card shadow-popover p-6 mb-6">
-        <div class="flex justify-between items-start mb-6">
-          <div>
-            <h1 class="text-display font-semibold text-fg">
-              {$sessionTypeLabel(session.session_type)}
-            </h1>
-            <p class="text-fg-muted mt-1">
-              {formatDate(session.session_date)}
-              {#if session.duration_minutes}
-                • {session.duration_minutes} {$t('sessions.duration')}
-              {/if}
-            </p>
-            {#if patient}
-              <p class="text-body text-fg-muted mt-1">
-                {$t('common.patient')}: {patient.first_name}
-                {patient.last_name}
-              </p>
-            {/if}
-          </div>
-          <div class="flex space-x-2">
-            {#if !isEditing}
-              <button
-                onclick={() => (isEditing = true)}
-                class="h-8 px-3 bg-accent text-on-accent rounded-control hover:bg-accent-hover transition-colors"
-              >
-                {$t('common.edit')}
-              </button>
-            {/if}
-            <button
-              onclick={() => (showDeleteConfirm = true)}
-              class="h-8 px-3 bg-danger text-on-danger rounded-control hover:bg-danger-hover transition-colors"
-              disabled={isDeleting}
-            >
-              {isDeleting ? $t('common.deleting') : $t('common.delete')}
-            </button>
-          </div>
-        </div>
-
-        {#if isEditing}
-          <div class="space-y-4 mb-6">
-            <div>
-              <label for="session-type" class="block text-body font-medium text-fg-muted mb-1">
-                {$t('sessions.sessionType')}
-              </label>
-              <input
-                id="session-type"
-                type="text"
-                bind:value={editedSessionType}
-                class="w-full px-3 py-2 border border-line rounded-control bg-surface-raised text-fg"
-              />
-            </div>
-            <div>
-              <label for="session-date" class="block text-body font-medium text-fg-muted mb-1">
-                {$t('sessions.date')}
-              </label>
-              <input
-                id="session-date"
-                type="date"
-                bind:value={editedSessionDate}
-                class="w-full px-3 py-2 border border-line rounded-control bg-surface-raised text-fg"
-              />
-            </div>
-            <div>
-              <label for="session-duration" class="block text-body font-medium text-fg-muted mb-1">
-                {$t('sessions.duration')}
-              </label>
-              <input
-                id="session-duration"
-                type="number"
-                bind:value={editedDuration}
-                class="w-full px-3 py-2 border border-line rounded-control bg-surface-raised text-fg"
-              />
-            </div>
-          </div>
-        {/if}
-
-        <!-- Notes -->
-        <div class="mb-6">
-          {#if isEditing}
-            <div class="flex items-center justify-between gap-2 mb-2">
-              <label for="session-notes" class="block text-body font-medium text-fg-muted">
-                {$t('sessions.notes')}
-              </label>
-              <DictationButton
-                onTranscript={(text) => (editedNotes = insertDictation(notesEl, editedNotes, text))}
-              />
-            </div>
-            <textarea
-              id="session-notes"
-              bind:this={notesEl}
-              bind:value={editedNotes}
-              rows="10"
-              class="w-full px-3 py-2 border border-line rounded-control bg-surface-raised text-fg font-mono text-body"
-              placeholder={$t('sessions.notesPlaceholder')}></textarea>
-          {:else}
-            <p class="block text-body font-medium text-fg-muted mb-2">
-              {$t('sessions.notes')}
-            </p>
-            <div class="bg-surface-sunken rounded-card p-4 border border-line">
-              {#if session.notes}
-                <pre class="whitespace-pre-wrap font-sans text-fg">{session.notes}</pre>
-              {:else}
-                <p class="text-fg-subtle italic">{$t('sessions.noNotes')}</p>
-              {/if}
-            </div>
-          {/if}
-        </div>
-
-        <!-- Clinical Summary -->
-        <div class="border-t border-line pt-6 mb-6">
-          <div class="flex flex-wrap justify-between items-center gap-3 mb-4">
-            <h2 class="text-heading font-semibold text-fg">
-              {$t('sessions.clinicalSummary')}
-            </h2>
-            {#if !isGenerating && llmStatus?.is_loaded}
-              <div class="flex flex-wrap items-center gap-3">
-                <ThinkingEffortSelect />
-                <button
-                  onclick={generateSummary}
-                  class="h-8 px-3 bg-success text-on-success rounded-control hover:bg-success-hover transition-colors"
-                  disabled={isGenerating || !editedNotes || editedNotes.trim().length === 0}
-                >
-                  {$t('sessions.generateSummary')}
-                </button>
-              </div>
-            {/if}
-          </div>
-
-          {#if isGenerating}
-            <ReportStream content={generatedSummary} isStreaming={isGenerating} />
-          {:else if isEditing || showSummaryEditor}
-            <div class="space-y-4">
-              <textarea
-                bind:value={editableSummary}
-                rows="15"
-                class="w-full px-3 py-2 border border-line rounded-control bg-surface-raised text-fg font-sans text-body"
-                placeholder={$t('sessions.clinicalSummaryPlaceholder')}></textarea>
-            </div>
-          {:else if session.clinical_summary}
-            <div class="bg-surface-sunken rounded-card p-4 border border-line">
-              <pre class="whitespace-pre-wrap font-sans text-fg">{session.clinical_summary}</pre>
-            </div>
-          {:else}
-            <div class="bg-surface-sunken rounded-card p-4 border border-line">
-              <p class="text-fg-subtle italic">{$t('sessions.noSummary')}</p>
-            </div>
-          {/if}
-        </div>
-
-        {#if isEditing || showSummaryEditor}
-          <div class="flex justify-end space-x-3 pt-4 border-t border-line">
-            <button
-              onclick={() => {
-                isEditing = false;
-                showSummaryEditor = false;
-                editedNotes = session?.notes || '';
-                editedDuration = session?.duration_minutes || null;
-                editedSessionType = session?.session_type || '';
-                editedSessionDate = session?.session_date || '';
-                editableSummary = session?.clinical_summary || '';
-              }}
-              class="h-8 px-3 border border-line text-fg-muted rounded-control hover:bg-surface-hover transition-colors"
-              disabled={isSaving}
-            >
-              {$t('common.cancel')}
-            </button>
-            <button
-              onclick={handleUpdate}
-              class="h-8 px-3 bg-accent text-on-accent rounded-control hover:bg-accent-hover transition-colors"
-              disabled={isSaving}
-            >
-              {isSaving ? $t('common.saving') : $t('common.save')}
-            </button>
-          </div>
-        {/if}
-
-        <div class="mt-6 pt-6 border-t border-line text-body text-fg-muted">
-          <p>{$t('common.createdAt')}: {formatDateTime(session.created_at)}</p>
-          <p>{$t('common.updatedAt')}: {formatDateTime(session.updated_at)}</p>
-        </div>
-      </div>
-
-      <!-- Outcome Scores Section -->
-      <div class="border-t border-line pt-6">
-        <div class="flex justify-between items-center mb-4">
-          <h2 class="text-title font-semibold text-fg">{$t('outcomeScores.title')}</h2>
-          {#if !showAddForm && !editingScore}
-            <button
-              onclick={() => (showAddForm = true)}
-              class="h-8 px-3 bg-accent text-on-accent rounded-control hover:bg-accent-hover transition-colors"
-            >
-              + {$t('outcomeScores.newScore')}
-            </button>
-          {/if}
-        </div>
-
-        {#if showAddForm}
-          <div class="mb-6 p-6 bg-surface-raised rounded-card border border-line">
-            <h3 class="text-heading font-medium text-fg mb-4">{$t('outcomeScores.newScore')}</h3>
-            <OutcomeScoreForm
-              {sessionId}
-              onSave={handleSaveScore}
-              onCancel={handleCancelEditScore}
+      {#if isEditing}
+        <div class="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <Field label={$t('sessions.sessionType')} for="session-type" class="sm:col-span-3">
+            <Select id="session-type" bind:value={editedSessionType}>
+              {#each sessionTypeOptions as type (type)}
+                <option value={type}>{$sessionTypeLabel(type)}</option>
+              {/each}
+            </Select>
+          </Field>
+          <Field label={$t('sessions.date')} for="session-date">
+            <Input id="session-date" type="date" bind:value={editedSessionDate} />
+          </Field>
+          <Field label={$t('sessions.duration')} for="session-duration">
+            <Input
+              id="session-duration"
+              type="number"
+              min="0"
+              step="5"
+              bind:value={editedDuration}
             />
-          </div>
-        {/if}
+          </Field>
+        </div>
+      {/if}
 
-        {#if editingScore}
-          <div class="mb-6 p-6 bg-surface-raised rounded-card border border-line">
-            <h3 class="text-heading font-medium text-fg mb-4">{$t('common.edit')}</h3>
-            <!-- Keyed so switching to a different score remounts the form: it
-                 snapshots its props and would otherwise keep the previous values. -->
-            {#key editingScore.id}
-              <OutcomeScoreForm
-                outcomeScore={editingScore}
-                onSave={handleSaveScore}
-                onCancel={handleCancelEditScore}
-              />
-            {/key}
-          </div>
+      <!-- Notes -->
+      <section class="mb-6" aria-labelledby="session-notes-title">
+        <div class="mb-2 flex items-center justify-between gap-2">
+          {#if isEditing}
+            <label id="session-notes-title" for="session-notes" class="text-heading text-fg">
+              {$t('sessions.notes')}
+            </label>
+            <DictationButton
+              onTranscript={(text) => (editedNotes = insertDictation(notesEl, editedNotes, text))}
+            />
+          {:else}
+            <h3 id="session-notes-title" class="text-heading text-fg">{$t('sessions.notes')}</h3>
+          {/if}
+        </div>
+        {#if isEditing}
+          <!-- Raw textarea on purpose: dictation inserts at the caret, so it needs
+               the element (bind:this), which the Textarea primitive does not expose. -->
+          <textarea
+            id="session-notes"
+            bind:this={notesEl}
+            bind:value={editedNotes}
+            rows="12"
+            class="w-full resize-y rounded-control border border-line bg-surface-raised px-2.5 py-2 text-body text-fg transition-colors duration-150 ease-standard focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/25 focus-visible:outline-none"
+            placeholder={$t('sessions.notesPlaceholder')}></textarea>
+        {:else if session.notes}
+          <p class="whitespace-pre-wrap text-body text-fg">{session.notes}</p>
+        {:else}
+          <p class="text-body text-fg-subtle">{$t('sessions.noNotes')}</p>
         {/if}
+      </section>
+
+      <!-- Clinical summary -->
+      <section class="mb-6 border-t border-line-subtle pt-4">
+        <SectionHeader title={$t('sessions.clinicalSummary')} level={3} id="summary-title">
+          {#snippet actions()}
+            {#if !isGenerating && llmStatus?.is_loaded}
+              <ThinkingEffortSelect />
+              <Button
+                size="sm"
+                onclick={generateSummary}
+                disabled={isGenerating || !editedNotes || editedNotes.trim().length === 0}
+              >
+                {$t('sessions.generateSummary')}
+              </Button>
+            {/if}
+          {/snippet}
+        </SectionHeader>
+
+        {#if isGenerating}
+          <ReportStream content={generatedSummary} isStreaming={isGenerating} />
+        {:else if isEditing || showSummaryEditor}
+          <Textarea
+            bind:value={editableSummary}
+            rows={15}
+            aria-labelledby="summary-title"
+            placeholder={$t('sessions.clinicalSummaryPlaceholder')}
+          />
+        {:else if session.clinical_summary}
+          <Markdown source={session.clinical_summary} class="text-body text-fg" />
+        {:else}
+          <p class="text-body text-fg-subtle">{$t('sessions.noSummary')}</p>
+        {/if}
+      </section>
+
+      {#if isEditing || showSummaryEditor}
+        <div class="mb-6 flex justify-end gap-2 border-t border-line-subtle pt-4">
+          <Button onclick={cancelEdit} disabled={isSaving}>{$t('common.cancel')}</Button>
+          <Button variant="primary" onclick={handleUpdate} loading={isSaving}>
+            {$t('common.save')}
+          </Button>
+        </div>
+      {/if}
+
+      <p class="mb-6 text-caption text-fg-subtle" data-numeric>
+        {$t('common.createdAt')}: {$fmt.dateTime(session.created_at)}
+        <span aria-hidden="true" class="px-1">·</span>
+        {$t('common.updatedAt')}: {$fmt.dateTime(session.updated_at)}
+      </p>
+
+      <!-- Outcome scores -->
+      <section class="border-t border-line-subtle pt-4">
+        <SectionHeader title={$t('outcomeScores.title')} level={3}>
+          {#snippet actions()}
+            <Button
+              size="sm"
+              onclick={() => {
+                editingScore = null;
+                showAddForm = true;
+              }}
+            >
+              <Plus size={14} aria-hidden="true" />
+              {$t('outcomeScores.newScore')}
+            </Button>
+          {/snippet}
+        </SectionHeader>
 
         {#if loadingScores}
-          <div class="flex justify-center items-center py-12">
-            <div class="text-fg-muted">{$t('common.loading')}</div>
-          </div>
-        {:else if scores.length === 0 && !showAddForm}
-          <div class="text-center py-12 bg-surface-sunken rounded-card border border-line">
-            <p class="text-fg-muted mb-4">{$t('outcomeScores.noScores')}</p>
-            <button
-              onclick={() => (showAddForm = true)}
-              class="h-8 px-3 bg-accent text-on-accent rounded-control hover:bg-accent-hover transition-colors"
-            >
-              {$t('outcomeScores.newScore')}
-            </button>
-          </div>
+          <Spinner label={$t('common.loading')} />
+        {:else if scores.length === 0}
+          <p class="text-body text-fg-muted">{$t('outcomeScores.noScores')}</p>
         {:else}
-          <div class="grid gap-4">
+          <div class="grid gap-2">
             {#each scores as score (score.id)}
               <OutcomeScoreCard
                 outcomeScore={score}
                 onEdit={() => handleEditScore(score)}
-                onDelete={() => handleDeleteScore(score.id)}
+                onDelete={() => askDeleteScore(score)}
               />
             {/each}
           </div>
         {/if}
-      </div>
+      </section>
     {/if}
   </div>
-</div>
+</PageShell>
 
-{#if showDeleteConfirm}
-  <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-    <div class="bg-surface-raised rounded-card p-6 max-w-md w-full mx-4">
-      <h3 class="text-heading font-semibold text-fg mb-4">
-        {$t('sessions.confirmDelete')}
-      </h3>
-      <p class="text-fg-muted mb-6">
-        {$t('sessions.confirmDeleteMessage')}
-      </p>
-      <div class="flex justify-end space-x-3">
-        <button
-          onclick={() => (showDeleteConfirm = false)}
-          class="h-8 px-3 border border-line text-fg-muted rounded-control hover:bg-surface-hover transition-colors"
-          disabled={isDeleting}
-        >
-          {$t('common.cancel')}
-        </button>
-        <button
-          onclick={handleDelete}
-          class="h-8 px-3 bg-danger text-on-danger rounded-control hover:bg-danger-hover transition-colors"
-          disabled={isDeleting}
-        >
-          {isDeleting ? $t('common.deleting') : $t('common.delete')}
-        </button>
-      </div>
-    </div>
-  </div>
-{/if}
+<Dialog
+  open={scoreFormOpen}
+  title={editingScore ? $t('outcomeScores.editScore') : $t('outcomeScores.newScore')}
+  onClose={handleCancelEditScore}
+>
+  <!-- Keyed so switching to a different score remounts the form: it
+       snapshots its props and would otherwise keep the previous values. -->
+  {#key editingScore?.id ?? 'new'}
+    {#if editingScore}
+      <OutcomeScoreForm
+        outcomeScore={editingScore}
+        onSave={handleSaveScore}
+        onCancel={handleCancelEditScore}
+      />
+    {:else}
+      <OutcomeScoreForm {sessionId} onSave={handleSaveScore} onCancel={handleCancelEditScore} />
+    {/if}
+  {/key}
+</Dialog>
+
+<ConfirmDialog
+  bind:open={showDeleteConfirm}
+  tone="danger"
+  title={$t('sessions.confirmDelete')}
+  message={session
+    ? $t('sessions.confirmDeleteNamed')
+        .replace('{type}', $sessionTypeLabel(session.session_type))
+        .replace('{date}', $fmt.date(session.session_date))
+    : $t('sessions.confirmDeleteMessage')}
+  onConfirm={handleDelete}
+/>
+
+<ConfirmDialog
+  bind:open={showDeleteScore}
+  tone="danger"
+  title={$t('outcomeScores.deleteScore')}
+  message={deletingScore
+    ? $t('outcomeScores.confirmDeleteNamed')
+        .replace('{scale}', deletingScore.scale_type)
+        .replace('{date}', $fmt.date(deletingScore.administered_at))
+    : ''}
+  onConfirm={confirmDeleteScore}
+/>

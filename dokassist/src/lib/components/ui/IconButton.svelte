@@ -2,10 +2,12 @@
   import type { Snippet } from 'svelte';
 
   type Tone = 'default' | 'danger';
+  type Size = 'sm' | 'md' | 'lg';
 
   let {
     label,
     tone = 'default',
+    size = 'md',
     href = undefined,
     disabled = false,
     class: className = '',
@@ -14,6 +16,7 @@
   }: {
     label: string;
     tone?: Tone;
+    size?: Size;
     href?: string;
     disabled?: boolean;
     class?: string;
@@ -22,13 +25,21 @@
   } = $props();
 
   const tones: Record<Tone, string> = {
-    default: 'text-fg-subtle hover:bg-surface-hover hover:text-fg',
+    default: 'text-fg-subtle hover:bg-fill hover:text-fg',
     danger: 'text-fg-subtle hover:bg-danger-subtle hover:text-danger-fg',
+  };
+
+  /* Circular, matching Button heights (D5): 28 / 32 / 36 px. */
+  const sizes: Record<Size, string> = {
+    sm: 'size-control-sm',
+    md: 'size-control',
+    lg: 'size-control-lg',
   };
 
   let classes = $derived(
     [
-      'inline-flex h-10 w-10 items-center justify-center rounded-control',
+      'inline-flex shrink-0 items-center justify-center rounded-full',
+      sizes[size],
       'transition-colors duration-150 ease-standard',
       'disabled:pointer-events-none disabled:opacity-50',
       tones[tone],

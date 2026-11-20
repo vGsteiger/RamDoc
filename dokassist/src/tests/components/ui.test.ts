@@ -29,7 +29,7 @@ describe('Button', () => {
     expect(screen.getByRole('link')).toHaveAttribute('href', '/patients');
   });
 
-  it('applies the accent fill only for the primary variant', () => {
+  it('applies the ink (accent) fill only for the primary variant', () => {
     const { unmount } = render(Button, { variant: 'primary' });
     expect(screen.getByRole('button')).toHaveClass('bg-accent');
     unmount();
@@ -38,9 +38,19 @@ describe('Button', () => {
     expect(screen.getByRole('button')).not.toHaveClass('bg-accent');
   });
 
-  it('uses the danger token for destructive actions', () => {
-    render(Button, { variant: 'danger' });
+  it('uses a quiet danger button at rest and a filled one only on request', () => {
+    const { unmount } = render(Button, { variant: 'danger' });
+    expect(screen.getByRole('button')).toHaveClass('text-danger-fg', 'bg-fill');
+    expect(screen.getByRole('button')).not.toHaveClass('bg-danger');
+    unmount();
+
+    render(Button, { variant: 'danger-solid' });
     expect(screen.getByRole('button')).toHaveClass('bg-danger');
+  });
+
+  it('never wraps or shrinks its label', () => {
+    render(Button);
+    expect(screen.getByRole('button')).toHaveClass('whitespace-nowrap', 'shrink-0');
   });
 
   it('disables itself while loading so the action cannot double-fire', () => {
@@ -92,13 +102,17 @@ describe('Button', () => {
     expect(link).not.toHaveAttribute('aria-disabled');
   });
 
-  it('keeps shared controls large enough for reliable pointer interaction', () => {
-    const { unmount } = render(Button, { size: 'sm' });
-    expect(screen.getByRole('button')).toHaveClass('min-h-9');
-    unmount();
-
-    render(Button, { size: 'md' });
-    expect(screen.getByRole('button')).toHaveClass('min-h-10');
+  // D5: 28px dense, 32px default, 36px for the composer and auth screens.
+  it('uses the control height tokens per size', () => {
+    for (const [size, cls] of [
+      ['sm', 'h-control-sm'],
+      ['md', 'h-control'],
+      ['lg', 'h-control-lg'],
+    ] as const) {
+      const { unmount } = render(Button, { size });
+      expect(screen.getByRole('button')).toHaveClass(cls);
+      unmount();
+    }
   });
 
   it('emits no raw palette utilities', () => {
@@ -148,9 +162,12 @@ describe('IconButton', () => {
     expect(link).toHaveAttribute('href');
   });
 
-  it('uses a 40px target for icon-only actions', () => {
-    render(IconButton, { label: 'More options' });
-    expect(screen.getByRole('button')).toHaveClass('h-10', 'w-10');
+  it('is a square matching the control height', () => {
+    const { unmount } = render(IconButton, { label: 'More options' });
+    expect(screen.getByRole('button')).toHaveClass('size-control');
+    unmount();
+    render(IconButton, { label: 'More options', size: 'sm' });
+    expect(screen.getByRole('button')).toHaveClass('size-control-sm');
   });
 });
 
@@ -171,11 +188,11 @@ describe('Badge and Card', () => {
     expect(badge.className).not.toMatch(RAW_PALETTE);
   });
 
-  it('separates cards with a hairline rather than a shadow', () => {
+  it('renders cards as soft sheets rather than outlined boxes', () => {
     const { container } = render(Card);
     const card = container.querySelector('div');
-    expect(card).toHaveClass('border-line');
-    expect(card?.className).not.toMatch(/shadow-/);
+    expect(card).toHaveClass('card-surface', 'rounded-panel');
+    expect(card).not.toHaveClass('border');
   });
 
   // List rows are clickable cards, so Card renders a real button rather than
@@ -184,7 +201,7 @@ describe('Badge and Card', () => {
     let clicks = 0;
     render(Card, { onclick: () => (clicks += 1) });
     const card = screen.getByRole('button');
-    expect(card).toHaveClass('rounded-card');
+    expect(card).toHaveClass('rounded-panel');
     await fireEvent.click(card);
     expect(clicks).toBe(1);
   });
@@ -196,7 +213,7 @@ describe('Badge and Card', () => {
 
   it('gains the hover affordance implicitly when actionable', () => {
     const { unmount } = render(Card, { onclick: () => {} });
-    expect(screen.getByRole('button')).toHaveClass('hover:bg-surface-hover');
+    expect(screen.getByRole('button')).toHaveClass('hover:bg-surface-raised');
     unmount();
 
     const { container } = render(Card);

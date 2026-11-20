@@ -15,8 +15,8 @@
     unresolvedClaims,
   } from '$lib/chat-provenance';
   import { t } from '$lib/translations';
-  import { Wrench, Check } from 'lucide-svelte';
-  import { Button, ThinkingIndicator } from '$lib/components/ui';
+  import { AlertTriangle, Check, ChevronRight, Wrench } from 'lucide-svelte';
+  import { Button, Markdown, Select, Textarea, ThinkingIndicator } from '$lib/components/ui';
   import { THINK_END, THINK_START, chatActivityStage } from '$lib/chat-activity';
 
   // Internal fields to hide from tool result display
@@ -264,242 +264,257 @@
 </script>
 
 {#if message.role === 'user'}
-  <div class="flex justify-end mb-3">
+  <div class="flex justify-end">
     <div
-      class="min-w-0 max-w-[75%] break-words bg-accent text-on-accent rounded-card px-4 py-2 text-body whitespace-pre-wrap"
+      class="min-w-0 max-w-[85%] whitespace-pre-wrap break-words rounded-panel bg-fill px-4 py-2.5 text-body text-fg"
     >
       {message.content}
     </div>
   </div>
 {:else if message.role === 'assistant'}
-  <div class="flex justify-start mb-3">
-    <div class="min-w-0 max-w-[80%] break-words space-y-2">
-      {#if thinkContent()}
-        <details class="bg-surface-hover border border-line rounded-card px-3 py-2">
-          <summary class="text-caption text-fg-subtle uppercase tracking-wide cursor-pointer">
-            {$t('chat.thinkingLabel')}
-          </summary>
-          <pre
-            class="whitespace-pre-wrap font-sans text-caption text-fg-muted italic mt-1">{thinkContent()}</pre>
-        </details>
-      {/if}
-      {#if mainContent().trim() || showActivity}
-        <div
-          class="bg-surface-hover border border-line rounded-card px-4 py-2 text-body text-fg whitespace-pre-wrap"
+  <div class="min-w-0 space-y-3" data-role="assistant">
+    {#if thinkContent()}
+      <details class="group text-label text-fg-muted">
+        <summary
+          class="inline-flex cursor-pointer items-center gap-1 text-caption text-fg-subtle hover:text-fg-muted"
         >
-          {#if mainContent().trim()}
-            {mainContent()}
-          {:else if showActivity}
-            <ThinkingIndicator stage={activityStage} {startedAt} toolName={activeToolName} />
-          {/if}
-        </div>
-      {/if}
-      {#if provenance && !isStreaming}
-        <div
-          class="rounded-card border border-line bg-surface-raised px-3 py-2 text-caption text-fg-muted"
-        >
-          {#if provenance.sources.length}
-            <p class="font-medium text-fg">{$t('chat.evidenceSources')}</p>
-            <ul class="mt-1 list-disc pl-4">
-              {#each provenance.sources as source (source.toolName)}
-                <li>{sourceLabel(source)}</li>
-              {/each}
-            </ul>
-            <p class="mt-1">{$t('chat.evidenceInference')}</p>
-          {:else}
-            <p class="text-warning-fg">{$t('chat.evidenceUnsupported')}</p>
-          {/if}
-          {#if provenance.unverifiedCitations.length}
-            <p class="mt-1 text-warning-fg">
-              {$t('chat.unverifiedCitations').replace(
-                '{citations}',
-                provenance.unverifiedCitations.join(', ')
-              )}
-            </p>
-          {/if}
-        </div>
-      {/if}
-    </div>
+          <ChevronRight
+            size={12}
+            class="transition-transform duration-150 group-open:rotate-90"
+            aria-hidden="true"
+          />
+          {$t('chat.thinkingLabel')}
+        </summary>
+        <pre
+          class="mt-1.5 whitespace-pre-wrap border-l-2 border-line pl-3 font-sans text-label text-fg-muted">{thinkContent()}</pre>
+      </details>
+    {/if}
+    {#if mainContent().trim()}
+      <Markdown source={mainContent()} />
+    {:else if showActivity}
+      <ThinkingIndicator stage={activityStage} {startedAt} toolName={activeToolName} />
+    {/if}
+    {#if provenance && !isStreaming}
+      <div class="rounded-card bg-fill px-3 py-2 text-caption text-fg-muted">
+        {#if provenance.sources.length}
+          <p class="font-medium text-fg">{$t('chat.evidenceSources')}</p>
+          <ul class="mt-1 list-disc pl-4">
+            {#each provenance.sources as source (source.toolName)}
+              <li>{sourceLabel(source)}</li>
+            {/each}
+          </ul>
+          <p class="mt-1">{$t('chat.evidenceInference')}</p>
+        {:else}
+          <p class="flex items-start gap-1.5 text-warning-fg">
+            <AlertTriangle size={12} class="mt-0.5 shrink-0" aria-hidden="true" />
+            <span>{$t('chat.evidenceUnsupported')}</span>
+          </p>
+        {/if}
+        {#if provenance.unverifiedCitations.length}
+          <p class="mt-1 text-warning-fg">
+            {$t('chat.unverifiedCitations').replace(
+              '{citations}',
+              provenance.unverifiedCitations.join(', ')
+            )}
+          </p>
+        {/if}
+      </div>
+    {/if}
   </div>
 {:else if message.role === 'tool_call'}
-  <div class="flex justify-start mb-2">
-    <div class="min-w-0 max-w-[80%] break-words">
-      <button
-        onclick={() => (toolCallCollapsed = !toolCallCollapsed)}
-        aria-label={toolCallCollapsed ? $t('chat.showToolCall') : $t('chat.hideToolCall')}
-        class="flex items-center gap-2 text-caption text-fg-muted hover:text-fg-muted transition-colors"
-      >
-        <Wrench size={14} class="text-fg-subtle" />
-        <span>{$t('chat.toolCall')}: {message.tool_name ?? 'unknown'}</span>
-        <span>{toolCallCollapsed ? '▶' : '▼'}</span>
-      </button>
-      {#if !toolCallCollapsed}
-        <div class="mt-1 bg-surface-hover border border-line rounded-card px-3 py-2">
-          <pre
-            class="text-caption text-fg-muted whitespace-pre-wrap overflow-x-auto">{message.tool_args_json ??
-              message.content}</pre>
-        </div>
-      {/if}
-    </div>
+  <div class="min-w-0">
+    <Button
+      variant="ghost"
+      size="sm"
+      class="-ml-2.5 max-w-full"
+      onclick={() => (toolCallCollapsed = !toolCallCollapsed)}
+      aria-label={toolCallCollapsed ? $t('chat.showToolCall') : $t('chat.hideToolCall')}
+      aria-expanded={!toolCallCollapsed}
+    >
+      <Wrench size={14} class="text-fg-subtle" aria-hidden="true" />
+      <span class="truncate">{$t('chat.toolCall')}: {message.tool_name ?? $t('common.unknown')}</span>
+      <ChevronRight
+        size={12}
+        class="shrink-0 transition-transform duration-150 {toolCallCollapsed ? '' : 'rotate-90'}"
+        aria-hidden="true"
+      />
+    </Button>
+    {#if !toolCallCollapsed}
+      <div class="mt-1 rounded-card bg-fill px-3 py-2">
+        <pre
+          class="overflow-x-auto whitespace-pre-wrap text-caption text-fg-muted">{message.tool_args_json ??
+            message.content}</pre>
+      </div>
+    {/if}
   </div>
 {:else if message.role === 'tool_result'}
   {@const parsed = parseToolResult(message.content)}
   {@const reportDraft = writeReportDraftProposal(message)}
-  <div class="flex justify-start mb-3">
-    <div class="min-w-0 max-w-[80%] break-words">
-      <button
-        onclick={() => (toolResultCollapsed = !toolResultCollapsed)}
-        aria-label={toolResultCollapsed ? $t('chat.showToolResult') : $t('chat.hideToolResult')}
-        class="flex items-center gap-2 text-caption text-fg-muted hover:text-fg-muted transition-colors"
-      >
-        <Check size={14} class="text-success-fg" />
-        <span>{$t('chat.toolResult')}</span>
-        <span>{toolResultCollapsed ? '▶' : '▼'}</span>
-      </button>
-      {#if !toolResultCollapsed}
-        <div class="mt-1 bg-success-subtle border border-success-line rounded-card px-3 py-2">
-          {#if parsed !== null}
-            {#if Array.isArray(parsed)}
-              <div class="space-y-2">
-                {#each parsed as item, i}
-                  <div
-                    class="text-caption text-fg-muted border-b border-success-line pb-1 last:border-0 last:pb-0"
-                  >
-                    <span class="text-[10px] text-fg-muted uppercase">{i + 1}</span>
-                    {#each visibleEntries(item) as [key, val]}
-                      <div class="flex gap-2">
-                        <span class="text-fg-muted shrink-0">{toLabel(key)}:</span>
-                        <span class="text-fg">{formatValue(val)}</span>
-                      </div>
-                    {/each}
-                  </div>
-                {/each}
-              </div>
-            {:else}
-              <div class="space-y-1">
-                {#each visibleEntries(parsed) as [key, val]}
-                  <div class="flex gap-2 text-caption">
-                    <span class="text-fg-muted shrink-0">{toLabel(key)}:</span>
-                    <span class="text-fg">{formatValue(val)}</span>
-                  </div>
-                {/each}
-              </div>
-            {/if}
+  <div class="min-w-0">
+    <Button
+      variant="ghost"
+      size="sm"
+      class="-ml-2.5 max-w-full"
+      onclick={() => (toolResultCollapsed = !toolResultCollapsed)}
+      aria-label={toolResultCollapsed ? $t('chat.showToolResult') : $t('chat.hideToolResult')}
+      aria-expanded={!toolResultCollapsed}
+    >
+      <Check size={14} class="text-success-fg" aria-hidden="true" />
+      <span class="truncate">{$t('chat.toolResult')}</span>
+      <ChevronRight
+        size={12}
+        class="shrink-0 transition-transform duration-150 {toolResultCollapsed ? '' : 'rotate-90'}"
+        aria-hidden="true"
+      />
+    </Button>
+    {#if !toolResultCollapsed}
+      <div class="mt-1 rounded-card bg-fill px-3 py-2">
+        {#if parsed !== null}
+          {#if Array.isArray(parsed)}
+            <div class="space-y-2">
+              {#each parsed as item, i (i)}
+                <div
+                  class="border-b border-line-subtle pb-1 text-caption text-fg-muted last:border-0 last:pb-0"
+                >
+                  <span class="text-caption text-fg-subtle" data-numeric>{i + 1}</span>
+                  {#each visibleEntries(item) as [key, val] (key)}
+                    <div class="flex gap-2">
+                      <span class="shrink-0 text-fg-muted">{toLabel(key)}:</span>
+                      <span class="min-w-0 break-words text-fg">{formatValue(val)}</span>
+                    </div>
+                  {/each}
+                </div>
+              {/each}
+            </div>
           {:else}
-            <pre
-              class="text-caption text-fg-muted whitespace-pre-wrap overflow-x-auto">{message.content}</pre>
+            <div class="space-y-1">
+              {#each visibleEntries(parsed) as [key, val] (key)}
+                <div class="flex gap-2 text-caption">
+                  <span class="shrink-0 text-fg-muted">{toLabel(key)}:</span>
+                  <span class="min-w-0 break-words text-fg">{formatValue(val)}</span>
+                </div>
+              {/each}
+            </div>
           {/if}
-        </div>
-      {/if}
-      {#if reportDraft}
-        <div class="mt-2 rounded-card border border-accent/30 bg-accent-subtle p-3 space-y-2">
-          <p class="text-caption font-medium text-fg">{$t('chat.reportDraftUnsaved')}</p>
-          <p class="text-caption text-fg-muted">
+        {:else}
+          <pre
+            class="overflow-x-auto whitespace-pre-wrap text-caption text-fg-muted">{message.content}</pre>
+        {/if}
+      </div>
+    {/if}
+    {#if reportDraft}
+      <div class="mt-2 space-y-3 card-surface rounded-panel p-3">
+        <div>
+          <p class="text-label font-medium text-fg">{$t('chat.reportDraftUnsaved')}</p>
+          <p class="mt-0.5 text-caption text-fg-muted">
             {$t('chat.reportDraftReviewHint')}
           </p>
+        </div>
+        <details class="text-caption text-fg-muted">
+          <summary class="cursor-pointer text-label text-fg">{$t('chat.reviewReportDraft')}</summary>
+          <Textarea
+            bind:value={draftContent}
+            aria-label={$t('chat.editReportDraft')}
+            disabled={savedDraft || isSavingDraft}
+            rows={10}
+            class="mt-2"
+          />
+        </details>
+        <div class="flex flex-wrap items-center gap-2">
+          <Button
+            onclick={saveManualRevision}
+            disabled={isSavingRevision || savedDraft || draftContent === latestDraftVersion?.content}
+            size="sm"
+            >{isSavingRevision
+              ? $t('chat.savingDraftRevision')
+              : $t('chat.saveDraftRevision')}</Button
+          >
+          <span class="text-caption text-fg-muted"
+            >{$t('chat.draftVersionCount').replace('{count}', String(draftVersions.length))}</span
+          >
+        </div>
+        {#if draftVersions.length > 0}
           <details class="text-caption text-fg-muted">
-            <summary class="cursor-pointer text-fg">{$t('chat.reviewReportDraft')}</summary>
-            <textarea
-              bind:value={draftContent}
-              aria-label={$t('chat.editReportDraft')}
-              disabled={savedDraft || isSavingDraft}
-              rows="10"
-              class="mt-2 w-full rounded-control border border-line bg-surface-raised p-2 font-sans text-body text-fg"
-            ></textarea>
-          </details>
-          <div class="flex flex-wrap items-center gap-2">
-            <Button
-              onclick={saveManualRevision}
-              disabled={isSavingRevision ||
-                savedDraft ||
-                draftContent === latestDraftVersion?.content}
-              size="md"
-              >{isSavingRevision
-                ? $t('chat.savingDraftRevision')
-                : $t('chat.saveDraftRevision')}</Button
+            <summary class="cursor-pointer text-label text-fg"
+              >{$t('chat.draftVersionHistory')}</summary
             >
-            <span class="text-caption text-fg-muted"
-              >{$t('chat.draftVersionCount').replace('{count}', String(draftVersions.length))}</span
-            >
-          </div>
-          {#if draftVersions.length > 0}
-            <details class="text-caption text-fg-muted">
-              <summary class="cursor-pointer text-fg">{$t('chat.draftVersionHistory')}</summary>
-              <div class="mt-2 space-y-1">
-                {#each draftVersions as version (version.id)}
-                  <button
-                    onclick={() => restoreDraftVersion(version)}
-                    class="block text-left text-accent-fg underline"
-                    >{$t('chat.restoreDraftVersion')
-                      .replace('{version}', String(version.version_number))
-                      .replace('{origin}', version.origin)}</button
-                  >
-                {/each}
-              </div>
-            </details>
-          {/if}
-          {#if draftEvidence.length}
-            <p class="text-caption text-fg-muted">
-              {$t('chat.draftEvidenceSources').replace(
-                '{sources}',
-                draftEvidence.map(sourceLabel).join(', ')
-              )}
-            </p>
-          {/if}
-          {#if draftClaims.length}
-            <fieldset
-              class="space-y-2 rounded-control border border-warning-line bg-warning-subtle p-2"
-            >
-              <legend class="px-1 text-caption font-medium text-warning-fg">
-                {$t('chat.resolveUnsupportedClaims')}
-              </legend>
-              {#each draftClaims as claim (claim.id)}
-                <label class="block text-caption text-fg-muted">
-                  <span>{claimLabel(claim)}</span>
-                  <select
-                    class="mt-1 block w-full rounded-control border border-line bg-surface-raised p-1 text-fg"
-                    value={claimResolutions[claim.id] ?? ''}
-                    onchange={(event) => {
-                      claimResolutions = {
-                        ...claimResolutions,
-                        [claim.id]: event.currentTarget.value as ClaimResolution | '',
-                      };
-                    }}
-                  >
-                    <option value="">{$t('chat.selectClaimResolution')}</option>
-                    <option value="user_provided">{$t('chat.claimUserProvided')}</option>
-                    <option value="uncertain">{$t('chat.claimUncertain')}</option>
-                    <option value="removed">{$t('chat.claimRemoved')}</option>
-                  </select>
-                </label>
+            <div class="mt-1 flex flex-col items-start">
+              {#each draftVersions as version (version.id)}
+                <Button variant="ghost" size="sm" onclick={() => restoreDraftVersion(version)}
+                  >{$t('chat.restoreDraftVersion')
+                    .replace('{version}', String(version.version_number))
+                    .replace('{origin}', version.origin)}</Button
+                >
               {/each}
-            </fieldset>
-          {/if}
-          {#if savedDraft}
-            <p class="text-caption text-success-fg" role="status">{$t('chat.reportDraftSaved')}</p>
-          {:else}
-            <label class="flex items-start gap-2 text-caption text-fg-muted">
-              <input type="checkbox" bind:checked={reviewedDraft} disabled={isSavingDraft} />
-              <span>{$t('chat.confirmReportDraftReviewed')}</span>
-            </label>
-            {#if draftError}
-              <p class="text-caption text-danger-fg" role="alert">{draftError}</p>
-              <Button variant="secondary" size="md" onclick={loadDraftVersions}>
-                {$t('common.retry')}
-              </Button>
-            {/if}
-            <Button
-              onclick={() => saveReviewedDraft(reportDraft)}
-              disabled={!canSaveDraft}
-              loading={isSavingDraft}
-              variant="primary"
-              size="md"
-            >
-              {isSavingDraft ? $t('chat.savingReportDraft') : $t('chat.saveReviewedReportDraft')}
+            </div>
+          </details>
+        {/if}
+        {#if draftEvidence.length}
+          <p class="text-caption text-fg-muted">
+            {$t('chat.draftEvidenceSources').replace(
+              '{sources}',
+              draftEvidence.map(sourceLabel).join(', ')
+            )}
+          </p>
+        {/if}
+        {#if draftClaims.length}
+          <fieldset class="space-y-2 rounded-control border border-warning-line bg-warning-subtle p-2">
+            <legend class="px-1 text-caption font-medium text-warning-fg">
+              {$t('chat.resolveUnsupportedClaims')}
+            </legend>
+            {#each draftClaims as claim (claim.id)}
+              <label class="block text-caption text-fg-muted">
+                <span>{claimLabel(claim)}</span>
+                <Select
+                  controlSize="sm"
+                  class="mt-1"
+                  value={claimResolutions[claim.id] ?? ''}
+                  onchange={(event: Event & { currentTarget: HTMLSelectElement }) => {
+                    claimResolutions = {
+                      ...claimResolutions,
+                      [claim.id]: event.currentTarget.value as ClaimResolution | '',
+                    };
+                  }}
+                >
+                  <option value="">{$t('chat.selectClaimResolution')}</option>
+                  <option value="user_provided">{$t('chat.claimUserProvided')}</option>
+                  <option value="uncertain">{$t('chat.claimUncertain')}</option>
+                  <option value="removed">{$t('chat.claimRemoved')}</option>
+                </Select>
+              </label>
+            {/each}
+          </fieldset>
+        {/if}
+        {#if savedDraft}
+          <p class="text-caption text-success-fg" role="status">{$t('chat.reportDraftSaved')}</p>
+        {:else}
+          <!-- Native checkbox: there is no checkbox primitive yet. -->
+          <label class="flex items-start gap-2 text-caption text-fg-muted">
+            <input
+              type="checkbox"
+              class="mt-0.5"
+              bind:checked={reviewedDraft}
+              disabled={isSavingDraft}
+            />
+            <span>{$t('chat.confirmReportDraftReviewed')}</span>
+          </label>
+          {#if draftError}
+            <p class="text-caption text-danger-fg" role="alert">{draftError}</p>
+            <Button variant="secondary" size="sm" onclick={loadDraftVersions}>
+              {$t('common.retry')}
             </Button>
           {/if}
-        </div>
-      {/if}
-    </div>
+          <!-- Secondary, not primary: the composer's Send is the view's one ink action. -->
+          <Button
+            onclick={() => saveReviewedDraft(reportDraft)}
+            disabled={!canSaveDraft}
+            loading={isSavingDraft}
+            size="sm"
+          >
+            {isSavingDraft ? $t('chat.savingReportDraft') : $t('chat.saveReviewedReportDraft')}
+          </Button>
+        {/if}
+      </div>
+    {/if}
   </div>
 {/if}
