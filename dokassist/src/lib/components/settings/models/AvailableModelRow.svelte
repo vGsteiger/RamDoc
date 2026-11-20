@@ -2,7 +2,7 @@
   import type { AvailableModel, ModelChoice } from '$lib/api';
   import { Badge, Button, ProgressBar, SettingsRow } from '$lib/components/ui';
   import { t } from '$lib/translations';
-  import { formatGigabytes, hasEnoughRam } from './format';
+  import { catalogText, formatGigabytes, hasEnoughRam } from './format';
 
   /* One downloadable writing model from the catalogue. */
   let {
@@ -25,6 +25,12 @@
     onDownload: (choice: ModelChoice) => void;
   } = $props();
 
+  let description = $derived(
+    catalogText($t, 'descriptions', model.filename, model.description)
+  );
+  let disclaimer = $derived(
+    model.disclaimer ? catalogText($t, 'disclaimers', model.filename, model.disclaimer) : null
+  );
   let canRun = $derived(hasEnoughRam(totalRamBytes, model.min_ram_gb));
   let ramLabel = $derived(totalRamBytes ? formatGigabytes(totalRamBytes) : '…');
 
@@ -38,7 +44,7 @@
   }
 </script>
 
-<SettingsRow label={model.name} description={model.description}>
+<SettingsRow label={model.name} {description}>
   {#snippet control()}
     {#if !model.is_downloaded}
       <Button onclick={download} disabled={disabled || !canRun} loading={downloading}>
@@ -75,8 +81,8 @@
       {$t('settings.size').replace('{size}', formatGigabytes(model.size_bytes))}
     </p>
   {/if}
-  {#if model.disclaimer}
-    <p class="mt-1 text-caption text-warning-fg">{model.disclaimer}</p>
+  {#if disclaimer}
+    <p class="mt-1 text-caption text-warning-fg">{disclaimer}</p>
   {/if}
   {#if !model.is_downloaded && !canRun}
     <p class="mt-1 text-caption text-warning-fg">

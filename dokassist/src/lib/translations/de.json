@@ -909,7 +909,7 @@
     },
     "status": {
       "draft": "Entwurf",
-      "final": "Final",
+      "final": "Endgültig",
       "sent": "Versendet"
     },
     "empty": {
@@ -1640,5 +1640,33 @@
     "documentActions": "Aktionen für {name}",
     "deleteTitle": "Dokument löschen?",
     "deleteMessage": "«{name}» aus der Literaturbibliothek löschen?"
+  },
+  "modelCatalog": {
+    "descriptions": {
+      "gemma_4_31B_q4_0_it_gguf": "Grösstes dichtes Gemma-4-Modell mit Googles quantisierungsbewussten Q4_0-Gewichten; starkes mehrsprachiges Schreiben mit 256K Kontext.",
+      "granite_4_2_30b_Q4_K_M_gguf": "Enterprise-Modell von IBM mit offiziell evaluiertem Deutsch und Französisch, Reasoning-Modus und 128K Kontext.",
+      "NVIDIA_Nemotron_3_5_Lightning_30B_A3B_Q4_0_gguf": "Schnelles hybrides Mamba-MoE mit sehr langem Kontext für umfangreiche Akten; unterstützt Deutsch und Französisch.",
+      "Qwen3_8_27B_UD_Q4_K_M_gguf": "Nachfolger von Qwen 3.6 27B: stärkeres mehrsprachiges Reasoning und bessere Werkzeugnutzung mit 256K Kontext.",
+      "gemma_4_26B_q4_0_it_gguf": "Googles quantisierungsbewusste Q4_0-Version des Gemma-4-MoE; bessere Qualität als nachträglich quantisiertes Q4_0 bei gleicher Grösse.",
+      "Ministral_3_14B_Instruct_2512_Q4_K_M_gguf": "Europäisches mittelgrosses Modell von Mistral mit besonders starkem Französisch und 256K Kontext.",
+      "gemma_4_12b_it_qat_q4_0_gguf": "Mittelgrosses dichtes Gemma 4 mit quantisierungsbewussten Gewichten und 256K Kontext für Macs mit 16 GB.",
+      "Qwen3_5_9B_Q4_K_M_gguf": "Ersetzt Qwen3 8B: gleiche Grössenklasse, aber 256K statt 32K Kontext.",
+      "granite_4_2_8b_Q4_K_M_gguf": "Kompaktes IBM-Modell mit evaluiertem Deutsch und Französisch und einem sparsamen Reasoning-Modus.",
+      "gemma_4_E4B_q4_0_it_gguf": "Quantisierungsbewusste Version der On-Device-Stufe von Gemma 4 mit 128K Kontext.",
+      "NVIDIA_Nemotron_3_5_Bolt_E4B_UD_Q4_K_XL_gguf": "Von NVIDIA auf Reasoning abgestimmtes Gemma 4 E4B für kleine Macs; 64K Kontext.",
+      "gemma_4_E2B_q4_0_it_gguf": "Quantisierungsbewusste Version des kleinsten Gemma 4 für Macs mit wenig Arbeitsspeicher; 128K Kontext.",
+      "Qwen3_6_35B_A3B_UD_Q4_K_M_gguf": "Leistungsstärkstes MoE mit langem Kontext für Berichte, deutsche klinische Texte, Literatursuche und Werkzeugnutzung.",
+      "Qwen3_6_27B_Q4_K_M_gguf": "Dichte Qualitätsstufe von Qwen 3.6 mit starkem mehrsprachigem Reasoning und Kontext im 256K-Bereich.",
+      "gemma_4_26B_A4B_it_Q4_0_gguf": "Speichereffiziente mehrsprachige MoE-Alternative mit 256K Kontext und über 140 Sprachen.",
+      "gpt_oss_20b_MXFP4_gguf": "Kompaktes MoE für Reasoning und Werkzeugnutzung; die offiziellen MXFP4-Gewichte sind für den lokalen Einsatz ausgelegt.",
+      "gemma_4_E4B_it_Q4_0_gguf": "Neue On-Device-Stufe von Gemma mit 128K Kontext und geringem Speicherbedarf von 4,3 GiB.",
+      "gemma_4_E2B_it_Q4_0_gguf": "Neueste, besonders kleine mehrsprachige Option mit 128K Kontext für Macs mit wenig Arbeitsspeicher.",
+      "Qwen3_8B_Q4_K_M_gguf": "Bewährtes mehrsprachiges dichtes Ausweichmodell mit guter Qualität bei 4,7 GiB Speicherbedarf.",
+      "Phi_4_mini_instruct_Q4_K_M_gguf": "Schnelle kompakte Alternative für eher englischsprachige Aufgaben und wenig Arbeitsspeicher.",
+      "medgemma_1_5_4b_it_Q4_K_M_gguf": "Medizinisches Instruktionsmodell für lokale Entwürfe, die von Fachpersonen geprüft werden."
+    },
+    "disclaimers": {
+      "medgemma_1_5_4b_it_Q4_K_M_gguf": "Nur für Entwürfe verwenden, die von Fachpersonen geprüft werden. Dieses Modell ist nicht für Diagnose- oder Behandlungsentscheidungen validiert."
+    }
   }
 }

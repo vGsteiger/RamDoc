@@ -1640,5 +1640,33 @@
     "documentActions": "Actions for {name}",
     "deleteTitle": "Delete document?",
     "deleteMessage": "Delete “{name}” from the literature library?"
+  },
+  "modelCatalog": {
+    "descriptions": {
+      "gemma_4_31B_q4_0_it_gguf": "Largest dense Gemma 4 with Google's quantization-aware Q4_0 weights; strong multilingual writing with 256K context.",
+      "granite_4_2_30b_Q4_K_M_gguf": "IBM's enterprise model with officially evaluated German and French, reasoning mode and 128K context.",
+      "NVIDIA_Nemotron_3_5_Lightning_30B_A3B_Q4_0_gguf": "Fast hybrid Mamba-MoE with very long context for large records; supports German and French.",
+      "Qwen3_8_27B_UD_Q4_K_M_gguf": "Successor to Qwen 3.6 27B: stronger multilingual reasoning and tool use with 256K context.",
+      "gemma_4_26B_q4_0_it_gguf": "Google's quantization-aware Q4_0 release of the Gemma 4 MoE; better quality than post-training Q4_0 at the same size.",
+      "Ministral_3_14B_Instruct_2512_Q4_K_M_gguf": "Mistral's European mid-size model with particularly strong French and 256K context.",
+      "gemma_4_12b_it_qat_q4_0_gguf": "Mid-size dense Gemma 4 with quantization-aware weights and 256K context for 16 GB Macs.",
+      "Qwen3_5_9B_Q4_K_M_gguf": "Replaces Qwen3 8B: same footprint class with 256K instead of 32K context.",
+      "granite_4_2_8b_Q4_K_M_gguf": "Compact IBM model with evaluated German and French and a low-effort reasoning mode.",
+      "gemma_4_E4B_q4_0_it_gguf": "Quantization-aware release of the on-device Gemma 4 tier with 128K context.",
+      "NVIDIA_Nemotron_3_5_Bolt_E4B_UD_Q4_K_XL_gguf": "NVIDIA's reasoning-tuned Gemma 4 E4B for small Macs; 64K context.",
+      "gemma_4_E2B_q4_0_it_gguf": "Quantization-aware release of the smallest Gemma 4 for memory-constrained Macs; 128K context.",
+      "Qwen3_6_35B_A3B_UD_Q4_K_M_gguf": "Flagship long-context MoE for report generation, German clinical text, RAG, and tool use.",
+      "Qwen3_6_27B_Q4_K_M_gguf": "Dense Qwen 3.6 quality tier with strong multilingual reasoning and 256K-class context.",
+      "gemma_4_26B_A4B_it_Q4_0_gguf": "Memory-efficient multilingual MoE alternative with 256K context and over 140 languages.",
+      "gpt_oss_20b_MXFP4_gguf": "Compact reasoning and tool-use MoE; the official MXFP4 weights are designed for local use.",
+      "gemma_4_E4B_it_Q4_0_gguf": "New on-device Gemma tier with 128K context and a low 4.3 GiB model footprint.",
+      "gemma_4_E2B_it_Q4_0_gguf": "Newest ultra-small multilingual option with 128K context for memory-constrained Macs.",
+      "Qwen3_8B_Q4_K_M_gguf": "Established multilingual dense fallback with good quality at a 4.7 GiB footprint.",
+      "Phi_4_mini_instruct_Q4_K_M_gguf": "Fast compact alternative for English-leaning workloads and limited memory.",
+      "medgemma_1_5_4b_it_Q4_K_M_gguf": "Medical-domain instruction model for clinician-reviewed on-device drafting."
+    },
+    "disclaimers": {
+      "medgemma_1_5_4b_it_Q4_K_M_gguf": "Use for clinician-reviewed drafting only. This model is not validated for diagnosis or treatment decisions."
+    }
   }
 }
