@@ -6,7 +6,9 @@
   import { authStatus } from '$lib/stores/auth';
   import { t } from '$lib/translations';
   import { classifyUnlockError } from '$lib/unlock-errors';
-  import { Fingerprint, KeyRound } from 'lucide-svelte';
+  import { Fingerprint, LoaderCircle } from 'lucide-svelte';
+  import AuthCard from '$lib/components/AuthCard.svelte';
+  import { Alert, Button } from '$lib/components/ui';
 
   let isUnlocking = $state(false);
   let error = $state<string | null>(null);
@@ -77,86 +79,73 @@
   const handleAcceptCheckpoint = () => attemptUnlock(unlockAppAcceptingAuditCheckpoint);
 </script>
 
-<div class="min-h-screen bg-surface-sunken text-fg flex items-center justify-center p-8">
-  <main
-    class="max-w-md w-full rounded-card border border-line bg-surface-raised p-8 text-center shadow-modal space-y-8"
-  >
-    <div class="space-y-3">
-      <div
-        class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-accent-subtle/15 text-accent-fg"
-      >
-        <KeyRound size={24} aria-hidden="true" />
-      </div>
-      <h1 class="text-display font-semibold text-fg">{$t('auth.welcomeBack')}</h1>
-      <p class="text-fg-muted">{$t('auth.unlockSubtitle')}</p>
-    </div>
-
+<AuthCard title={$t('auth.welcomeBack')} description={$t('auth.unlockSubtitle')}>
+  <div class="space-y-5">
     {#if checkpointMismatch}
-      <div
-        class="rounded-card border border-danger-line/50 bg-danger-subtle/40 p-4 text-left space-y-3"
-        role="alert"
-      >
-        <p class="text-body font-semibold text-danger-fg">{$t('auth.checkpointMismatchTitle')}</p>
-        <p class="text-body text-fg">{$t('auth.checkpointMismatchBody')}</p>
-        <details class="text-caption text-fg-muted">
+      <Alert tone="danger" title={$t('auth.checkpointMismatchTitle')}>
+        <p class="text-fg">{$t('auth.checkpointMismatchBody')}</p>
+        <details class="mt-2 text-caption text-fg-muted">
           <summary class="cursor-pointer">{$t('auth.technicalDetails')}</summary>
           <p class="mt-1 break-words">{checkpointMismatch}</p>
         </details>
-        <button
-          onclick={handleAcceptCheckpoint}
-          disabled={isUnlocking}
-          class="w-full px-4 py-3 border border-danger-line text-danger-fg hover:bg-danger-subtle/60 focus:outline-none focus:ring-2 focus:ring-danger-line/40 disabled:cursor-not-allowed disabled:opacity-60 font-medium rounded-card transition-colors"
-        >
-          {$t('auth.checkpointMismatchContinue')}
-        </button>
-      </div>
+        <div class="mt-3">
+          <Button
+            variant="danger"
+            size="lg"
+            full
+            onclick={handleAcceptCheckpoint}
+            disabled={isUnlocking}
+          >
+            {$t('auth.checkpointMismatchContinue')}
+          </Button>
+        </div>
+      </Alert>
     {:else if error}
-      <div
-        class="rounded-card border border-danger-line/50 bg-danger-subtle/40 p-4 text-left space-y-2"
-        role="alert"
-      >
-        <p class="text-body text-danger-fg">{error}</p>
+      <Alert tone="danger">
+        <p>{error}</p>
         {#if errorDetails}
-          <details class="text-caption text-fg-muted">
+          <details class="mt-2 text-caption text-fg-muted">
             <summary class="cursor-pointer">{$t('auth.technicalDetails')}</summary>
             <p class="mt-1 break-words">{errorDetails}</p>
           </details>
         {/if}
         {#if suggestRecovery}
-          <a href={resolve('/recover')} class="block text-body font-medium text-accent-fg hover:underline">
+          <a
+            href={resolve('/recover')}
+            class="mt-2 block font-medium text-link underline underline-offset-2 hover:text-link-hover"
+          >
             {$t('auth.useRecoveryPhrase')}
           </a>
         {/if}
-      </div>
+      </Alert>
     {/if}
 
-    <div class="space-y-4">
-      <button
-        onclick={handleUnlock}
-        disabled={isUnlocking}
-        class="w-full px-6 py-4 bg-accent hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent/30 focus:ring-offset-2 focus:ring-offset-surface-raised disabled:bg-surface-selected disabled:cursor-not-allowed text-on-accent font-medium rounded-card transition-colors flex items-center justify-center gap-3"
-      >
-        {#if isUnlocking}
-          <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-on-accent"></div>
-          <span>{$t('auth.unlocking')}</span>
-        {:else}
-          <Fingerprint size={22} aria-hidden="true" />
-          <span>{$t('auth.unlockWithTouchID')}</span>
-        {/if}
-      </button>
+    <Button variant="primary" size="lg" full onclick={handleUnlock} disabled={isUnlocking}>
+      {#if isUnlocking}
+        <LoaderCircle size={16} class="animate-spin" aria-hidden="true" />
+        <span>{$t('auth.unlocking')}</span>
+      {:else}
+        <Fingerprint size={18} aria-hidden="true" />
+        <span>{$t('auth.unlockWithTouchID')}</span>
+      {/if}
+    </Button>
 
+    <p class="text-center">
       <a
         href="/recover"
-        class="block text-body text-accent-fg hover:text-accent-fg transition-colors"
+        class="text-body text-link underline-offset-2 hover:text-link-hover hover:underline"
       >
         {$t('auth.recoveryLink')}
       </a>
-    </div>
+    </p>
+  </div>
 
-    <div class="border-t border-line pt-6">
-      <a href="/reset" class="text-caption text-fg-muted hover:text-danger-fg transition-colors">
-        {$t('auth.resetLink')}
-      </a>
-    </div>
-  </main>
-</div>
+  {#snippet footer()}
+    <a
+      href="/reset"
+      class="text-caption text-fg-muted underline-offset-2 transition-colors duration-150 ease-standard hover:text-danger-fg hover:underline"
+    >
+      {$t('auth.resetLink')}
+    </a>
+  {/snippet}
+</AuthCard>

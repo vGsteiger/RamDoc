@@ -1,17 +1,29 @@
 <script lang="ts">
-  import { invoke } from '@tauri-apps/api/core';
-  import type { SubstanceDetail } from '$lib/api';
+  import type { Snippet } from 'svelte';
+  import { AlertTriangle } from 'lucide-svelte';
+  import { getMedicationReferenceDetail, type SubstanceDetail } from '$lib/api';
+  import { Skeleton } from '$lib/components/ui';
   import { t } from '$lib/translations';
 
+  /*
+   * Swissmedic AIPS reference details for one substance.
+   *
+   *   variant="inline" (default) — compact and collapsible, under the
+   *     substance field of the medication form.
+   *   variant="full" — the Reference page detail pane: always open, body text,
+   *     with an optional `actions` slot in the header (e.g. Compare).
+   */
   interface Props {
     substanceId: string | null;
+    variant?: 'inline' | 'full';
+    actions?: Snippet<[SubstanceDetail]>;
   }
 
-  let { substanceId }: Props = $props();
+  let { substanceId, variant = 'inline', actions }: Props = $props();
 
   let detail = $state<SubstanceDetail | null>(null);
   let loading = $state(false);
-  let collapsed = $state(false);
+  let open = $state(true);
 
   $effect(() => {
     if (!substanceId) {
@@ -20,9 +32,9 @@
     }
 
     loading = true;
-    collapsed = false;
+    open = true;
     const currentSubstanceId = substanceId;
-    invoke<SubstanceDetail>('get_medication_reference_detail', { id: substanceId })
+    getMedicationReferenceDetail(substanceId)
       .then((d) => {
         if (currentSubstanceId === substanceId) {
           detail = d;
@@ -39,67 +51,92 @@
         }
       });
   });
+
+  let full = $derived(variant === 'full');
 </script>
+
+{#snippet heading(d: SubstanceDetail)}
+  <span class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+    <span class="{full ? 'text-title' : 'text-body'} font-semibold text-fg">{d.name_de}</span>
+    {#if d.atc_code}
+      <span class="font-mono text-caption text-fg-muted">{d.atc_code}</span>
+    {/if}
+    {#if d.trade_names.length > 0}
+      <span class="min-w-0 text-label text-fg-muted">
+        {d.trade_names.slice(0, full ? 6 : 3).join(' · ')}
+      </span>
+    {/if}
+  </span>
+{/snippet}
+
+{#snippet sections(d: SubstanceDetail)}
+  <dl class="space-y-3 {full ? 'text-body' : 'text-label'}">
+    {#if d.indication}
+      <div>
+        <dt class="font-medium text-fg">{$t('medications.indication')}</dt>
+        <dd class="mt-0.5 leading-relaxed text-fg-muted">{d.indication}</dd>
+      </div>
+    {/if}
+    {#if d.side_effects}
+      <div>
+        <dt class="font-medium text-fg">{$t('medications.sideEffects')}</dt>
+        <dd class="mt-0.5 leading-relaxed text-fg-muted">{d.side_effects}</dd>
+      </div>
+    {/if}
+    {#if d.contraindications}
+      <div>
+        <dt class="flex items-center gap-1.5 font-medium text-danger-fg">
+          <AlertTriangle size={14} aria-hidden="true" />
+          {$t('medications.contraindications')}
+        </dt>
+        <dd class="mt-0.5 leading-relaxed text-fg-muted">{d.contraindications}</dd>
+      </div>
+    {/if}
+  </dl>
+  {#if d.source_version}
+    <p class="mt-3 text-caption text-fg-subtle">
+      {$t('common.source')}: Swissmedic AIPS {d.source_version}
+    </p>
+  {/if}
+{/snippet}
 
 {#if loading}
   <div
-    class="mt-2 px-3 py-2 bg-surface-selected rounded-card text-caption text-fg-muted animate-pulse"
+    class="{full ? '' : 'mt-2'} space-y-2 rounded-card border border-line bg-surface-raised p-3"
+    role="status"
+    aria-label={$t('medications.loadingReference')}
   >
-    {$t('medications.loadingReference')}
+    <Skeleton class="block h-4 w-1/3" />
+    <Skeleton class="block h-3 w-full" />
+    <Skeleton class="block h-3 w-2/3" />
   </div>
+{:else if detail && full}
+  <article class="rounded-card border border-line bg-surface-raised p-4 sm:p-5">
+    <header class="flex flex-wrap items-start justify-between gap-3">
+      {@render heading(detail)}
+      {#if actions}
+        <div class="flex shrink-0 items-center gap-2">{@render actions(detail)}</div>
+      {/if}
+    </header>
+    <div class="mt-4 border-t border-line-subtle pt-4">
+      {@render sections(detail)}
+    </div>
+  </article>
 {:else if detail}
-  <div
-    class="mt-2 bg-surface-selected border border-line rounded-card overflow-hidden text-caption"
+  <details
+    class="group mt-2 overflow-hidden rounded-card border border-line bg-surface-raised"
+    bind:open
   >
-    <!-- Header -->
-    <button
-      type="button"
-      class="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-surface-selected transition-colors"
-      onclick={() => (collapsed = !collapsed)}
+    <summary
+      class="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 transition-colors duration-150 ease-standard hover:bg-surface-hover [&::-webkit-details-marker]:hidden"
     >
-      <div class="flex items-center gap-2">
-        <span class="font-semibold text-fg">{detail.name_de}</span>
-        {#if detail.atc_code}
-          <span class="font-mono bg-accent-subtle text-accent-fg px-1.5 py-0.5 rounded-card">
-            {detail.atc_code}
-          </span>
-        {/if}
-        {#if detail.trade_names.length > 0}
-          <span class="text-fg-muted">{detail.trade_names.slice(0, 3).join(' · ')}</span>
-        {/if}
-      </div>
-      <span class="text-fg-muted text-caption">{collapsed ? '▸' : '▾'}</span>
-    </button>
-
-    {#if !collapsed}
-      <div class="px-3 pb-3 space-y-2 border-t border-line">
-        {#if detail.indication}
-          <div class="pt-2">
-            <p class="font-semibold text-fg-muted mb-0.5">{$t('medications.indication')}</p>
-            <p class="text-fg-muted leading-relaxed">{detail.indication}</p>
-          </div>
-        {/if}
-
-        {#if detail.side_effects}
-          <div>
-            <p class="font-semibold text-warning-fg mb-0.5">{$t('medications.sideEffects')}</p>
-            <p class="text-fg-muted leading-relaxed">{detail.side_effects}</p>
-          </div>
-        {/if}
-
-        {#if detail.contraindications}
-          <div>
-            <p class="font-semibold text-danger-fg mb-0.5">{$t('medications.contraindications')}</p>
-            <p class="text-fg-muted leading-relaxed">{detail.contraindications}</p>
-          </div>
-        {/if}
-
-        {#if detail.source_version}
-          <p class="text-fg-muted pt-1">
-            {$t('common.source')}: Swissmedic AIPS {detail.source_version}
-          </p>
-        {/if}
-      </div>
-    {/if}
-  </div>
+      {@render heading(detail)}
+      <span class="shrink-0 text-caption text-fg-subtle group-open:rotate-90" aria-hidden="true"
+        >▸</span
+      >
+    </summary>
+    <div class="border-t border-line-subtle px-3 py-3">
+      {@render sections(detail)}
+    </div>
+  </details>
 {/if}

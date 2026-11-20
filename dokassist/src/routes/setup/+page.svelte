@@ -5,7 +5,8 @@
   import { authStatus } from '$lib/stores/auth';
   import { t } from '$lib/translations';
   import MnemonicDisplay from '$lib/components/MnemonicDisplay.svelte';
-  import { AlertTriangle } from 'lucide-svelte';
+  import AuthCard from '$lib/components/AuthCard.svelte';
+  import { Alert, Button, Field, Input, Spinner } from '$lib/components/ui';
 
   let words = $state<string[]>([]);
   let isLoading = $state(true);
@@ -74,108 +75,82 @@
   }
 </script>
 
-<div class="min-h-screen bg-surface-sunken text-fg flex items-center justify-center p-8">
-  <div class="max-w-4xl w-full">
-    {#if isLoading}
-      <div class="text-center">
-        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-accent mx-auto"></div>
-        <p class="mt-4 text-fg-muted">{$t('auth.setupGenerating')}</p>
-      </div>
-    {:else if error}
-      <div class="bg-danger-subtle border border-danger-line rounded-card p-6 text-center">
-        <h2 class="text-title font-semibold text-danger-fg mb-2">{$t('auth.setupFailed')}</h2>
-        <p class="text-fg-muted">{error}</p>
-        <button
-          onclick={createRecoveryPhrase}
-          class="mt-5 px-5 py-2 bg-accent hover:bg-accent-hover text-on-accent font-medium rounded-control transition-colors"
+{#if isLoading}
+  <AuthCard>
+    <div class="flex justify-center py-4">
+      <Spinner label={$t('auth.setupGenerating')} />
+    </div>
+  </AuthCard>
+{:else if error}
+  <AuthCard title={$t('auth.setupFailed')}>
+    <Alert tone="danger">{error}</Alert>
+    <div class="mt-6">
+      <Button variant="primary" size="lg" full onclick={createRecoveryPhrase}>
+        {$t('auth.retry')}
+      </Button>
+    </div>
+    {#snippet footer()}
+      {#if errorCode !== 'SETUP_IN_PROGRESS'}
+        <a
+          href="/reset?from=setup"
+          class="text-caption text-fg-muted underline-offset-2 transition-colors duration-150 ease-standard hover:text-danger-fg hover:underline"
         >
-          {$t('auth.retry')}
-        </button>
-        {#if errorCode !== 'SETUP_IN_PROGRESS'}
-          <p class="mt-4">
-            <a
-              href="/reset?from=setup"
-              class="text-caption text-fg-muted hover:text-danger-fg transition-colors"
-            >
-              {$t('auth.resetLink')}
-            </a>
-          </p>
-        {/if}
+          {$t('auth.resetLink')}
+        </a>
+      {/if}
+    {/snippet}
+  </AuthCard>
+{:else if !showConfirmation}
+  <AuthCard title={$t('auth.welcomeToRamDoc')} description={$t('auth.setupIntro')} width="lg">
+    <div class="space-y-6">
+      <Alert tone="warning">{$t('auth.recoveryPhraseDesc')}</Alert>
+
+      <MnemonicDisplay {words} />
+
+      <div class="flex justify-center">
+        <Button variant="primary" size="lg" onclick={startConfirmation}>
+          {$t('auth.writtenDown')}
+        </Button>
       </div>
-    {:else if !showConfirmation}
-      <div class="space-y-6">
-        <div class="text-center">
-          <h1 class="text-display font-semibold text-fg mb-2">{$t('auth.welcomeToRamDoc')}</h1>
-          <p class="text-fg-muted">
-            {$t('auth.setupIntro')}
-          </p>
-        </div>
+    </div>
+  </AuthCard>
+{:else}
+  <AuthCard title={$t('auth.confirmRecoveryPhrase')} description={$t('auth.confirmWordsPrompt')}>
+    <div class="space-y-5">
+      {#if confirmError}
+        <Alert tone="danger">{confirmError}</Alert>
+      {/if}
 
-        <div class="bg-warning-subtle border border-warning rounded-card p-4">
-          <p class="text-warning-fg text-body font-medium flex items-center gap-2">
-            <AlertTriangle size={16} />
-            {$t('auth.recoveryPhraseDesc')}
-          </p>
-        </div>
-
-        <MnemonicDisplay {words} />
-
-        <div class="flex justify-center">
-          <button
-            onclick={startConfirmation}
-            class="px-6 py-3 bg-accent hover:bg-accent-hover text-on-accent font-medium rounded-control transition-colors"
+      <div class="space-y-4">
+        {#each confirmIndices as index (index)}
+          <Field
+            label={$t('auth.wordPlaceholder').replace('{number}', String(index + 1))}
+            for={`confirm-word-${index}`}
           >
-            {$t('auth.writtenDown')}
-          </button>
-        </div>
+            <Input
+              id={`confirm-word-${index}`}
+              type="text"
+              controlSize="lg"
+              value={userInputs[index] ?? ''}
+              oninput={(e: Event) =>
+                (userInputs[index] = (e.currentTarget as HTMLInputElement).value)}
+              placeholder={$t('auth.enterWord')}
+              autocomplete="off"
+              autocapitalize="off"
+              spellcheck="false"
+            />
+          </Field>
+        {/each}
       </div>
-    {:else}
-      <div class="space-y-6">
-        <div class="text-center">
-          <h2 class="text-display font-semibold text-fg mb-2">
-            {$t('auth.confirmRecoveryPhrase')}
-          </h2>
-          <p class="text-fg-muted">{$t('auth.confirmWordsPrompt')}</p>
-        </div>
 
-        {#if confirmError}
-          <div class="bg-danger-subtle border border-danger-line rounded-card p-4">
-            <p class="text-danger-fg text-body">{confirmError}</p>
-          </div>
-        {/if}
-
-        <div class="space-y-4 max-w-md mx-auto">
-          {#each confirmIndices as index}
-            <div>
-              <label for={`confirm-word-${index}`} class="block text-fg-muted mb-2">
-                {$t('auth.wordPlaceholder').replace('{number}', String(index + 1))}
-              </label>
-              <input
-                id={`confirm-word-${index}`}
-                type="text"
-                bind:value={userInputs[index]}
-                class="w-full px-4 py-3 bg-surface-raised border border-line rounded-control text-fg focus:outline-none focus:ring-2 focus:ring-accent/30"
-                placeholder={$t('auth.enterWord')}
-              />
-            </div>
-          {/each}
-        </div>
-
-        <div class="flex justify-center gap-4">
-          <button
-            onclick={() => (showConfirmation = false)}
-            class="px-6 py-3 border border-line bg-surface-raised hover:bg-surface-hover text-fg font-medium rounded-control transition-colors"
-          >
-            {$t('common.back')}
-          </button>
-          <button
-            onclick={validateConfirmation}
-            class="px-6 py-3 bg-accent hover:bg-accent-hover text-on-accent font-medium rounded-control transition-colors"
-          >
-            {$t('common.continue')}
-          </button>
-        </div>
+      <div class="flex gap-3">
+        <Button size="lg" class="flex-1" onclick={() => (showConfirmation = false)}>
+          {$t('common.back')}
+        </Button>
+        <Button variant="primary" size="lg" class="flex-1" onclick={validateConfirmation}>
+          {$t('common.continue')}
+        </Button>
       </div>
-    {/if}
-  </div>
-</div>
+    </div>
+  </AuthCard>
+{/if}
