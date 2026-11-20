@@ -82,7 +82,7 @@ fastembed = { version = "7", default-features = false, features = ["ort-download
 minisign-verify = "0.2"
 
 # Export
-zip = "8"
+zip = "9"
 printpdf = "0.10"
 docx-rs = "0.4"
 pulldown-cmark = { version = "0.13", default-features = false }
