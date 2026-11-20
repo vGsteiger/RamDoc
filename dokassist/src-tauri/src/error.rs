@@ -41,6 +41,11 @@ pub enum AppError {
     #[error("LLM error: {0}")]
     Llm(String),
 
+    /// Speech-to-text failed: no microphone, missing model or worker, or the
+    /// transcription worker reported an error.
+    #[error("Dictation error: {0}")]
+    Dictation(String),
+
     #[error("Auth required")]
     AuthRequired,
 
@@ -68,6 +73,11 @@ pub enum AppError {
 
     #[error("Update error: {0}")]
     Update(String),
+
+    /// The update manifest could not be loaded (offline, or the newest
+    /// release is still being published). Distinct from "up to date".
+    #[error("Update information is unavailable: {0}")]
+    UpdateInfoUnavailable(String),
 
     /// Touch ID sheet was dismissed by the user (not an error — just a cancel).
     #[error("Touch ID authentication was cancelled")]
@@ -106,6 +116,7 @@ impl AppError {
             AppError::AuditCheckpointMismatch(_) => "AUDIT_CHECKPOINT_MISMATCH".to_string(),
             AppError::Filesystem(_) => "FILESYSTEM_ERROR".to_string(),
             AppError::Llm(_) => "LLM_ERROR".to_string(),
+            AppError::Dictation(_) => "DICTATION_ERROR".to_string(),
             AppError::AuthRequired => "AUTH_REQUIRED".to_string(),
             AppError::SetupInProgress => "SETUP_IN_PROGRESS".to_string(),
             AppError::AlreadyInitialized => "ALREADY_INITIALIZED".to_string(),
@@ -137,6 +148,7 @@ impl AppError {
             }
             AppError::RateLimited(_) => "RATE_LIMITED".to_string(),
             AppError::Update(_) => "UPDATE_ERROR".to_string(),
+            AppError::UpdateInfoUnavailable(_) => "UPDATE_INFO_UNAVAILABLE".to_string(),
             AppError::BiometricCancelled => "BIOMETRIC_CANCELLED".to_string(),
         }
     }

@@ -44,28 +44,15 @@ pub async fn check_for_updates(app: AppHandle) -> Result<UpdateInfo, AppError> {
             }
             Err(e) => {
                 let msg = e.to_string();
-                // Only treat network/404 errors as "no release yet" — not signature errors.
-                // A 404 or network failure just means no manifest is published yet.
-                // Signature/pubkey failures must surface as real errors so the user
-                // knows the update cannot be trusted.
-                let is_no_release = msg.contains("404")
-                    || msg.contains("release JSON")
-                    || (msg.contains("status code") && !msg.contains("pubkey"))
-                    || msg.contains("relative URL");
-                if is_no_release {
-                    log::info!(
-                        "Updater manifest not available ({}), treating as up to date",
-                        msg
-                    );
-                    return Ok(UpdateInfo {
-                        current_version,
-                        latest_version: None,
-                        update_available: false,
-                        body: None,
-                        date: None,
-                    });
-                }
                 log::error!("Failed to check for updates: {}", msg);
+                // Never report a failed check as "up to date": that hid a
+                // release published without its latest.json (404) and left
+                // users on old versions believing they were current.
+                if is_manifest_unavailable(&msg) {
+                    return Err(AppError::UpdateInfoUnavailable(msg));
+                }
+                // Signature/pubkey and other failures surface verbatim so the
+                // user knows the update cannot be trusted.
                 Err(AppError::Update(format!(
                     "Failed to check for updates: {}",
                     msg
@@ -134,4 +121,40 @@ pub async fn install_update(app: AppHandle) -> Result<(), AppError> {
 #[tauri::command]
 pub fn get_app_version(app: AppHandle) -> String {
     app.package_info().version.to_string()
+}
+
+/// The update manifest (latest.json) could not be fetched or read: offline,
+/// or the newest release is still being published (404). Signature and
+/// public-key failures are deliberately excluded — they are security errors.
+fn is_manifest_unavailable(msg: &str) -> bool {
+    if msg.contains("pubkey") || msg.contains("signature") {
+        return false;
+    }
+    msg.contains("404")
+        || msg.contains("release JSON")
+        || msg.contains("status code")
+        || msg.contains("relative URL")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn missing_manifest_is_reported_not_swallowed() {
+        assert!(is_manifest_unavailable(
+            "Could not fetch a valid release JSON from the remote"
+        ));
+        assert!(is_manifest_unavailable(
+            "Download request failed with status code 404"
+        ));
+    }
+
+    #[test]
+    fn signature_failures_are_not_manifest_unavailable() {
+        assert!(!is_manifest_unavailable(
+            "The signature verification failed"
+        ));
+        assert!(!is_manifest_unavailable("invalid pubkey, status code 404"));
+    }
 }

@@ -9,6 +9,10 @@ dist
 # Tauri
 src-tauri/target
 
+# Dictation worker (asr-worker/) and its staged sidecar
+asr-worker/target
+src-tauri/binaries
+
 # Logs
 *.log
 logs

@@ -5,5 +5,8 @@
     <!-- Required for LocalAuthentication Touch ID prompts. -->
     <key>com.apple.security.device.biometry</key>
     <true/>
+    <!-- Required under the hardened runtime for microphone dictation. -->
+    <key>com.apple.security.device.audio-input</key>
+    <true/>
 </dict>
 </plist>

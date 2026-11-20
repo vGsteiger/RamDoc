@@ -1,7 +1,20 @@
 <script lang="ts">
-  import { uploadFile, processFile, type FileRecord } from '$lib/api';
+  import {
+    uploadFile,
+    processFile,
+    audioMimeType,
+    isAudioMime,
+    AUDIO_EXTENSIONS,
+    type FileRecord,
+  } from '$lib/api';
   import { Paperclip } from 'lucide-svelte';
   import { t } from '$lib/translations';
+  import { errorText } from '$lib/translations/labels';
+  import { addToast } from '$lib/stores/toast';
+
+  const accept = ['.pdf', '.png', '.jpg', '.jpeg', '.docx']
+    .concat(AUDIO_EXTENSIONS.map((ext) => `.${ext}`))
+    .join(',');
 
   interface Props {
     patientId: string;
@@ -52,7 +65,11 @@
 
   async function uploadFiles(files: FileList) {
     for (const file of Array.from(files)) {
-      if (!supportedTypes.includes(file.type)) {
+      // Recorded dictations are accepted too; they are transcribed locally.
+      const mimeType = supportedTypes.includes(file.type)
+        ? file.type
+        : audioMimeType(file.name, file.type);
+      if (!mimeType) {
         errorMessage = $t('files.unsupportedType').replace('{type}', file.type);
         setTimeout(() => (errorMessage = ''), 5000);
         continue;
@@ -68,7 +85,7 @@
 
         uploadProgress = 50;
 
-        const record = await uploadFile(patientId, file.name, data, file.type);
+        const record = await uploadFile(patientId, file.name, data, mimeType);
 
         uploadProgress = 100;
 
@@ -78,6 +95,14 @@
 
         processFile(record.id).catch((err) => {
           console.warn('process_file failed (non-fatal):', err);
+          // A failed transcription (e.g. no speech model installed yet) is
+          // worth telling the user about; the recording itself is stored.
+          if (isAudioMime(mimeType)) {
+            addToast(
+              $t('dictation.transcriptionFailed').replace('{error}', $errorText(err)),
+              'error'
+            );
+          }
         });
 
         isUploading = false;
@@ -110,7 +135,7 @@
       type="file"
       class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
       multiple
-      accept=".pdf,.png,.jpg,.jpeg,.docx"
+      {accept}
       onchange={handleFileInput}
     />
 

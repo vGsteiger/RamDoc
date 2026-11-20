@@ -454,6 +454,114 @@ export async function processFile(fileId: string): Promise<void> {
   return await invoke<void>('process_file', { fileId });
 }
 
+/** Extracted text of a processed file (for audio: the dictation transcript). */
+export async function getFileText(fileId: string): Promise<string | null> {
+  return await invoke<string | null>('get_file_text', { fileId });
+}
+
+// === Dictation (local speech-to-text) ===
+
+export interface DictationModel {
+  id: string;
+  name: string;
+  size_bytes: number;
+  license: string;
+  languages: string;
+  description: string;
+  recommended: boolean;
+  installed: boolean;
+  active: boolean;
+}
+
+export interface DictationStatus {
+  models: DictationModel[];
+  /** The bundled transcription worker is present. */
+  worker_available: boolean;
+  /** Worker present and at least one model installed. */
+  ready: boolean;
+  recording_id: number | null;
+}
+
+export interface DictationResult {
+  text: string;
+  language: string | null;
+  audio_ms: number;
+  /** The recording hit the 30 minute cap and was cut. */
+  truncated: boolean;
+}
+
+/** Tauri events emitted by the dictation backend. */
+export const DICTATION_EVENTS = {
+  /** `{ id, level }` with level 0–1, ~10×/s while recording. */
+  level: 'dictation-level',
+  /** f64 0–1 while a dictation model downloads. */
+  downloadProgress: 'dictation-model-download-progress',
+  downloadDone: 'dictation-model-download-done',
+  /** `{ file_id, done, total }` while an uploaded recording is transcribed. */
+  fileProgress: 'file-transcription-progress',
+} as const;
+
+export async function getDictationStatus(): Promise<DictationStatus> {
+  return await invoke<DictationStatus>('get_dictation_status');
+}
+
+export async function downloadDictationModel(modelId: string): Promise<void> {
+  return await invoke<void>('download_dictation_model', { modelId });
+}
+
+export async function deleteDictationModel(modelId: string): Promise<void> {
+  return await invoke<void>('delete_dictation_model', { modelId });
+}
+
+export async function setActiveDictationModel(modelId: string): Promise<void> {
+  return await invoke<void>('set_active_dictation_model', { modelId });
+}
+
+/** Opens the microphone and preloads the model; returns the dictation id. */
+export async function startDictation(): Promise<number> {
+  return await invoke<number>('start_dictation');
+}
+
+export async function stopDictation(id: number): Promise<DictationResult> {
+  return await invoke<DictationResult>('stop_dictation', { id });
+}
+
+export async function cancelDictation(id?: number): Promise<void> {
+  return await invoke<void>('cancel_dictation', { id: id ?? null });
+}
+
+const AUDIO_MIME_BY_EXTENSION: Record<string, string> = {
+  wav: 'audio/wav',
+  mp3: 'audio/mpeg',
+  m4a: 'audio/mp4',
+  mp4: 'audio/mp4',
+  aac: 'audio/aac',
+  flac: 'audio/flac',
+  ogg: 'audio/ogg',
+  oga: 'audio/ogg',
+  aif: 'audio/aiff',
+  aiff: 'audio/aiff',
+  caf: 'audio/x-caf',
+};
+
+/** File extensions accepted as transcribable dictation recordings. */
+export const AUDIO_EXTENSIONS = Object.keys(AUDIO_MIME_BY_EXTENSION);
+
+/**
+ * Resolve an audio MIME type for a picked file. WebKit reports an empty or
+ * vendor-specific type for some recordings (e.g. `.m4a`, `.caf`), so fall
+ * back to the extension. Returns null for non-audio files.
+ */
+export function audioMimeType(filename: string, reportedType: string): string | null {
+  if (reportedType.startsWith('audio/')) return reportedType;
+  const ext = filename.split('.').pop()?.toLowerCase() ?? '';
+  return AUDIO_MIME_BY_EXTENSION[ext] ?? null;
+}
+
+export function isAudioMime(mimeType: string): boolean {
+  return mimeType.startsWith('audio/');
+}
+
 export interface Patient {
   id: string;
   first_name: string;

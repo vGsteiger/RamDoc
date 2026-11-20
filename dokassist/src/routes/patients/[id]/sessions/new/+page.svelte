@@ -6,6 +6,8 @@
   import { addToast } from '$lib/stores/toast';
   import { AMDP_CATEGORIES, serializeAMDP, type AMDPCategory } from '$lib/amdp';
   import AMDPForm from '$lib/components/AMDPForm.svelte';
+  import DictationButton from '$lib/components/DictationButton.svelte';
+  import { insertDictation } from '$lib/dictation';
   import { get } from 'svelte/store';
   import { t } from '$lib/translations';
 
@@ -19,6 +21,7 @@
   let sessionTime = $state(prefilledTime ?? '');
   let durationMinutes = $state(50);
   let notes = $state('');
+  let notesEl = $state<HTMLTextAreaElement>();
   let amdpCategories = $state<AMDPCategory[]>(JSON.parse(JSON.stringify(AMDP_CATEGORIES)));
 
   let saving = $state(false);
@@ -150,11 +153,15 @@
     </div>
 
     <div>
-      <label for="notes" class="block text-body font-medium text-fg-muted mb-1">
-        {$t('common.notes')} *
-      </label>
+      <div class="flex items-center justify-between gap-2 mb-1">
+        <label for="notes" class="block text-body font-medium text-fg-muted">
+          {$t('common.notes')} *
+        </label>
+        <DictationButton onTranscript={(text) => (notes = insertDictation(notesEl, notes, text))} />
+      </div>
       <textarea
         id="notes"
+        bind:this={notesEl}
         bind:value={notes}
         required
         rows="8"

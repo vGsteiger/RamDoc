@@ -1,3 +1,4 @@
+use crate::dictation;
 use crate::error::AppError;
 use crate::filesystem::{self, MAX_FILE_SIZE};
 use crate::llm::embed::EmbedEngine;
@@ -158,8 +159,14 @@ pub async fn process_file(
     let mime_type = file.mime_type.clone();
     let vault_path = file.vault_path.clone();
     let data_dir = state.data_dir.clone();
+    let is_audio = dictation::audio::is_audio_mime(&mime_type);
+    let filename = file.filename.clone();
+    let progress_app = app.clone();
+    let progress_file_id = file_id.clone();
 
     // ── 3 & 4. Decrypt + extract text (blocking I/O / CPU) ─────────────────
+    // Audio dictations are transcribed locally by the dokassist-asr worker;
+    // the decrypted audio is only ever held in memory and piped to it.
     let text: String = tokio::task::spawn_blocking(move || -> Result<String, AppError> {
         let bytes = filesystem::read_file(&data_dir, &fs_key, &vault_path)?;
 
@@ -167,6 +174,19 @@ pub async fn process_file(
             "application/pdf" => pdf_extract::extract_text_from_mem(&bytes)
                 .map_err(|e| AppError::Llm(format!("PDF text extraction failed: {e}")))?,
             t if t.starts_with("text/") => String::from_utf8_lossy(&bytes).into_owned(),
+            _ if is_audio => {
+                dictation::transcribe_file_bytes(&data_dir, bytes, &filename, |done, total| {
+                    let _ = progress_app.emit(
+                        "file-transcription-progress",
+                        serde_json::json!({
+                            "file_id": progress_file_id,
+                            "done": done,
+                            "total": total,
+                        }),
+                    );
+                })?
+                .text
+            }
             _ => return Ok(String::new()), // unsupported type — skip
         };
 
@@ -193,7 +213,8 @@ pub async fn process_file(
             )
             .unwrap_or_else(|_| "Unknown Patient".to_string());
 
-        file_record::update_file_text(&conn, &file_id, &text, None)?;
+        let document_type = is_audio.then_some("dictation");
+        file_record::update_file_text(&conn, &file_id, &text, document_type)?;
 
         crate::search::index_file(
             &conn,
@@ -235,6 +256,23 @@ pub async fn process_file(
     let _ = app.emit("file-processed", &file_id);
 
     Ok(())
+}
+
+/// Text extracted by `process_file` (for audio: the dictation transcript),
+/// or `None` if the file has not been processed or has no text.
+#[tauri::command]
+pub async fn get_file_text(
+    state: State<'_, AppState>,
+    file_id: String,
+) -> Result<Option<String>, AppError> {
+    let db = state.get_db()?;
+    let conn = db.conn()?;
+    let text: Option<String> = conn.query_row(
+        "SELECT extracted_text FROM files WHERE id = ?1",
+        [&file_id],
+        |row| row.get(0),
+    )?;
+    Ok(text.filter(|t| !t.trim().is_empty()))
 }
 
 #[tauri::command]

@@ -26,7 +26,8 @@ jobs:
       matrix:
         include:
           - platform: 'macos-latest'
-            args: '--target aarch64-apple-darwin'
+            # tauri.bundle.conf.json builds and bundles the dokassist-asr dictation worker sidecar.
+            args: '--target aarch64-apple-darwin --config src-tauri/tauri.bundle.conf.json'
             rust-targets: 'aarch64-apple-darwin'
 
     runs-on: ${{ matrix.platform }}
@@ -60,17 +61,9 @@ jobs:
         toolchain: stable
         target: ${{ matrix.rust-targets }}
 
-    - name: Cache cargo build
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          dokassist/src-tauri/target
-        key: ${{ runner.os }}-tauri-${{ matrix.rust-targets }}-${{ hashFiles('dokassist/src-tauri/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-tauri-${{ matrix.rust-targets }}-${{ hashFiles('dokassist/src-tauri/Cargo.lock') }}-
-          ${{ runner.os }}-tauri-${{ matrix.rust-targets }}-
+    # No target/ cache here: release builds run from the PR-merge event, so any
+    # cache they save is scoped to that PR's ref and can never be restored by a
+    # later release; it only consumed the 10 GB repo cache quota.
 
     - name: Install frontend dependencies
       working-directory: ./dokassist
@@ -125,27 +118,26 @@ jobs:
         ARM_TAR=$(find ./artifacts -name "*.app.tar.gz" | head -n1)
         ARM_SIG=$(find ./artifacts -name "*.app.tar.gz.sig" | head -n1)
 
-        ARM_URL=""
-        ARM_SIG_CONTENT=""
+        # The release stays a draft until everything below is uploaded, so an
+        # incomplete build must fail here rather than publish a release whose
+        # latest.json is missing or points nowhere.
+        for f in "$ARM_DMG" "$ARM_TAR" "$ARM_SIG"; do
+          if [ ! -f "$f" ]; then
+            echo "::error::Missing release artifact (DMG, .app.tar.gz or .sig) — not publishing $TAG"
+            exit 1
+          fi
+        done
 
         # Upload DMG as release asset for fresh installs
-        if [ -f "$ARM_DMG" ]; then
-          echo "Uploading ARM64 DMG: $(basename "$ARM_DMG")"
-          gh release upload "$TAG" "$ARM_DMG" --clobber --repo "$REPO"
-        else
-          echo "Warning: No aarch64 DMG found in artifacts"
-        fi
+        echo "Uploading ARM64 DMG: $(basename "$ARM_DMG")"
+        gh release upload "$TAG" "$ARM_DMG" --clobber --repo "$REPO"
 
         # Upload .app.tar.gz bundle (used by Tauri updater)
-        if [ -f "$ARM_TAR" ]; then
-          echo "Uploading ARM64 app.tar.gz: $(basename "$ARM_TAR")"
-          gh release upload "$TAG" "$ARM_TAR" --clobber --repo "$REPO"
-          ARM_URL="${BASE_URL}/$(basename "$ARM_TAR")"
-        else
-          echo "Warning: No aarch64 .app.tar.gz found in artifacts"
-        fi
+        echo "Uploading ARM64 app.tar.gz: $(basename "$ARM_TAR")"
+        gh release upload "$TAG" "$ARM_TAR" --clobber --repo "$REPO"
+        ARM_URL="${BASE_URL}/$(basename "$ARM_TAR")"
 
-        [ -f "$ARM_SIG" ] && ARM_SIG_CONTENT=$(tr -d '\r\n' < "$ARM_SIG")
+        ARM_SIG_CONTENT=$(tr -d '\r\n' < "$ARM_SIG")
 
         # Generate and upload latest.json for Tauri updater
         # NOTE: Tauri v2 requires plain semver (no "v" prefix)
@@ -172,3 +164,20 @@ jobs:
 
         gh release upload "$TAG" latest.json --clobber --repo "$REPO"
         echo "Uploaded latest.json to release $TAG"
+
+    - name: Publish release
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        TAG="${{ inputs.tag }}"
+        REPO="${{ github.repository }}"
+        # release.yml creates releases as drafts so /releases/latest (and the
+        # updater's latest.json URL) never points at a release without assets.
+        # Only publish drafts: a manual re-build of an older, already
+        # published tag must not steal "Latest" from a newer release.
+        if [ "$(gh release view "$TAG" --repo "$REPO" --json isDraft -q .isDraft)" = "true" ]; then
+          gh release edit "$TAG" --repo "$REPO" --draft=false --latest
+          echo "Published $TAG as the latest release"
+        else
+          echo "$TAG is already published; leaving its Latest status unchanged"
+        fi

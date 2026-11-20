@@ -8,6 +8,8 @@
   import { thinkingEffort } from '$lib/stores/thinking';
   import { stripThinkTags } from '$lib/llm/strip-think';
   import { ThinkingIndicator } from '$lib/components/ui';
+  import DictationButton from '$lib/components/DictationButton.svelte';
+  import { insertDictation } from '$lib/dictation';
 
   export let content: string = '';
   export let readonly: boolean = false;
@@ -205,6 +207,14 @@
           >
             {showSuggestions ? $t('common.close') : $t('reports.editor.suggestions')}
           </button>
+          <DictationButton
+            onTranscript={(text) =>
+              (content = insertDictation(
+                document.getElementById('report-textarea') as HTMLTextAreaElement | null,
+                content,
+                text
+              ))}
+          />
           {#if selectedText}
             <span class="text-caption text-fg-muted">
               {$t('reports.editor.charsSelected').replace('{count}', String(selectedText.length))}

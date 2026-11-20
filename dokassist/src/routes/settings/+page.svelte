@@ -59,6 +59,7 @@
   import { ThinkingIndicator } from '$lib/components/ui';
   import { t } from '$lib/translations';
   import PromotedModelImportDialog from '$lib/components/PromotedModelImportDialog.svelte';
+  import DictationSettings from '$lib/components/DictationSettings.svelte';
 
   function renderMarkdown(text: string): string {
     function escape(s: string) {
@@ -230,6 +231,9 @@
     try {
       updateInfo = await checkForUpdates();
     } catch (e) {
+      // Drop any earlier result: a stale "You're up to date!" must not
+      // remain on screen next to (or instead of) a failed check.
+      updateInfo = null;
       updateError = $errorText(e);
     } finally {
       checkingUpdate = false;
@@ -1441,6 +1445,8 @@
       <p class="text-caption text-danger-fg">{embedError}</p>
     {/if}
   </section>
+
+  <DictationSettings />
 
   <section class="mt-10">
     <h2 class="text-heading font-semibold text-fg mb-4">

@@ -43,6 +43,9 @@ pub struct AppState {
     /// Unencrypted medication reference SQLite (public AIPS data).
     /// `None` until the user downloads the reference DB via settings.
     pub medication_ref: Mutex<Option<Connection>>,
+    /// Live microphone dictation in progress. Cleared (microphone closed,
+    /// audio zeroed, worker killed) on lock, reset and window close.
+    pub dictation: Mutex<Option<crate::dictation::ActiveDictation>>,
 }
 
 pub enum AuthState {
@@ -108,7 +111,18 @@ impl AppState {
             runtime_generation: AtomicU64::new(0),
             embed: Mutex::new(None),
             medication_ref: Mutex::new(medication_ref),
+            dictation: Mutex::new(None),
         }
+    }
+
+    /// Abort any live dictation: closes the microphone, discards the captured
+    /// audio and kills the transcription worker.
+    pub fn clear_dictation(&self) {
+        let active = match self.dictation.lock() {
+            Ok(mut g) => g.take(),
+            Err(poisoned) => poisoned.into_inner().take(),
+        };
+        drop(active);
     }
 
     /// Initialize the database and strictly verify its external audit checkpoint.
