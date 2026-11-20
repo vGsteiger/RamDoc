@@ -5,6 +5,7 @@
   import { checkAuth, getSettings } from '$lib/api';
   import { authStatus, isLoading } from '$lib/stores/auth';
   import { t } from '$lib/translations';
+  import { Alert, BrandMark, Button, Spinner } from '$lib/components/ui';
 
   let error = $state<string | null>(null);
 
@@ -27,8 +28,8 @@
           if (!settings.onboarding_completed) {
             goto('/onboarding/step1');
           } else {
-            // The conversation workspace is the daily starting point. Dashboard
-            // remains available from navigation for clinicians who need its overview.
+            // The conversation workspace is the daily starting point (D3: the
+            // dashboard's "Today" content lives on the new-chat screen).
             goto('/chat');
           }
         } catch (err) {
@@ -55,24 +56,14 @@
   }
 </script>
 
-<div class="min-h-screen bg-surface-sunken text-fg flex items-center justify-center p-8">
-  {#if error}
-    <div class="text-center space-y-4 max-w-md">
-      <div class="bg-danger-subtle border border-danger-line rounded-card p-6">
-        <h2 class="text-title font-semibold text-danger-fg mb-2">{$t('auth.authError')}</h2>
-        <p class="text-fg-muted">{error}</p>
-      </div>
-      <button
-        onclick={handleRetry}
-        class="px-6 py-3 bg-accent hover:bg-accent-hover text-on-accent font-medium rounded-control transition-colors"
-      >
-        {$t('auth.retry')}
-      </button>
-    </div>
-  {:else}
-    <div class="text-center">
-      <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-accent mx-auto"></div>
-      <p class="mt-4 text-fg-muted">{$t('auth.loading')}</p>
-    </div>
-  {/if}
+<div class="flex min-h-screen items-center justify-center bg-surface p-8 text-fg">
+  <div class="flex w-full max-w-sm flex-col items-center gap-4 text-center">
+    <BrandMark size={32} />
+    {#if error}
+      <Alert tone="danger" title={$t('auth.authError')} class="w-full text-left">{error}</Alert>
+      <Button size="lg" onclick={handleRetry}>{$t('auth.retry')}</Button>
+    {:else}
+      <Spinner size={20} label={$t('auth.loading')} />
+    {/if}
+  </div>
 </div>

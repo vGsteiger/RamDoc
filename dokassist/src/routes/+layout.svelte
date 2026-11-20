@@ -2,11 +2,13 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
-  import { checkAuth, listPatients, type Patient } from '$lib/api';
+  import { checkAuth } from '$lib/api';
   import { authStatus } from '$lib/stores/auth';
   import { resolvedTheme } from '$lib/stores/theme';
+  import { sidebarCollapsed } from '$lib/stores/sidebar';
+  import { matchShellShortcut, NEW_CHAT_URL, patientIdFromPath } from '$lib/shell';
+  import { t } from '$lib/translations';
   import Sidebar from '$lib/components/Sidebar.svelte';
-  import TopBar from '$lib/components/TopBar.svelte';
   import Toast from '$lib/components/Toast.svelte';
   import CommandPalette from '$lib/components/CommandPalette.svelte';
   import type { Snippet } from 'svelte';
@@ -16,8 +18,13 @@
 
   let currentPath = $derived(page.url.pathname);
   let isCommandPaletteOpen = $state(false);
-  let isSidebarOpen = $state(false);
-  let patients = $state<Patient[]>([]);
+  let isOverlayOpen = $state(false);
+  // ≥1024px: full sidebar (or the rail, if the user collapsed it). Below: rail.
+  let isWide = $state(
+    typeof window === 'undefined' || typeof window.matchMedia !== 'function'
+      ? true
+      : window.matchMedia('(min-width: 1024px)').matches
+  );
 
   const authPaths = ['/', '/setup', '/unlock', '/recover', '/reset'];
   const layoutlessPaths = [
@@ -37,6 +44,17 @@
     }
   });
 
+  // Any navigation closes the overlaid sidebar.
+  $effect(() => {
+    void page.url.href;
+    isOverlayOpen = false;
+  });
+
+  function toggleSidebar() {
+    if (isWide) sidebarCollapsed.update((value) => !value);
+    else isOverlayOpen = !isOverlayOpen;
+  }
+
   onMount(() => {
     // Async initialization
     (async () => {
@@ -55,13 +73,6 @@
             } else if (status === 'recovery_required') {
               goto('/recover', { replaceState: true });
             }
-          } else {
-            // Load patients for command palette
-            try {
-              patients = await listPatients();
-            } catch (error) {
-              console.error('Failed to load patients:', error);
-            }
           }
         } catch (error) {
           console.error('Auth check failed:', error);
@@ -70,38 +81,46 @@
       }
     })();
 
-    // Global keyboard shortcuts
+    let media: MediaQueryList | null = null;
+    const onMediaChange = (event: MediaQueryListEvent) => {
+      isWide = event.matches;
+      isOverlayOpen = false;
+    };
+    if (typeof window.matchMedia === 'function') {
+      media = window.matchMedia('(min-width: 1024px)');
+      isWide = media.matches;
+      media.addEventListener('change', onMediaChange);
+    }
+
+    // Global keyboard shortcuts (D10). See matchShellShortcut for the map.
     const handleGlobalKeydown = (e: KeyboardEvent) => {
       // Don't handle shortcuts on auth routes
       if (layoutlessPaths.includes(currentPath)) {
         return;
       }
 
-      const key = e.key.toLowerCase();
-
-      // Cmd+K / Ctrl+K - Open command palette
-      if ((e.metaKey || e.ctrlKey) && key === 'k') {
+      const shortcut = matchShellShortcut(e);
+      if (shortcut === 'commandPalette') {
         e.preventDefault();
         isCommandPaletteOpen = true;
+        return;
       }
-      // Cmd+N / Ctrl+N - New patient
-      if ((e.metaKey || e.ctrlKey) && key === 'n' && !isCommandPaletteOpen) {
+      if (shortcut === 'toggleSidebar') {
+        e.preventDefault();
+        toggleSidebar();
+        return;
+      }
+      if (isCommandPaletteOpen) return;
+      if (shortcut === 'newChat') {
+        e.preventDefault();
+        goto(NEW_CHAT_URL);
+      } else if (shortcut === 'newPatient') {
         e.preventDefault();
         goto('/patients/new');
-      }
-      // Cmd+Shift+S / Ctrl+Shift+S - New session (requires current patient page)
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && key === 's' && !isCommandPaletteOpen) {
+      } else if (shortcut === 'newSession') {
         e.preventDefault();
-        // Check if we're on a patient page
-        const match = currentPath.match(/^\/patients\/([^\/]+)$/);
-        if (match && match[1] !== 'new') {
-          goto(`/patients/${match[1]}/sessions/new`);
-        }
-      }
-      // Cmd+F / Ctrl+F - Focus search (handled by TopBar)
-      // Escape - Close command palette
-      if (e.key === 'Escape' && isCommandPaletteOpen) {
-        isCommandPaletteOpen = false;
+        const patientId = patientIdFromPath(currentPath);
+        if (patientId) goto(`/patients/${patientId}/sessions/new`);
       }
     };
 
@@ -109,25 +128,35 @@
 
     return () => {
       window.removeEventListener('keydown', handleGlobalKeydown);
+      media?.removeEventListener('change', onMediaChange);
     };
   });
 </script>
 
 {#if showLayout}
+  <a
+    href="#main-content"
+    class="sr-only z-50 rounded-control bg-surface-overlay px-3 py-2 text-body text-fg shadow-popover focus:not-sr-only focus:fixed focus:left-3 focus:top-3"
+  >
+    {$t('nav.skipToContent')}
+  </a>
   <div class="flex h-screen bg-surface">
-    <Sidebar bind:mobileOpen={isSidebarOpen} onMobileClose={() => (isSidebarOpen = false)} />
-    <div class="flex-1 min-w-0 flex flex-col overflow-hidden">
-      <TopBar onMenuToggle={() => (isSidebarOpen = !isSidebarOpen)} isNavigationOpen={isSidebarOpen} />
-      <main class="flex-1 overflow-auto">
-        {@render children()}
-      </main>
-    </div>
+    <Sidebar
+      collapsed={$sidebarCollapsed}
+      wide={isWide}
+      overlayOpen={isOverlayOpen}
+      onToggle={toggleSidebar}
+      onOverlayClose={() => (isOverlayOpen = false)}
+      onOpenPalette={() => (isCommandPaletteOpen = true)}
+    />
+    <main id="main-content" tabindex="-1" class="min-w-0 flex-1 overflow-auto">
+      {@render children()}
+    </main>
   </div>
   <Toast />
   <CommandPalette
     bind:isOpen={isCommandPaletteOpen}
     onClose={() => (isCommandPaletteOpen = false)}
-    {patients}
   />
 {:else}
   {@render children()}
