@@ -10,20 +10,20 @@
     SectionHeader,
   } from '$lib/components/ui';
   import { getPatientWorkspace } from '$lib/components/patient/state.svelte';
-  import { chatHref, patientPath } from '$lib/components/patient/workspace';
+  import { chatHref, newPatientChatHref } from '$lib/components/patient/workspace';
   import { fmt } from '$lib/format';
   import { t } from '$lib/translations';
 
   /*
    * The patient's chats, the first section of the workspace (D4). Each row
    * opens the chat in the chat workspace. "New chat" lives in the patient
-   * header (and in the empty state) and goes through `/patients/{id}/chat`,
+   * header (and in the empty state) and goes to `/chat?patientId={id}`,
    * which starts a chat with this patient attached.
    */
   const workspace = getPatientWorkspace();
   let chats = $derived(workspace?.chats ?? []);
   let loaded = $derived(workspace?.chatsLoaded ?? false);
-  let newChatHref = $derived(workspace ? patientPath(workspace.id, 'chat') : '/chat');
+  let newChatHref = $derived(workspace ? newPatientChatHref(workspace.id) : '/chat?new=1');
 
   // The list may be stale if a chat was created or renamed since the layout loaded.
   onMount(() => {

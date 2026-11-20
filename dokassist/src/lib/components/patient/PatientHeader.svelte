@@ -9,7 +9,13 @@
   import { errorText } from '$lib/translations/labels';
   import { addToast } from '$lib/stores/toast';
   import { exportPatientFhir, exportPatientSummaryPdf } from './export';
-  import { activeDiagnoses, activeMedications, maskAhv, patientPath } from './workspace';
+  import {
+    activeDiagnoses,
+    activeMedications,
+    maskAhv,
+    newPatientChatHref,
+    patientPath,
+  } from './workspace';
 
   /*
    * The patient identification strip shown on every patient route (D4):
@@ -146,7 +152,7 @@
       <Button
         variant={newChatPrimary ? 'primary' : 'secondary'}
         size="sm"
-        href={patientPath(patient.id, 'chat')}
+        href={newPatientChatHref(patient.id)}
       >
         <MessageSquarePlus size={14} aria-hidden="true" />
         {$t('patients.newChat')}

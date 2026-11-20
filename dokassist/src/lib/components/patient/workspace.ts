@@ -130,6 +130,11 @@ export function chatsForPatient(
 }
 
 /** Deep link that opens an existing chat in the chat workspace. */
+/** A fresh chat with this patient attached (D4: starting a chat from a patient). */
+export function newPatientChatHref(patientId: string): string {
+  return `/chat?patientId=${encodeURIComponent(patientId)}`;
+}
+
 export function chatHref(sessionId: string): string {
   return `/chat?sessionId=${encodeURIComponent(sessionId)}`;
 }
