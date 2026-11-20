@@ -80,6 +80,37 @@ pub struct ContextCacheTelemetry {
     pub estimated_prefill_saved_ms: f64,
     pub resident_contexts: usize,
     pub max_contexts: usize,
+    /// Hybrid/recurrent models only: prefix reuse via a restored recurrent
+    /// state snapshot, where plain KV rollback is impossible.
+    #[serde(default)]
+    pub checkpoint_restores: u64,
+    #[serde(default)]
+    pub checkpoints_created: u64,
+}
+
+/// Newest checkpoint position usable for a shared prefix of `reused` tokens:
+/// it must not extend past the shared prefix and must cover at least one
+/// token (position 0 is a full reset, not a reuse).
+pub(crate) fn checkpoint_for_prefix(positions: &[usize], reused: usize) -> Option<usize> {
+    positions
+        .iter()
+        .copied()
+        .filter(|&n| n > 0 && n <= reused)
+        .max()
+}
+
+/// Where to snapshot a prompt of `prompt_len` tokens whose first `reused`
+/// tokens are already in the context: up to `tail` tokens before the end (at
+/// most half of the uncached remainder), so the next turn (this prompt plus
+/// an answer) can resume almost all of it. `None` when fewer than two tokens
+/// remain to be evaluated.
+pub(crate) fn checkpoint_position(prompt_len: usize, reused: usize, tail: usize) -> Option<usize> {
+    let remaining = prompt_len.checked_sub(reused)?;
+    if remaining < 2 {
+        return None;
+    }
+    let tail = tail.min(remaining / 2).max(1);
+    Some(prompt_len - tail)
 }
 
 pub(crate) fn reusable_prefix<T: PartialEq>(cached: &[T], requested: &[T]) -> usize {
@@ -111,6 +142,24 @@ mod tests {
             patient_id: Some(patient.into()),
             patient_revision: Some(revision.into()),
         }
+    }
+
+    #[test]
+    fn checkpoint_selection_prefers_the_newest_within_the_shared_prefix() {
+        assert_eq!(checkpoint_for_prefix(&[100, 900], 950), Some(900));
+        assert_eq!(checkpoint_for_prefix(&[100, 900], 899), Some(100));
+        assert_eq!(checkpoint_for_prefix(&[100, 900], 99), None);
+        assert_eq!(checkpoint_for_prefix(&[0], 50), None);
+        assert_eq!(checkpoint_for_prefix(&[], 50), None);
+    }
+
+    #[test]
+    fn checkpoint_lands_near_the_prompt_end() {
+        assert_eq!(checkpoint_position(1_000, 0, 64), Some(936));
+        // Short or mostly cached prompts snapshot halfway through the remainder.
+        assert_eq!(checkpoint_position(1_000, 936, 64), Some(968));
+        assert_eq!(checkpoint_position(30, 0, 64), Some(15));
+        assert_eq!(checkpoint_position(30, 29, 64), None);
     }
 
     #[test]
