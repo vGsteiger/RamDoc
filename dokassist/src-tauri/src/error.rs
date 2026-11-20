@@ -74,6 +74,11 @@ pub enum AppError {
     #[error("Update error: {0}")]
     Update(String),
 
+    /// The update manifest could not be loaded (offline, or the newest
+    /// release is still being published). Distinct from "up to date".
+    #[error("Update information is unavailable: {0}")]
+    UpdateInfoUnavailable(String),
+
     /// Touch ID sheet was dismissed by the user (not an error — just a cancel).
     #[error("Touch ID authentication was cancelled")]
     BiometricCancelled,
@@ -143,6 +148,7 @@ impl AppError {
             }
             AppError::RateLimited(_) => "RATE_LIMITED".to_string(),
             AppError::Update(_) => "UPDATE_ERROR".to_string(),
+            AppError::UpdateInfoUnavailable(_) => "UPDATE_INFO_UNAVAILABLE".to_string(),
             AppError::BiometricCancelled => "BIOMETRIC_CANCELLED".to_string(),
         }
     }

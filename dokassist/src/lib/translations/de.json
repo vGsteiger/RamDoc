@@ -1219,7 +1219,8 @@
       "DB_UNIQUE_CONSTRAINT": "Dieser Datensatz existiert bereits in der Datenbank.",
       "DB_FOREIGN_KEY": "Der Vorgang kann nicht abgeschlossen werden, weil er auf nicht vorhandene Daten verweist.",
       "AUTH_REQUIRED": "Bitte entsperren Sie die Anwendung, um fortzufahren.",
-      "LLM_ERROR": "Beim Generieren von Inhalten mit dem Sprachmodell ist ein Fehler aufgetreten."
+      "LLM_ERROR": "Beim Generieren von Inhalten mit dem Sprachmodell ist ein Fehler aufgetreten.",
+      "UPDATE_INFO_UNAVAILABLE": "Update-Informationen konnten nicht geladen werden. Möglicherweise sind Sie offline, oder die neueste Version wird gerade veröffentlicht. Bitte versuchen Sie es in einigen Minuten erneut."
     },
     "referenceLine": "Fehlerreferenz: {ref}\n(Geben Sie diese Referenz an den Support weiter, wenn Sie Hilfe benötigen.)"
   },

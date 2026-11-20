@@ -151,7 +151,12 @@ jobs:
 
           See the [full changelog](https://github.com/${{ github.repository }}/compare/$LATEST_TAG...v$NEW_VERSION)"
 
+          # Created as a draft: tauri-build.yml publishes it (and marks it
+          # Latest) only after the DMG, updater bundle and latest.json are
+          # attached. Publishing first sent every updater check to a 404.
           gh release create "v$NEW_VERSION" \
+            --draft \
+            --verify-tag \
             --title "Release v$NEW_VERSION" \
             --notes "$RELEASE_NOTES"
 
