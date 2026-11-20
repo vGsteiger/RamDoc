@@ -202,8 +202,8 @@
   function rowClass(selected: boolean) {
     return `${rowBase} ${rail ? 'justify-center' : 'px-2'} ${
       selected
-        ? 'bg-surface-selected font-medium text-fg'
-        : 'text-fg-muted hover:bg-surface-hover hover:text-fg'
+        ? 'bg-fill-strong font-medium text-fg'
+        : 'text-fg-muted hover:bg-fill hover:text-fg'
     }`;
   }
 </script>
@@ -298,9 +298,11 @@
   bind:this={sidebarElement}
   data-sidebar-mode={mode}
   aria-label={$t('nav.sidebar')}
-  class="flex h-full shrink-0 flex-col border-r border-line-subtle bg-surface-sunken {rail
+  class="glass flex shrink-0 flex-col overflow-hidden rounded-panel {rail
     ? 'w-13'
-    : 'w-58'} {mode === 'overlay' ? 'fixed inset-y-0 left-0 z-40 shadow-modal' : ''}"
+    : 'w-58'} {mode === 'overlay'
+    ? 'fixed inset-y-2 left-2 z-40'
+    : 'relative z-10 my-2 ml-2'}"
 >
   <!-- Header: brand, and the collapse control. -->
   <div class="flex h-12 shrink-0 items-center gap-2 {rail ? 'justify-center' : 'pl-3 pr-1.5'}">

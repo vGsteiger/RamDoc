@@ -4,6 +4,6 @@
   import { t } from '$lib/translations';
 </script>
 
-<PageShell width="form" title={$t('dictation.section')} description={$t('dictation.sectionDesc')}>
+<PageShell width="full" title={$t('dictation.section')} description={$t('dictation.sectionDesc')}>
   <DictationSettings />
 </PageShell>

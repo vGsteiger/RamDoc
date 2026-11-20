@@ -40,7 +40,7 @@
   }
 </script>
 
-<details class="group mb-section rounded-card border border-line-subtle bg-surface-raised">
+<details class="group mb-section card-surface rounded-panel">
   <summary
     class="flex cursor-pointer list-none items-start gap-2 rounded-card px-4 py-3 hover:bg-surface-hover"
   >

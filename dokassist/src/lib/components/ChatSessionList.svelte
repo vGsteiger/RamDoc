@@ -182,8 +182,8 @@
             aria-current={active ? 'page' : undefined}
             onclick={(e) => select(session, e)}
             class="relative flex min-h-9 flex-col justify-center rounded-control py-1 pl-8 pr-8 transition-colors duration-150 ease-standard {active
-              ? 'bg-surface-selected'
-              : 'hover:bg-surface-hover'}"
+              ? 'bg-fill-strong'
+              : 'hover:bg-fill'}"
           >
             {#if active}
               <span

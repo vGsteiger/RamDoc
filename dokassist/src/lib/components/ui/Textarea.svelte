@@ -15,13 +15,13 @@
 
   let classes = $derived(
     [
-      'w-full rounded-control border bg-surface-raised px-2.5 py-2 text-body text-fg',
+      'w-full rounded-control border border-transparent bg-fill px-3 py-2 text-body text-fg',
       'transition-colors duration-150 ease-standard',
       'focus:outline-none focus-visible:outline-none',
       'disabled:cursor-not-allowed disabled:bg-surface-sunken disabled:text-fg-disabled',
       invalid
         ? 'border-danger focus:border-danger focus:ring-2 focus:ring-danger/25'
-        : 'border-line focus:border-focus focus:ring-2 focus:ring-focus/25',
+        : 'focus:bg-surface-raised focus:ring-2 focus:ring-focus/30',
       className,
     ].join(' ')
   );

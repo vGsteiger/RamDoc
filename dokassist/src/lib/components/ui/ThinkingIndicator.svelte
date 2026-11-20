@@ -37,14 +37,9 @@
   let showElapsed = $derived(elapsedSeconds >= ELAPSED_AFTER_SECONDS);
 </script>
 
-<span class="inline-flex items-center gap-2 text-body text-fg-muted {className}">
-  <span class="thinking-dots" aria-hidden="true">
-    <span class="thinking-dot"></span>
-    <span class="thinking-dot"></span>
-    <span class="thinking-dot"></span>
-  </span>
+<span class="inline-flex items-baseline gap-2 text-body text-fg-muted {className}">
   <!-- Timer ticks every second; keep it out of the live region so SRs do not re-announce. -->
-  <span role="status" aria-live="polite">{label}</span>
+  <span role="status" aria-live="polite" class="shimmer-text">{label}</span>
   {#if showElapsed}
     <span class="text-caption text-fg-subtle" data-numeric>{formatElapsed(elapsedSeconds)}</span>
   {/if}

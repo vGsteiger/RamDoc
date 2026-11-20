@@ -41,8 +41,8 @@
 </script>
 
 <div class="flex h-full min-h-0 flex-col">
-  <div class="shrink-0 border-b border-line-subtle bg-surface">
-    <div class="mx-auto w-full min-w-0 max-w-page px-page-x pt-3">
+  <div class="shrink-0 bg-surface">
+    <div class="w-full min-w-0 px-page-x pt-3">
       {#if current.patient}
         <PatientHeader
           patient={current.patient}

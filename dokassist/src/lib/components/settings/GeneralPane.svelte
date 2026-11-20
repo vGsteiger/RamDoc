@@ -20,7 +20,7 @@
 </script>
 
 <PageShell
-  width="form"
+  width="full"
   title={$t('settings.nav.general')}
   description={$t('settings.panes.generalDesc')}
 >

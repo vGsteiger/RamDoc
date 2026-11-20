@@ -213,7 +213,7 @@
 
   {#if mode === 'preview'}
     <div
-      class="min-h-80 rounded-card border border-line bg-surface-raised px-5 py-4 sm:px-8 sm:py-6"
+      class="min-h-80 card-surface rounded-panel px-5 py-4 sm:px-8 sm:py-6"
     >
       {#if content}
         <Markdown source={content} headingOffset={1} />
@@ -238,7 +238,7 @@
 
   {#if showSuggestions && !readonly}
     <section
-      class="rounded-card border border-line bg-surface-raised"
+      class="card-surface rounded-panel"
       aria-label={$t('reports.editor.suggestions')}
     >
       <div class="space-y-3 border-b border-line-subtle p-4">

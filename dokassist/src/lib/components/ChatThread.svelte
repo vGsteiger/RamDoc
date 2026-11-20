@@ -470,11 +470,11 @@
       {/if}
 
       <div
-        class="relative rounded-card border border-line bg-surface-raised transition-colors duration-150 ease-standard focus-within:border-line-strong"
+        class="glass relative rounded-panel transition-shadow duration-150 ease-standard focus-within:ring-1 focus-within:ring-line-strong"
         data-testid="chat-composer"
       >
         {#if contextBar}
-          <div class="flex min-w-0 flex-wrap items-center gap-1.5 px-2 pt-2">
+          <div class="flex min-w-0 flex-wrap items-center gap-1.5 px-3.5 pt-3.5">
             {@render contextBar()}
           </div>
         {/if}
@@ -492,9 +492,9 @@
               ? $t('chat.recordsPlaceholder')
               : $t('chat.typeMessageHint')}
           rows={2}
-          class="block max-h-60 min-h-16 w-full resize-none bg-transparent px-3 pt-2.5 text-body text-fg placeholder:text-fg-subtle focus:outline-none focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60 [field-sizing:content]"
+          class="block max-h-60 min-h-16 w-full resize-none bg-transparent px-4 pt-3 text-body text-fg placeholder:text-fg-subtle focus:outline-none focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60 [field-sizing:content]"
         ></textarea>
-        <div class="flex flex-wrap items-center gap-2 px-2 pb-2">
+        <div class="flex flex-wrap items-center gap-2 px-3 pb-3">
           {#if recordsPatient}
             <SegmentedControl
               size="sm"

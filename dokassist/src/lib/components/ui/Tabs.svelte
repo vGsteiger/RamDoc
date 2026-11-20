@@ -16,7 +16,7 @@
   import { tick } from 'svelte';
 
   /*
-   * Underline tabs. The selected tab carries a 2px ink underline and ink
+   * Pill tabs (iOS segmented style). The selected tab is a raised knob with ink
    * text; the rest are muted. The strip scrolls horizontally inside its own
    * box when it does not fit, so it never widens the page (700px windows).
    *
@@ -87,11 +87,11 @@
 
   function tabClass(active: boolean) {
     return [
-      'relative inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-1 font-medium',
+      'relative inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 font-medium',
       'transition-colors duration-150 ease-standard focus-visible:outline-offset-[-2px]',
       'disabled:pointer-events-none disabled:opacity-50',
       sizes[size],
-      active ? 'border-accent text-fg' : 'border-transparent text-fg-muted hover:text-fg',
+      active ? 'bg-surface-raised text-fg shadow-control' : 'text-fg-muted hover:bg-fill hover:text-fg',
     ].join(' ');
   }
 </script>
@@ -108,7 +108,7 @@
 >
   {#if isNav}
     <nav aria-label={label}>
-      <ul bind:this={strip} class="flex min-w-full w-max items-stretch gap-5 border-b border-line">
+      <ul bind:this={strip} class="inline-flex w-max items-stretch gap-0.5 rounded-full bg-fill p-0.5">
         {#each items as item (item.id)}
           <li class="flex">
             <a
@@ -130,7 +130,7 @@
       role="tablist"
       aria-label={label}
       tabindex="-1"
-      class="flex min-w-full w-max items-stretch gap-5 border-b border-line"
+      class="inline-flex w-max items-stretch gap-0.5 rounded-full bg-fill p-0.5"
       onkeydown={onKeydown}
     >
       {#each items as item (item.id)}

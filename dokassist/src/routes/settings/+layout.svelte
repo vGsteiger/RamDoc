@@ -32,13 +32,13 @@
 </script>
 
 <div class="@container min-h-full">
-  <div class="mx-auto flex w-full max-w-[66rem] min-w-0 flex-col @min-[720px]:flex-row">
+  <div class="flex min-h-full w-full min-w-0 flex-col @min-[720px]:flex-row">
     <nav
       aria-label={$t('settings.nav.label')}
-      class="hidden shrink-0 @min-[720px]:block @min-[720px]:w-52 @min-[720px]:pl-page-x"
+      class="hidden shrink-0 border-line-subtle @min-[720px]:block @min-[720px]:w-60 @min-[720px]:border-r"
     >
-      <div class="sticky top-0 py-page-y">
-        <p class="mb-2 px-2.5 text-caption font-medium text-fg-subtle">{$t('settings.title')}</p>
+      <div class="sticky top-0 px-3 py-page-y">
+        <p class="mb-2 px-2.5 text-title text-fg">{$t('settings.title')}</p>
         <ul class="space-y-0.5">
           {#each SETTINGS_SECTIONS as section (section.path)}
             {@const active = current?.path === section.path}
@@ -48,8 +48,8 @@
                 href={resolve(section.path)}
                 aria-current={active ? 'page' : undefined}
                 class="flex h-control min-w-0 items-center gap-2 rounded-control px-2.5 text-body transition-colors duration-150 ease-standard {active
-                  ? 'bg-surface-selected font-medium text-fg'
-                  : 'text-fg-muted hover:bg-surface-hover hover:text-fg'}"
+                  ? 'bg-fill-strong font-medium text-fg'
+                  : 'text-fg-muted hover:bg-fill hover:text-fg'}"
               >
                 <Icon size={16} strokeWidth={1.5} class="shrink-0" aria-hidden="true" />
                 <span class="truncate">{$t(section.labelKey)}</span>

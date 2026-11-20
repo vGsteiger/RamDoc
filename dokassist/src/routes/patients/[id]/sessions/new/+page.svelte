@@ -94,7 +94,7 @@
 </script>
 
 <PageShell>
-  <div class="max-w-measure">
+  <div>
     <SectionHeader title={$t('sessions.newSessionTitle')} />
 
     {#if error}

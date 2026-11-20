@@ -158,7 +158,7 @@
     </EmptyState>
   {:else}
     <ul
-      class="rounded-card border border-line bg-surface-raised"
+      class="card-surface rounded-panel"
       aria-label={$t('medications.title')}
     >
       {#each medications as medication (medication.id)}

@@ -299,7 +299,7 @@
 {/snippet}
 
 {#snippet timeGrid()}
-  <div class="rounded-card border border-line bg-surface-raised">
+  <div class="card-surface rounded-panel">
     <!-- Weekday + date header; sticks while the hours scroll. -->
     <div
       class="sticky top-0 z-20 grid rounded-t-card border-b border-line bg-surface-raised"
@@ -451,7 +451,7 @@
 {#snippet monthGrid()}
   {@const names = weekdayNames($language)}
   {@const todayIso = toISODate(now)}
-  <div class="rounded-card border border-line bg-surface-raised">
+  <div class="card-surface rounded-panel">
     <div class="grid grid-cols-7 border-b border-line">
       {#each names as name, i (i)}
         <div class="px-2 py-2 text-center text-label text-fg-muted">{name}</div>
@@ -534,7 +534,7 @@
               >
             {/if}
           </h2>
-          <ul class="divide-y divide-line-subtle rounded-card border border-line bg-surface-raised">
+          <ul class="divide-y divide-line-subtle card-surface rounded-panel">
             {#each day.sessions as s (s.session.id)}
               {@const status = statusOf(s)}
               <li class="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">

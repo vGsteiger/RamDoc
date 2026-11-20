@@ -53,7 +53,7 @@
 </script>
 
 <PageShell
-  width="form"
+  width="full"
   title={$t('settings.nav.referenceData')}
   description={$t('settings.panes.referenceDataDesc')}
 >

@@ -41,7 +41,7 @@
 </script>
 
 <PageShell>
-  <div class="max-w-form">
+  <div>
     <SectionHeader title={$t('patients.editPatient')} />
     {#if error}
       <Alert tone="danger" class="mb-4">{error}</Alert>

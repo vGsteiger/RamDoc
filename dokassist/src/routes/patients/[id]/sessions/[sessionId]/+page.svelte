@@ -358,7 +358,7 @@ ${activeDiagnoses ? `Aktive Diagnosen:\n${activeDiagnoses}` : ''}
 </script>
 
 <PageShell>
-  <div class="max-w-measure">
+  <div>
     {#if isLoading}
       <div class="flex justify-center py-12"><Spinner label={$t('common.loading')} /></div>
     {:else if !session}

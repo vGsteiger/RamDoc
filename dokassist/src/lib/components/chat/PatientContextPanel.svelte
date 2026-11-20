@@ -99,7 +99,7 @@
 {#snippet sectionTitle(title: string, href: string, linkLabel: string)}
   <div class="mb-1 flex min-h-control-sm items-center justify-between gap-2">
     <h3 class="text-caption font-medium text-fg-muted">{title}</h3>
-    <a {href} class="text-caption text-link underline hover:text-link-hover">{linkLabel}</a>
+    <a {href} class="text-caption text-link hover:text-link-hover">{linkLabel}</a>
   </div>
 {/snippet}
 
@@ -109,7 +109,7 @@
   aria-label={$t('chat.patientPanel.title')}
   data-testid="patient-context-panel"
 >
-  <div class="flex min-h-12 shrink-0 items-center justify-between gap-2 border-b border-line px-4">
+  <div class="flex min-h-12 shrink-0 items-center justify-between gap-2 px-4">
     <h2 class="text-label font-medium text-fg-muted">{$t('chat.patientPanel.title')}</h2>
     {#if onclose}
       <IconButton label={$t('chat.patientPanel.close')} size="sm" onclick={onclose}>

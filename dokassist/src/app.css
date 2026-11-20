@@ -32,17 +32,31 @@
   color-scheme: light;
 
   /* Surfaces — cool near-white ramp. */
-  --surface: #f7f7fa;
+  --surface: #f2f2f7;
   --surface-raised: #ffffff;
   --surface-overlay: #ffffff;
-  --surface-sunken: #f0f0f5;
-  --surface-hover: #ebebf0;
-  --surface-selected: #e3e3ea;
+  --surface-sunken: #ebebf0;
+  --surface-hover: #e9e9ef;
+  --surface-selected: #e2e2e9;
 
   /* Hairlines carry separation; shadows are reserved for true overlays. */
-  --line-subtle: #ebebf0;
-  --line: #dedee5;
-  --line-strong: #c6c6cf;
+  --line-subtle: rgb(60 60 67 / 0.1);
+  --line: rgb(60 60 67 / 0.16);
+  --line-strong: rgb(60 60 67 / 0.29);
+
+  /* iOS-style fills: controls are filled capsules, not outlined boxes. */
+  --fill: rgb(120 120 128 / 0.12);
+  --fill-strong: rgb(120 120 128 / 0.2);
+
+  /* Glass (floating surfaces only: composer, sidebar, menus, dialogs). A
+   * translucent tint over a backdrop blur, a light rim and a soft lift. */
+  --glass: rgb(255 255 255 / 0.72);
+  --glass-strong: rgb(255 255 255 / 0.86);
+  --glass-rim: rgb(255 255 255 / 0.65);
+  --glass-edge: rgb(0 0 0 / 0.06);
+  --card: rgb(255 255 255 / 0.82);
+  --elevation-card: 0 0 0 0.5px rgb(0 0 0 / 0.04), 0 1px 2px rgb(16 16 32 / 0.04),
+    0 6px 20px -8px rgb(16 16 32 / 0.1);
 
   /* Foreground ramp. */
   --fg: #1b1b1f;
@@ -103,8 +117,14 @@
   --info-fg: #2850a3;
 
   /* Elevation — one soft shadow per overlay class, never on inline content. */
-  --elevation-popover: 0 4px 12px -2px rgb(16 16 24 / 0.1), 0 2px 4px -2px rgb(16 16 24 / 0.06);
-  --elevation-modal: 0 16px 40px -8px rgb(16 16 24 / 0.18), 0 4px 10px -4px rgb(16 16 24 / 0.1);
+  --elevation-popover: 0 10px 30px -8px rgb(16 16 32 / 0.18), 0 2px 6px -2px rgb(16 16 32 / 0.08);
+  --elevation-modal: 0 24px 60px -12px rgb(16 16 32 / 0.25), 0 6px 16px -6px rgb(16 16 32 / 0.12);
+  /* Floating glass panels (composer, sidebar). */
+  --elevation-glass: 0 0 0 0.5px var(--glass-edge), 0 8px 28px -10px rgb(16 16 32 / 0.16),
+    0 1px 3px rgb(16 16 32 / 0.05);
+  /* The raised knob of a segmented control and the primary capsule. */
+  --elevation-control: 0 0 0 0.5px rgb(0 0 0 / 0.04), 0 2px 6px rgb(0 0 0 / 0.1),
+    0 1px 1px rgb(0 0 0 / 0.04);
 }
 
 .dark {
@@ -118,9 +138,19 @@
   --surface-hover: #26262b;
   --surface-selected: #2f2f35;
 
-  --line-subtle: #232328;
-  --line: #2f2f36;
-  --line-strong: #43434c;
+  --line-subtle: rgb(235 235 245 / 0.08);
+  --line: rgb(235 235 245 / 0.13);
+  --line-strong: rgb(235 235 245 / 0.22);
+
+  --fill: rgb(118 118 128 / 0.24);
+  --fill-strong: rgb(118 118 128 / 0.34);
+
+  --glass: rgb(30 30 34 / 0.68);
+  --glass-strong: rgb(36 36 41 / 0.86);
+  --glass-rim: rgb(255 255 255 / 0.08);
+  --glass-edge: rgb(0 0 0 / 0.5);
+  --card: rgb(44 44 50 / 0.6);
+  --elevation-card: 0 0 0 0.5px rgb(255 255 255 / 0.04), 0 6px 20px -8px rgb(0 0 0 / 0.5);
 
   --fg: #ececf0;
   --fg-muted: #a4a4ae;
@@ -173,8 +203,10 @@
   --info-line: #273a66;
   --info-fg: #8fb0f5;
 
-  --elevation-popover: 0 4px 12px -2px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.4);
-  --elevation-modal: 0 16px 40px -8px rgb(0 0 0 / 0.6), 0 4px 10px -4px rgb(0 0 0 / 0.45);
+  --elevation-popover: 0 10px 30px -8px rgb(0 0 0 / 0.6), 0 2px 6px -2px rgb(0 0 0 / 0.4);
+  --elevation-modal: 0 24px 60px -12px rgb(0 0 0 / 0.7), 0 6px 16px -6px rgb(0 0 0 / 0.5);
+  --elevation-glass: 0 0 0 0.5px var(--glass-edge), 0 8px 28px -10px rgb(0 0 0 / 0.6);
+  --elevation-control: 0 0 0 0.5px rgb(0 0 0 / 0.3), 0 2px 6px rgb(0 0 0 / 0.35);
 }
 
 @theme inline {
@@ -235,13 +267,18 @@
   --container-form: 48rem;
   --container-page: 76rem;
 
-  /* Two radii only: controls and containers. rounded-full stays for avatars
-   * and dot indicators. */
-  --radius-control: 6px;
-  --radius-card: 10px;
+  /* Radii, iOS-soft and concentric. Buttons, selects, segmented controls and
+   * chips are capsules (rounded-full). Fields and list rows use
+   * rounded-control, grouped cards rounded-card, floating glass panels
+   * (composer, sidebar, dialogs) rounded-panel. */
+  --radius-control: 10px;
+  --radius-card: 14px;
+  --radius-panel: 22px;
 
   --shadow-popover: var(--elevation-popover);
   --shadow-modal: var(--elevation-modal);
+  --shadow-glass: var(--elevation-glass);
+  --shadow-control: var(--elevation-control);
 
   /* Motion — short, ease-out, colour and opacity only. */
   --ease-standard: cubic-bezier(0.2, 0, 0.13, 1);
@@ -256,6 +293,8 @@
   --color-line: var(--line);
   --color-line-subtle: var(--line-subtle);
   --color-line-strong: var(--line-strong);
+  --color-fill: var(--fill);
+  --color-fill-strong: var(--fill-strong);
 
   --color-fg: var(--fg);
   --color-fg-muted: var(--fg-muted);
@@ -355,6 +394,53 @@
 }
 
 @layer components {
+  /* Liquid-glass material for floating surfaces. Content scrolls beneath it
+   * and stays faintly visible; the rim catches light on the top edge. */
+  .glass {
+    background-color: var(--glass);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    backdrop-filter: blur(24px) saturate(180%);
+    box-shadow:
+      inset 0 1px 0 var(--glass-rim),
+      var(--elevation-glass);
+  }
+
+  .glass-strong {
+    background-color: var(--glass-strong);
+    -webkit-backdrop-filter: blur(30px) saturate(180%);
+    backdrop-filter: blur(30px) saturate(180%);
+    box-shadow:
+      inset 0 1px 0 var(--glass-rim),
+      var(--elevation-popover);
+  }
+
+  /* Inline cards: a soft lifted sheet with a light rim, never an outline. */
+  .card-surface {
+    background-color: var(--card);
+    -webkit-backdrop-filter: blur(20px) saturate(170%);
+    backdrop-filter: blur(20px) saturate(170%);
+    box-shadow:
+      inset 0 1px 0 var(--glass-rim),
+      var(--elevation-card);
+  }
+
+  /* "Thinking…": a soft sheen sweeping across muted text. */
+  .shimmer-text {
+    color: transparent;
+    background-image: linear-gradient(
+      100deg,
+      var(--fg-subtle) 0%,
+      var(--fg-subtle) 40%,
+      var(--fg) 50%,
+      var(--fg-subtle) 60%,
+      var(--fg-subtle) 100%
+    );
+    background-size: 250% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    animation: shimmer-sweep 1.8s linear infinite;
+  }
+
   /* Field label — the one repeated form pattern worth a shorthand. */
   .field-label {
     display: block;
@@ -392,6 +478,15 @@
   /* Indeterminate ProgressBar: opacity only, no sliding. */
   .progress-indeterminate {
     animation: progress-pulse 1.4s ease-in-out infinite;
+  }
+}
+
+@keyframes shimmer-sweep {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -50% 0;
   }
 }
 
@@ -449,6 +544,12 @@
   .thinking-dot {
     animation: none;
     opacity: 0.7;
+  }
+
+  .shimmer-text {
+    animation: none;
+    color: var(--fg-muted);
+    background-image: none;
   }
 
   .progress-indeterminate {

@@ -82,7 +82,7 @@
 </script>
 
 <PageShell
-  width="form"
+  width="full"
   title={$t('settings.nav.updates')}
   description={$t('settings.panes.updatesDesc')}
 >

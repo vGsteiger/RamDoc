@@ -57,7 +57,7 @@
 </script>
 
 <PageShell
-  width="form"
+  width="full"
   title={$t('settings.nav.dangerZone')}
   description={$t('settings.panes.dangerZoneDesc')}
 >

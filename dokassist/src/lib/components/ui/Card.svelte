@@ -25,14 +25,13 @@
   // says so, so the hover affordance is never accidentally omitted.
   let isInteractive = $derived(interactive || Boolean(href) || Boolean(onclick));
 
-  /* A hairline border is the separation mechanism — no shadow on inline
-   * containers, only on genuine overlays (see Dialog). */
+  /* iOS-style sheet: a soft lift and a light rim instead of an outline. */
   let classes = $derived(
     [
-      'rounded-card border border-line bg-surface-raised',
+      'card-surface rounded-panel',
       paddings[padding],
       isInteractive
-        ? 'block transition-colors duration-150 ease-standard hover:border-line-strong hover:bg-surface-hover'
+        ? 'block transition-[background-color,transform] duration-150 ease-standard hover:bg-surface-raised active:scale-[0.995]'
         : '',
       className,
     ]

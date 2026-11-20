@@ -15,8 +15,8 @@
 
   /*
    * Mutually exclusive options (calendar view, theme, document type). A
-   * radiogroup: one tab stop, Arrow keys move and select. The selected
-   * segment is a raised surface with ink text — no accent fill.
+   * radiogroup: one tab stop, Arrow keys move and select. iOS style: a grey
+   * capsule track with the selected segment as a raised white knob.
    */
   let {
     options,
@@ -76,7 +76,7 @@
   tabindex="-1"
   class="{full
     ? 'flex w-full'
-    : 'inline-flex'} max-w-full items-stretch gap-0.5 rounded-control border border-line bg-surface-sunken p-0.5 {sizes[
+    : 'inline-flex'} max-w-full items-stretch gap-0.5 rounded-full bg-fill p-0.5 {sizes[
     size
   ]} {className}"
   onkeydown={onKeydown}
@@ -92,11 +92,11 @@
       data-value={option.value}
       tabindex={checked || (value === undefined && option === options[0]) ? 0 : -1}
       disabled={option.disabled}
-      class="inline-flex min-w-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-control border px-2.5 font-medium transition-colors duration-150 ease-standard disabled:pointer-events-none disabled:opacity-50 {full
+      class="inline-flex min-w-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3 font-medium transition-[background-color,color,box-shadow] duration-200 ease-standard disabled:pointer-events-none disabled:opacity-50 {full
         ? 'flex-1'
         : 'shrink-0'} {checked
-        ? 'border-line bg-surface-raised text-fg'
-        : 'border-transparent text-fg-muted hover:text-fg'}"
+        ? 'bg-surface-raised text-fg shadow-control'
+        : 'text-fg-muted hover:text-fg'}"
       onclick={() => choose(option.value)}
     >
       {#if Icon}

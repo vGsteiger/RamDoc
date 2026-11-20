@@ -45,9 +45,10 @@
   } = $props();
 
   const widths: Record<Width, string> = {
-    prose: 'max-w-measure',
-    form: 'max-w-form',
-    wide: 'max-w-page',
+    // Pages use the whole window; only long-form writing keeps a measure.
+    prose: 'max-w-none',
+    form: 'max-w-none',
+    wide: 'max-w-none',
     full: 'max-w-none',
   };
 </script>

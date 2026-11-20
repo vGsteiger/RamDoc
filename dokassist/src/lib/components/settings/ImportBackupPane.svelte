@@ -7,7 +7,7 @@
 </script>
 
 <PageShell
-  width="form"
+  width="full"
   title={$t('settings.nav.importBackup')}
   description={$t('settings.panes.importBackupDesc')}
 >

@@ -36,7 +36,7 @@
   {:else if variant === 'tile'}
     <div class="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
       {#each items as i (i)}
-        <div class="rounded-card border border-line bg-surface-raised p-4">
+        <div class="card-surface rounded-panel p-4">
           <div class="flex items-start gap-2">
             <Skeleton class="h-6 w-6 shrink-0" />
             <div class="min-w-0 flex-1 space-y-2">
@@ -50,7 +50,7 @@
   {:else if variant === 'file'}
     <div class="space-y-2">
       {#each items as i (i)}
-        <div class="rounded-card border border-line bg-surface-raised p-3">
+        <div class="card-surface rounded-panel p-3">
           <div class="flex items-start gap-3">
             <Skeleton class="h-8 w-8 shrink-0" />
             <div class="min-w-0 flex-1 space-y-2">

@@ -25,11 +25,11 @@
   } = $props();
 
   const tones: Record<Tone, string> = {
-    default: 'text-fg-subtle hover:bg-surface-hover hover:text-fg',
+    default: 'text-fg-subtle hover:bg-fill hover:text-fg',
     danger: 'text-fg-subtle hover:bg-danger-subtle hover:text-danger-fg',
   };
 
-  /* Square, matching Button heights (D5): 28 / 32 / 36 px. */
+  /* Circular, matching Button heights (D5): 28 / 32 / 36 px. */
   const sizes: Record<Size, string> = {
     sm: 'size-control-sm',
     md: 'size-control',
@@ -38,7 +38,7 @@
 
   let classes = $derived(
     [
-      'inline-flex shrink-0 items-center justify-center rounded-control',
+      'inline-flex shrink-0 items-center justify-center rounded-full',
       sizes[size],
       'transition-colors duration-150 ease-standard',
       'disabled:pointer-events-none disabled:opacity-50',

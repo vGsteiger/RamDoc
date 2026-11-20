@@ -266,7 +266,7 @@
 {#if message.role === 'user'}
   <div class="flex justify-end">
     <div
-      class="min-w-0 max-w-[85%] whitespace-pre-wrap break-words rounded-card border border-line-subtle bg-surface-sunken px-3.5 py-2 text-body text-fg"
+      class="min-w-0 max-w-[85%] whitespace-pre-wrap break-words rounded-panel bg-fill px-4 py-2.5 text-body text-fg"
     >
       {message.content}
     </div>
@@ -295,7 +295,7 @@
       <ThinkingIndicator stage={activityStage} {startedAt} toolName={activeToolName} />
     {/if}
     {#if provenance && !isStreaming}
-      <div class="rounded-card border border-line-subtle px-3 py-2 text-caption text-fg-muted">
+      <div class="rounded-card bg-fill px-3 py-2 text-caption text-fg-muted">
         {#if provenance.sources.length}
           <p class="font-medium text-fg">{$t('chat.evidenceSources')}</p>
           <ul class="mt-1 list-disc pl-4">
@@ -340,7 +340,7 @@
       />
     </Button>
     {#if !toolCallCollapsed}
-      <div class="mt-1 rounded-card border border-line-subtle bg-surface-sunken px-3 py-2">
+      <div class="mt-1 rounded-card bg-fill px-3 py-2">
         <pre
           class="overflow-x-auto whitespace-pre-wrap text-caption text-fg-muted">{message.tool_args_json ??
             message.content}</pre>
@@ -368,7 +368,7 @@
       />
     </Button>
     {#if !toolResultCollapsed}
-      <div class="mt-1 rounded-card border border-line-subtle bg-surface-sunken px-3 py-2">
+      <div class="mt-1 rounded-card bg-fill px-3 py-2">
         {#if parsed !== null}
           {#if Array.isArray(parsed)}
             <div class="space-y-2">
@@ -403,7 +403,7 @@
       </div>
     {/if}
     {#if reportDraft}
-      <div class="mt-2 space-y-3 rounded-card border border-line bg-surface-raised p-3">
+      <div class="mt-2 space-y-3 card-surface rounded-panel p-3">
         <div>
           <p class="text-label font-medium text-fg">{$t('chat.reportDraftUnsaved')}</p>
           <p class="mt-0.5 text-caption text-fg-muted">

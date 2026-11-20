@@ -192,7 +192,7 @@
     {#if editMode}
       <EnhancedReportEditor bind:content={editableContent} />
     {:else}
-      <article class="rounded-card border border-line bg-surface-raised px-5 py-4 sm:px-8 sm:py-6">
+      <article class="card-surface rounded-panel px-5 py-4 sm:px-8 sm:py-6">
         <Markdown source={report.content} headingOffset={1} />
       </article>
     {/if}

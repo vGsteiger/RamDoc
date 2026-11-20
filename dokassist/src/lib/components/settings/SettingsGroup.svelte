@@ -27,7 +27,7 @@
   {#if title}
     <SectionHeader {title} {description} {actions} />
   {/if}
-  <div class="min-w-0 rounded-card border border-line-subtle bg-surface-raised px-4">
+  <div class="min-w-0 card-surface rounded-panel px-4">
     {@render children?.()}
   </div>
 </section>

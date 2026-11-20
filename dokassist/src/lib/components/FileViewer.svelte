@@ -276,7 +276,7 @@
                 {/if}
                 {#if transcript}
                   <pre
-                    class="whitespace-pre-wrap rounded-card border border-line bg-surface-raised p-4 font-sans text-body text-fg">{transcript}</pre>
+                    class="whitespace-pre-wrap card-surface rounded-panel p-4 font-sans text-body text-fg">{transcript}</pre>
                 {/if}
               </div>
             </div>

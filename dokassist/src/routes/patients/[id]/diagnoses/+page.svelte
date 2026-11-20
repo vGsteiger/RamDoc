@@ -199,7 +199,7 @@
       {/snippet}
     </EmptyState>
   {:else}
-    <div class="rounded-card border border-line bg-surface-raised">
+    <div class="card-surface rounded-panel">
       {#each diagnoses as diagnosis (diagnosis.id)}
         <DiagnosisCard
           {diagnosis}

@@ -247,7 +247,7 @@
   {#if scope === 'patient'}
     {#if attachedPatient}
       <span
-        class="inline-flex h-control-sm min-w-0 max-w-full items-center gap-1.5 rounded-control border border-line bg-surface-sunken pl-2 pr-1 text-label text-fg"
+        class="inline-flex h-control-sm min-w-0 max-w-full items-center gap-1.5 rounded-full bg-fill pl-2.5 pr-1 text-label text-fg"
         data-testid="attached-patient-chip"
       >
         <UserRound size={14} class="shrink-0 text-fg-subtle" aria-hidden="true" />
@@ -270,7 +270,7 @@
   {:else}
     {#each contextPlan.selectedPatients as patient (patient.id)}
       <span
-        class="inline-flex h-control-sm min-w-0 max-w-full items-center gap-1.5 rounded-control border border-line bg-surface-sunken pl-2 pr-1 text-label text-fg"
+        class="inline-flex h-control-sm min-w-0 max-w-full items-center gap-1.5 rounded-full bg-fill pl-2.5 pr-1 text-label text-fg"
         data-testid="attached-patient-chip"
       >
         <UserRound size={14} class="shrink-0 text-fg-subtle" aria-hidden="true" />
@@ -298,7 +298,7 @@
     {#if showContextPicker}
       <div
         id="chat-context-picker"
-        class="absolute inset-x-0 bottom-full z-30 mb-2 max-h-[min(70vh,36rem)] overflow-y-auto rounded-card border border-line bg-surface-overlay p-4 shadow-popover"
+        class="glass-strong absolute inset-x-0 bottom-full z-30 mb-2 max-h-[min(70vh,36rem)] overflow-y-auto rounded-panel p-4"
       >
         <ContextPicker
           bind:value={contextPlan}
@@ -355,7 +355,7 @@
 <div class="flex h-full min-h-0 min-w-0" data-testid="chat-workspace">
   <div class="flex min-h-0 min-w-0 flex-1 flex-col">
     <header
-      class="flex min-h-12 shrink-0 items-center gap-2 border-b border-line-subtle px-4 sm:px-6"
+      class="flex min-h-12 shrink-0 items-center gap-2 px-4 sm:px-6"
     >
       <h1 class="min-w-0 flex-1 truncate text-heading font-medium text-fg">{title}</h1>
       {#if recordsPatient}
@@ -391,7 +391,7 @@
 
   {#if recordsPatient && panelOpen}
     {#if panelDocked}
-      <div class="w-80 shrink-0 border-l border-line-subtle">
+      <div class="glass my-2 mr-2 w-80 shrink-0 overflow-hidden rounded-panel">
         <PatientContextPanel id="chat-patient-panel" patientId={recordsPatient.id} />
       </div>
     {:else}
@@ -401,7 +401,7 @@
         onclick={() => (panelOpen = false)}
       ></div>
       <div
-        class="fixed inset-y-0 right-0 z-50 w-[min(22rem,100vw)] border-l border-line bg-surface-overlay shadow-modal"
+        class="glass-strong fixed inset-y-2 right-2 z-50 w-[min(22rem,calc(100vw-1rem))] overflow-hidden rounded-panel"
         role="dialog"
         aria-modal="true"
         aria-label={$t('chat.patientPanel.title')}

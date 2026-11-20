@@ -163,7 +163,7 @@
 </script>
 
 <PageShell
-  width="form"
+  width="full"
   title={$t('settings.nav.models')}
   description={$t('settings.panes.modelsDesc')}
 >

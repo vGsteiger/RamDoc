@@ -30,7 +30,7 @@
 
   {#if mode === 'preview'}
     <div
-      class="min-h-80 rounded-card border border-line bg-surface-raised px-5 py-4 sm:px-8 sm:py-6"
+      class="min-h-80 card-surface rounded-panel px-5 py-4 sm:px-8 sm:py-6"
     >
       {#if content}
         <Markdown source={content} headingOffset={1} />

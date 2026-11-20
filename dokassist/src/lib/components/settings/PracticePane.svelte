@@ -58,7 +58,7 @@
 </script>
 
 <PageShell
-  width="form"
+  width="full"
   title={$t('settings.nav.practice')}
   description={$t('settings.panes.practiceDesc')}
 >

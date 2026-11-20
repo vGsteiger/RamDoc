@@ -102,7 +102,7 @@
 
 {#if loading}
   <div
-    class="{full ? '' : 'mt-2'} space-y-2 rounded-card border border-line bg-surface-raised p-3"
+    class="{full ? '' : 'mt-2'} space-y-2 card-surface rounded-panel p-3"
     role="status"
     aria-label={$t('medications.loadingReference')}
   >
@@ -111,7 +111,7 @@
     <Skeleton class="block h-3 w-2/3" />
   </div>
 {:else if detail && full}
-  <article class="rounded-card border border-line bg-surface-raised p-4 sm:p-5">
+  <article class="card-surface rounded-panel p-4 sm:p-5">
     <header class="flex flex-wrap items-start justify-between gap-3">
       {@render heading(detail)}
       {#if actions}
@@ -124,7 +124,7 @@
   </article>
 {:else if detail}
   <details
-    class="group mt-2 overflow-hidden rounded-card border border-line bg-surface-raised"
+    class="group mt-2 overflow-hidden card-surface rounded-panel"
     bind:open
   >
     <summary

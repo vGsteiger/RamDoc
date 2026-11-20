@@ -321,7 +321,7 @@
             </p>
           {:else}
             <ol
-              class="divide-y divide-line-subtle rounded-card border border-line bg-surface-raised"
+              class="divide-y divide-line-subtle card-surface rounded-panel"
             >
               {#each results as hit (hit.chunk_id)}
                 <li class="px-4 py-3">
@@ -362,7 +362,7 @@
         {/snippet}
       </SectionHeader>
 
-      <ul class="divide-y divide-line-subtle rounded-card border border-line bg-surface-raised">
+      <ul class="divide-y divide-line-subtle card-surface rounded-panel">
         {#each literature as lit (lit.id)}
           {@const isProcessing = processing.has(lit.id)}
           <li class="flex items-start gap-3 px-4 py-3">
