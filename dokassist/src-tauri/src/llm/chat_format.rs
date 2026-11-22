@@ -84,6 +84,20 @@ impl ChatFamily {
         }
     }
 
+    /// Append [`Self::reasoning_off_prefix`] to a formatted prompt. Templates
+    /// that already open a `<think>` block in the generation prompt (Qwen 3
+    /// thinking variants) get it closed instead of a second, nested block.
+    pub fn with_reasoning_off(self, prompt: &str, template_uses_think_tags: bool) -> String {
+        let prefix = self.reasoning_off_prefix(template_uses_think_tags);
+        if prefix.is_empty() {
+            return prompt.to_string();
+        }
+        match prompt.trim_end().strip_suffix(THINK_OPEN) {
+            Some(before_open) => format!("{before_open}{prefix}"),
+            None => format!("{prompt}{prefix}"),
+        }
+    }
+
     pub fn normalizer(self) -> ReasoningNormalizer {
         ReasoningNormalizer::new(self)
     }
@@ -432,6 +446,21 @@ mod tests {
         let mut out: String = pieces.iter().map(|p| n.push(p)).collect();
         out.push_str(&n.finish());
         out
+    }
+
+    #[test]
+    fn reasoning_off_closes_a_think_block_opened_by_the_template() {
+        let base = "<|im_start|>assistant\n";
+        assert_eq!(
+            ChatFamily::Native.with_reasoning_off(base, true),
+            "<|im_start|>assistant\n<think>\n\n</think>\n\n"
+        );
+        assert_eq!(
+            ChatFamily::Native.with_reasoning_off("<|im_start|>assistant\n<think>\n", true),
+            "<|im_start|>assistant\n<think>\n\n</think>\n\n"
+        );
+        assert_eq!(ChatFamily::Native.with_reasoning_off(base, false), base);
+        assert_eq!(ChatFamily::Gemma4.with_reasoning_off(base, true), base);
     }
 
     #[test]

@@ -1262,11 +1262,35 @@ impl LlmEngine {
     ) -> Result<String, AppError> {
         let prompt =
             self.format_chat_history_with_effort(system_prompt, messages, ThinkingEffort::Low)?;
-        Ok(format!(
-            "{prompt}{}",
-            self.chat_family
-                .reasoning_off_prefix(self.template_uses_think_tags)
-        ))
+        Ok(self
+            .chat_family
+            .with_reasoning_off(&prompt, self.template_uses_think_tags))
+    }
+
+    /// One-off completion with reasoning switched off, for tasks that need a
+    /// direct structured answer (metadata extraction). Reasoning would spend
+    /// the small token limit before the answer appears, and greedy decoding
+    /// inside a `<think>` block tends to loop.
+    pub fn generate_reasoning_off(
+        &self,
+        system_prompt: &str,
+        user_message: &str,
+        max_tokens: usize,
+        sampler: SamplerConfig,
+    ) -> Result<String, AppError> {
+        let prompt = self.format_chat_history_reasoning_off(
+            system_prompt,
+            &[AgentMessage {
+                role: "user".to_string(),
+                content: user_message.to_string(),
+            }],
+        )?;
+        let mut result = String::new();
+        self.generate_streaming_raw_with_sampler(&prompt, max_tokens, sampler, |token| {
+            result.push_str(token);
+            true
+        })?;
+        Ok(result)
     }
 
     /// Returns stats from the most recent generation call, if any.
