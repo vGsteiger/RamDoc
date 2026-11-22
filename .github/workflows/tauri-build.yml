@@ -13,6 +13,11 @@ on:
         description: Existing version tag to build
         required: true
         type: string
+      publish:
+        description: Upload assets to the release and publish it (untick for a dry-run build)
+        required: false
+        default: true
+        type: boolean
 
 concurrency:
   group: tauri-build-${{ inputs.tag }}
@@ -69,12 +74,115 @@ jobs:
       working-directory: ./dokassist
       run: pnpm install --frozen-lockfile --prefer-offline
 
+    # Sign with a stable self-signed identity instead of ad-hoc ("-"). An ad-hoc
+    # signature's designated requirement is the build's cdhash, so every update
+    # looks like a different app to the legacy keychain and loses access to the
+    # SQLCipher key items. A fixed certificate gives a designated requirement of
+    # `certificate leaf = H"..."` that stays the same across releases.
+    # Gatekeeper still flags the download (that needs a Developer ID +
+    # notarization); this only keeps the code identity stable.
+    #
+    # The secrets are deliberately NOT named APPLE_CERTIFICATE*: tauri-bundler
+    # would import those itself, without the code-signing trust setting that
+    # codesign requires for a non-Apple certificate.
+    - name: Import self-signed code signing identity
+      env:
+        MACOS_SIGNING_CERT_P12: ${{ secrets.MACOS_SIGNING_CERT_P12 }}
+        MACOS_SIGNING_CERT_PASSWORD: ${{ secrets.MACOS_SIGNING_CERT_PASSWORD }}
+        MACOS_SIGNING_IDENTITY: RamDoc Self-Signed Code Signing
+      run: |
+        set -euo pipefail
+        if [ -z "$MACOS_SIGNING_CERT_P12" ] || [ -z "$MACOS_SIGNING_CERT_PASSWORD" ]; then
+          # Refuse to fall back to ad-hoc: a silent identity change is exactly
+          # what makes users lose keychain access after an update.
+          echo "::error::MACOS_SIGNING_CERT_P12 / MACOS_SIGNING_CERT_PASSWORD secrets are not set"
+          exit 1
+        fi
+
+        KEYCHAIN="$RUNNER_TEMP/ramdoc-signing.keychain-db"
+        KEYCHAIN_PASSWORD="$(openssl rand -hex 24)"
+        P12="$RUNNER_TEMP/ramdoc-signing.p12"
+        CERT="$RUNNER_TEMP/ramdoc-signing.pem"
+
+        printf '%s' "$MACOS_SIGNING_CERT_P12" | base64 --decode > "$P12"
+
+        security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+        security set-keychain-settings -lut 21600 "$KEYCHAIN"
+        security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+        security import "$P12" -k "$KEYCHAIN" -f pkcs12 \
+          -P "$MACOS_SIGNING_CERT_PASSWORD" -T /usr/bin/codesign
+        security set-key-partition-list -S apple-tool:,apple:,codesign: \
+          -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
+        # Put the signing keychain on the search list so codesign finds it.
+        EXISTING_KEYCHAINS=()
+        while IFS= read -r kc; do
+          EXISTING_KEYCHAINS+=("$kc")
+        done < <(security list-keychains -d user | sed -e 's/^[[:space:]]*"//' -e 's/"$//')
+        security list-keychains -d user -s "$KEYCHAIN" "${EXISTING_KEYCHAINS[@]}"
+
+        # codesign rejects untrusted identities ("no identity found"), so
+        # trust the certificate for code signing on this ephemeral runner.
+        # The authorizationdb change lets add-trusted-cert run without a GUI
+        # prompt.
+        security find-certificate -c "$MACOS_SIGNING_IDENTITY" -p "$KEYCHAIN" > "$CERT"
+        sudo security authorizationdb write com.apple.trust-settings.admin allow
+        sudo security add-trusted-cert -d -r trustRoot -p codeSign \
+          -k /Library/Keychains/System.keychain "$CERT"
+        rm -f "$P12" "$CERT"
+
+        security find-identity -v -p codesigning "$KEYCHAIN"
+        if ! security find-identity -v -p codesigning "$KEYCHAIN" | grep -q "\"$MACOS_SIGNING_IDENTITY\""; then
+          echo "::error::'$MACOS_SIGNING_IDENTITY' is not a valid code signing identity on the runner"
+          exit 1
+        fi
+
+        # tauri-bundler prefers APPLE_SIGNING_IDENTITY over tauri.conf.json's
+        # "signingIdentity": "-" (which stays ad-hoc for local builds).
+        echo "APPLE_SIGNING_IDENTITY=$MACOS_SIGNING_IDENTITY" >> "$GITHUB_ENV"
+        echo "MACOS_SIGNING_IDENTITY=$MACOS_SIGNING_IDENTITY" >> "$GITHUB_ENV"
+
     - name: Build Tauri app
       working-directory: ./dokassist
       run: pnpm tauri build ${{ matrix.args }}
       env:
         TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+    - name: Verify app is signed with the stable identity
+      run: |
+        set -euo pipefail
+        APP=$(find dokassist/src-tauri/target/*/release/bundle/macos -maxdepth 1 -name '*.app' | head -n1)
+        if [ -z "$APP" ]; then
+          echo "::error::No .app bundle found to verify"
+          exit 1
+        fi
+        codesign --verify --deep --strict --verbose=2 "$APP"
+        codesign -dvv "$APP" 2>&1 | grep -E '^(Authority|Signature|TeamIdentifier|Identifier)='
+        REQ=$(codesign -d -r- "$APP" 2>&1)
+        echo "$REQ"
+        # The designated requirement must pin the certificate, not a cdhash;
+        # otherwise keychain access would still break on every update.
+        if ! echo "$REQ" | grep -q 'certificate leaf'; then
+          echo "::error::App designated requirement does not pin the signing certificate"
+          exit 1
+        fi
+        if ! codesign -dvv "$APP" 2>&1 | grep -qx "Authority=$MACOS_SIGNING_IDENTITY"; then
+          echo "::error::App is not signed by '$MACOS_SIGNING_IDENTITY'"
+          exit 1
+        fi
+        # Every nested executable (the dokassist-asr sidecar) must carry the
+        # same identity, or it would be the one prompting for keychain access.
+        find "$APP/Contents/MacOS" -type f -perm -u+x | while read -r bin; do
+          if ! codesign -dvv "$bin" 2>&1 | grep -qx "Authority=$MACOS_SIGNING_IDENTITY"; then
+            echo "::error::$(basename "$bin") is not signed by '$MACOS_SIGNING_IDENTITY'"
+            exit 1
+          fi
+          echo "OK: $(basename "$bin")"
+        done
+
+    - name: Remove signing keychain
+      if: always()
+      run: security delete-keychain "$RUNNER_TEMP/ramdoc-signing.keychain-db" 2>/dev/null || true
 
     - name: Upload macOS artifacts
       uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -91,8 +199,9 @@ jobs:
     name: Upload Release Assets
     needs: tauri-build
     runs-on: ubuntu-latest
-    # Upload only after the requested release build succeeds.
-    if: always() && needs.tauri-build.result == 'success'
+    # Upload only after the requested release build succeeds. A manual
+    # dispatch with publish unticked is a dry run: build and verify only.
+    if: always() && needs.tauri-build.result == 'success' && inputs.publish != false
     permissions:
       contents: write
 
