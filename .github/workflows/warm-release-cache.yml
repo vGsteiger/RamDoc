@@ -12,7 +12,8 @@ name: Warm Release Cache
 
 on:
   push:
-    branches: [main]
+    # TEMPORARY (testing before merge): revert before merging.
+    branches: [main, ci/faster-release-builds]
     # Only dependency or toolchain changes invalidate the cached dependencies;
     # ordinary code changes only rebuild the app crates, which are not cached.
     paths:
