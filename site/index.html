@@ -91,6 +91,22 @@
             </dl>
           </section>
 
+          <aside class="note" id="first-launch">
+            <p class="note-label">First launch: &ldquo;Apple could not verify RamDoc&rdquo;</p>
+            <p>
+              RamDoc is not yet notarized by Apple, so macOS blocks the first launch of a
+              downloaded copy. You only need to allow it once. On macOS 15 or newer, open the app,
+              click <strong>Done</strong>, then go to
+              <strong>System Settings &rarr; Privacy &amp; Security</strong> and click
+              <strong>Open Anyway</strong> next to the RamDoc message. On macOS 13 or 14,
+              Control-click RamDoc in Applications and choose <strong>Open</strong>.
+            </p>
+            <p>
+              Comfortable with Terminal? Run
+              <code>xattr -dr com.apple.quarantine /Applications/RamDoc.app</code> instead.
+            </p>
+          </aside>
+
           <aside class="note">
             <p class="note-label">Why Apple Silicon only?</p>
             <p>

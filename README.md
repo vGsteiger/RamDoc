@@ -27,6 +27,36 @@ versioned merge to `main`. Download the latest release from the
 
 > **Note:** Intel Mac (x86_64) is not supported. The app requires Apple Silicon (M1 or later).
 
+### First launch: "Apple could not verify RamDoc"
+
+RamDoc is not yet signed with an Apple Developer ID or notarized by Apple, so macOS
+Gatekeeper blocks the first launch of a downloaded copy with *"Apple could not verify
+'RamDoc' is free of malware…"*. This is expected; the build itself comes unmodified from
+[`tauri-build.yml`](.github/workflows/tauri-build.yml) on GitHub Actions. You only need to
+allow it once:
+
+**macOS 15 (Sequoia) and newer**
+
+1. Drag **RamDoc** from the DMG into **Applications** and open it. When the warning appears,
+   click **Done**.
+2. Open **System Settings → Privacy & Security** and scroll down to **Security**.
+3. Next to *"RamDoc" was blocked to protect your Mac*, click **Open Anyway** and confirm with
+   your password or Touch ID.
+4. In the dialog that follows, click **Open Anyway** again.
+
+**macOS 13 (Ventura) and 14 (Sonoma)**
+
+Control-click (right-click) **RamDoc** in **Applications**, choose **Open**, then click
+**Open** in the dialog.
+
+**Terminal alternative (any version)**
+
+```bash
+xattr -dr com.apple.quarantine /Applications/RamDoc.app
+```
+
+This removes the "downloaded from the internet" flag from this copy only.
+
 Releases are triggered when a PR is labeled `major`, `minor`, or `patch` (or uses conventional
 commit prefixes such as `feat:` / `fix:`).
 
