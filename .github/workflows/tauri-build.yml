@@ -171,10 +171,14 @@ jobs:
         codesign -dvv "$APP" 2>&1 | grep -E '^(Authority|Signature|TeamIdentifier|Identifier)='
         REQ=$(codesign -d -r- "$APP" 2>&1)
         echo "$REQ"
-        # The designated requirement must pin the certificate, not a cdhash;
-        # otherwise keychain access would still break on every update.
-        if ! echo "$REQ" | grep -q 'certificate leaf'; then
-          echo "::error::App designated requirement does not pin the signing certificate"
+        # The designated requirement must pin our certificate, not a cdhash;
+        # otherwise keychain access would still break on every update. For a
+        # self-signed certificate (root == leaf) codesign writes
+        # `certificate root = H"<sha1>"`, for a chained one `certificate leaf`.
+        CERT_SHA1=$(security find-certificate -c "$MACOS_SIGNING_IDENTITY" -Z \
+          "$RUNNER_TEMP/ramdoc-signing.keychain-db" | awk '/^SHA-1 hash:/ {print tolower($3)}')
+        if [ -z "$CERT_SHA1" ] || ! echo "$REQ" | grep -qiE "certificate (root|leaf) = H\"$CERT_SHA1\""; then
+          echo "::error::App designated requirement does not pin the signing certificate ($CERT_SHA1)"
           exit 1
         fi
         if ! codesign -dvv "$APP" 2>&1 | grep -qx "Authority=$MACOS_SIGNING_IDENTITY"; then
