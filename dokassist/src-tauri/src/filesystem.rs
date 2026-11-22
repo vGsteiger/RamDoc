@@ -743,7 +743,16 @@ pub fn restore_backup(
             continue;
         }
 
-        let file_path = file.name().to_string();
+        let file_path = match file.name() {
+            Ok(name) => name.into_owned(),
+            Err(e) => {
+                let _ = fs::remove_dir_all(&temp_restore_dir);
+                return Err(AppError::Validation(format!(
+                    "Invalid name for archive entry {}: {}",
+                    i, e
+                )));
+            }
+        };
 
         // Validate file path to prevent Zip Slip attack
         let file_path_obj = Path::new(&file_path);
