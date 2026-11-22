@@ -122,12 +122,23 @@ jobs:
 
         # codesign rejects untrusted identities ("no identity found"), so
         # trust the certificate for code signing on this ephemeral runner.
-        # The authorizationdb change lets add-trusted-cert run without a GUI
-        # prompt.
+        # Trust-settings changes normally need a GUI authorization prompt;
+        # which non-interactive route works depends on the runner image, so
+        # try them in order and let the identity check below decide.
         security find-certificate -c "$MACOS_SIGNING_IDENTITY" -p "$KEYCHAIN" > "$CERT"
-        sudo security authorizationdb write com.apple.trust-settings.admin allow
-        sudo security add-trusted-cert -d -r trustRoot -p codeSign \
-          -k /Library/Keychains/System.keychain "$CERT"
+        sw_vers
+        # Relaxing the trust-settings right is denied on newer images
+        # (errAuthorizationDenied, -60005); it is only a helper, not required.
+        sudo security authorizationdb write com.apple.trust-settings.admin allow \
+          || echo "::notice::authorizationdb write denied; continuing"
+        if sudo security add-trusted-cert -d -r trustRoot -p codeSign \
+          -k /Library/Keychains/System.keychain "$CERT"; then
+          echo "Trusted certificate in the admin domain"
+        elif security add-trusted-cert -r trustRoot -p codeSign -k "$KEYCHAIN" "$CERT"; then
+          echo "Trusted certificate in the user domain"
+        else
+          echo "::warning::Could not add a code signing trust setting for the certificate"
+        fi
         rm -f "$P12" "$CERT"
 
         security find-identity -v -p codesigning "$KEYCHAIN"
