@@ -222,7 +222,12 @@ pub async fn validate_backup_archive(
             continue;
         }
 
-        let file_path = file.name().to_string();
+        let file_path = file
+            .name()
+            .map_err(|e| {
+                AppError::Validation(format!("Invalid name for archive entry {}: {}", i, e))
+            })?
+            .into_owned();
         let mut file_data = Vec::new();
         std::io::copy(&mut file, &mut file_data)?;
 
