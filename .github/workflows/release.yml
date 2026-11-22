@@ -149,7 +149,10 @@ jobs:
 
           **Version bump type:** $BUMP_TYPE
 
-          See the [full changelog](https://github.com/${{ github.repository }}/compare/$LATEST_TAG...v$NEW_VERSION)"
+          See the [full changelog](https://github.com/${{ github.repository }}/compare/$LATEST_TAG...v$NEW_VERSION)
+
+          ### Installing on macOS
+          RamDoc is not yet notarized by Apple, so the first launch of the downloaded app shows *\"Apple could not verify 'RamDoc' is free of malware\"*. Allow it once via **System Settings → Privacy & Security → Open Anyway** (macOS 15+), or Control-click the app and choose **Open** (macOS 13–14). Details: [first launch instructions](https://github.com/${{ github.repository }}#first-launch-apple-could-not-verify-ramdoc)."
 
           # Created as a draft: tauri-build.yml publishes it (and marks it
           # Latest) only after the DMG, updater bundle and latest.json are
