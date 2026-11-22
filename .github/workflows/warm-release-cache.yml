@@ -42,8 +42,9 @@ jobs:
   warm:
     name: Warm release cache - aarch64-apple-darwin
     runs-on: macos-latest
-    env:
-      RUST_TARGET: aarch64-apple-darwin
+    # No job-level RUST*/CARGO*/CC*/CMAKE* env here: rust-cache hashes those
+    # variables into the key, and any that tauri-build.yml lacks would make the
+    # release look for a different key and miss the cache.
 
     steps:
     - name: Checkout code
@@ -94,4 +95,4 @@ jobs:
     # bundling and signing, which produce nothing worth caching.
     - name: Build release (no bundle)
       working-directory: ./dokassist
-      run: pnpm tauri build --target "$RUST_TARGET" --config src-tauri/tauri.bundle.conf.json --no-bundle
+      run: pnpm tauri build --target aarch64-apple-darwin --config src-tauri/tauri.bundle.conf.json --no-bundle
