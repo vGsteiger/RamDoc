@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Bump whenever the agent system/tool prompt semantics change.
-pub const AGENT_PROMPT_VERSION: &str = "agent-v2";
+pub const AGENT_PROMPT_VERSION: &str = "agent-v3";
 
 /// What a context is kept for, which decides eviction order: one-off
 /// generations (reports, summaries, metadata extraction) are evicted before

@@ -8,6 +8,7 @@ use super::thinking::{self, ThinkingEffort};
 use crate::database::DbPool;
 use crate::error::AppError;
 use serde::{Deserialize, Serialize};
+use std::ops::Range;
 use std::sync::Arc;
 use tauri::Emitter;
 
@@ -313,66 +314,188 @@ fn route_tool_decision(output: &str) -> ToolDecision {
         .unwrap_or(ToolDecision::Answer)
 }
 
-/// Summarize the middle of the history to keep prompt size manageable.
+/// Opens the message that holds the folded history. Each folded block adds
+/// one line below it.
+const SUMMARY_LABEL: &str = "[Zusammenfassung vorheriger Schritte]:";
+
+/// Turns folded per summary block. Larger blocks mean fewer folds, and so
+/// fewer points at which the cached prefix changes.
+const TURNS_PER_SUMMARY_BLOCK: usize = 4;
+
+/// Expected size of one block summary ("maximal 3 Sätze"), used when planning
+/// how much history to fold. Under-estimating only means a later iteration
+/// folds another block.
+const SUMMARY_TOKEN_ESTIMATE: usize = 192;
+
+fn is_summary_message(message: &AgentMessage) -> bool {
+    message.role == "assistant" && message.content.starts_with(SUMMARY_LABEL)
+}
+
+/// Choose which messages to fold so the prompt shrinks by at least
+/// `excess_tokens`. Returns consecutive ranges, oldest first, each to be
+/// summarised on its own; empty if nothing can be folded.
 ///
-/// Keeps the first message (original user request) and the last two messages
-/// (most recent context), replacing everything in between with an LLM-generated
-/// summary.  Returns `history` unchanged on any error.
+/// Message 0 (the original request) and an existing summary at index 1 are
+/// never folded again. Block boundaries sit at every
+/// [`TURNS_PER_SUMMARY_BLOCK`]-th user message counted from the start of the
+/// unfolded history, so they depend only on the messages themselves and stay
+/// put as the conversation grows. The smallest number of whole blocks that
+/// frees enough is chosen. If whole blocks are not enough, everything before
+/// the current user message is folded too (a partial block), and as a last
+/// resort everything but the last two messages (the previous behaviour).
+fn plan_history_fold(history: &[AgentMessage], excess_tokens: usize) -> Vec<Range<usize>> {
+    if history.len() <= 3 {
+        return Vec::new();
+    }
+    let raw_start = if is_summary_message(&history[1]) {
+        2
+    } else {
+        1
+    };
+    let turn_starts: Vec<usize> = (raw_start + 1..history.len())
+        .filter(|&i| history[i].role == "user")
+        .collect();
+
+    let mut cuts: Vec<usize> = turn_starts
+        .iter()
+        .copied()
+        .skip(TURNS_PER_SUMMARY_BLOCK - 1)
+        .step_by(TURNS_PER_SUMMARY_BLOCK)
+        .collect();
+    // Fallbacks: up to the current user message, then all but the last two.
+    for fallback in [turn_starts.last().copied(), Some(history.len() - 2)]
+        .into_iter()
+        .flatten()
+    {
+        if fallback > cuts.last().copied().unwrap_or(raw_start) {
+            cuts.push(fallback);
+        }
+    }
+
+    let mut folded_tokens = 0;
+    let mut previous = raw_start;
+    let mut plan = Vec::new();
+    for cut in cuts {
+        folded_tokens += history[previous..cut]
+            .iter()
+            .map(|message| estimate_tokens(&message.content))
+            .sum::<usize>();
+        plan.push(previous..cut);
+        previous = cut;
+        let freed = folded_tokens.saturating_sub(plan.len() * SUMMARY_TOKEN_ESTIMATE);
+        if freed >= excess_tokens {
+            break;
+        }
+    }
+    plan
+}
+
+/// Rebuild `history` with the `plan` ranges folded into the summary message.
+///
+/// The result is `[first message, summary, unfolded rest]`. Each range is
+/// summarised by `summarize` and appended to the summary message as its own
+/// line; an existing summary message is extended, never rewritten. Returns
+/// `None` if the plan is empty or any summary fails or comes back empty, so
+/// the caller can keep the history unchanged.
+fn fold_history<E>(
+    history: &[AgentMessage],
+    plan: &[Range<usize>],
+    mut summarize: impl FnMut(&[AgentMessage]) -> Result<String, E>,
+) -> Option<Vec<AgentMessage>> {
+    let folded_end = plan.last()?.end;
+    let mut summary = match history.get(1) {
+        Some(existing) if is_summary_message(existing) => existing.content.clone(),
+        _ => SUMMARY_LABEL.to_string(),
+    };
+    for range in plan {
+        let block_summary = summarize(&history[range.clone()]).ok()?;
+        let block_summary = block_summary.trim();
+        if block_summary.is_empty() {
+            return None;
+        }
+        summary.push('\n');
+        summary.push_str(block_summary);
+    }
+
+    let mut folded = Vec::with_capacity(history.len() - folded_end + 2);
+    folded.push(history[0].clone());
+    folded.push(AgentMessage {
+        role: "assistant".to_string(),
+        content: summary,
+    });
+    folded.extend_from_slice(&history[folded_end..]);
+    Some(folded)
+}
+
+/// Fold old history into a summary to keep the prompt within the context.
+///
+/// Prefix reuse in the KV cache stops at the first changed token, so the
+/// rewrite is laid out to keep as much of the prompt stable as possible
+/// (#547):
+///
+/// * **Oldest first, in large blocks.** Blocks of
+///   [`TURNS_PER_SUMMARY_BLOCK`] turns are folded from the start of the
+///   conversation, only as many as needed (see [`plan_history_fold`]). The
+///   recent turns stay verbatim. Replacing the whole middle on every
+///   overflow, as before, changed everything after the first message.
+/// * **Append-only summary.** The summary message sits right after the first
+///   message and each folded block adds one line to it, so folding another
+///   block keeps the summary text already in the cache.
+/// * **Repeatable across turns.** Chat history is reloaded in full from the
+///   database every turn, so the fold is recomputed. Boundaries depend only
+///   on the messages, and each block is summarised greedily (temperature 0)
+///   from that block alone, so the next turn normally produces the same
+///   summary text and reuses the whole prefix up to the new messages.
+///
+/// Returns `history` unchanged on any error.
 fn summarize_history(
     engine: &Arc<LlmEngine>,
     system_prompt: &str,
-    mut history: Vec<AgentMessage>,
+    history: Vec<AgentMessage>,
+    excess_tokens: usize,
 ) -> Vec<AgentMessage> {
-    if history.len() <= 3 {
-        return history;
+    let plan = plan_history_fold(&history, excess_tokens);
+    let summarize = |block: &[AgentMessage]| summarize_block(engine, system_prompt, block);
+    match fold_history(&history, &plan, summarize) {
+        Some(folded) => {
+            log::info!(
+                "Agent: folded {} history messages in {} block(s)",
+                plan.iter().map(|range| range.len()).sum::<usize>(),
+                plan.len()
+            );
+            folded
+        }
+        None => history,
     }
+}
 
-    // Build a plain-text digest of the middle messages to summarize
-    let middle: Vec<_> = history[1..history.len() - 2].iter().collect();
-    let digest = middle
+/// Summarise one block of history with the LLM.
+fn summarize_block(
+    engine: &LlmEngine,
+    system_prompt: &str,
+    block: &[AgentMessage],
+) -> Result<String, AppError> {
+    let digest = block
         .iter()
         .map(|m| format!("[{}]: {}", m.role, m.content))
         .collect::<Vec<_>>()
         .join("\n");
-
     let summary_prompt = format!(
         "Fasse die folgende Gesprächshistorie in maximal 3 Sätzen auf Deutsch zusammen. \
          Antworte NUR mit der Zusammenfassung, ohne Einleitung:\n\n{digest}"
     );
-
     let mut summary = String::new();
-    if engine
-        .generate_streaming(
-            system_prompt,
-            &summary_prompt,
-            SUMMARY_MAX_TOKENS,
-            0.3,
-            |token| {
-                summary.push_str(token);
-                true
-            },
-        )
-        .is_err()
-    {
-        return history;
-    }
-
-    let summary = summary.trim().to_string();
-    if summary.is_empty() {
-        return history;
-    }
-
-    log::info!("Agent: summarized {} history messages", middle.len());
-
-    // Rebuild: first message + summary placeholder + last 2 messages
-    let last_two = history.split_off(history.len() - 2);
-    history.truncate(1);
-    history.push(AgentMessage {
-        role: "assistant".to_string(),
-        content: format!("[Zusammenfassung vorheriger Schritte]: {summary}"),
-    });
-    history.extend(last_two);
-    history
+    engine.generate_streaming(
+        system_prompt,
+        &summary_prompt,
+        SUMMARY_MAX_TOKENS,
+        0.0,
+        |token| {
+            summary.push_str(token);
+            true
+        },
+    )?;
+    Ok(harness::strip_think_blocks(&summary).trim().to_string())
 }
 
 /// Run a full agent turn: append user message, loop until final answer.
@@ -444,7 +567,12 @@ pub fn run_agent_loop(
             log::warn!(
                 "Agent: prompt ~{estimated_tokens} tokens nears context limit, summarizing history"
             );
-            history = summarize_history(engine, &system_prompt, history);
+            history = summarize_history(
+                engine,
+                &system_prompt,
+                history,
+                estimated_tokens - summarize_threshold,
+            );
         }
 
         // Reasoning is switched off for every family (the empty think block
@@ -856,5 +984,105 @@ mod tests {
         let decision =
             route_tool_decision(r#"<tool_call>{"name":"list_patients","args":{}}</tool_call>"#);
         assert!(matches!(decision, ToolDecision::Call(call) if call.name == "list_patients"));
+    }
+
+    /// `turns` completed question/answer turns followed by the current
+    /// question; every message is ~100 estimated tokens.
+    fn conversation(turns: usize) -> Vec<AgentMessage> {
+        let mut history = Vec::new();
+        for turn in 0..turns {
+            history.push(message("user", &format!("Q{turn}{}", "x".repeat(300))));
+            history.push(message("assistant", &format!("A{turn}{}", "x".repeat(300))));
+        }
+        history.push(message("user", &format!("Q{turns}{}", "x".repeat(300))));
+        history
+    }
+
+    /// Deterministic stand-in for the LLM: names the first message folded.
+    fn fake_summary(block: &[AgentMessage]) -> Result<String, ()> {
+        Ok(format!("S[{}]", &block[0].content[..3]))
+    }
+
+    #[test]
+    fn history_fold_plans_whole_turn_aligned_blocks_oldest_first() {
+        // Indices: 0 = Q0, odd = answers, 2k = Qk, 20 = current question.
+        let history = conversation(10);
+        // One block (messages 1..8, through the answer of turn 3) frees enough.
+        assert_eq!(plan_history_fold(&history, 500), vec![1..8]);
+        assert_eq!(plan_history_fold(&history, 600), vec![1..8, 8..16]);
+        // Whole blocks are not enough: fold up to the current question.
+        assert_eq!(
+            plan_history_fold(&history, 1_200),
+            vec![1..8, 8..16, 16..20]
+        );
+        // Boundaries do not move as the conversation grows.
+        assert_eq!(plan_history_fold(&conversation(12), 500), vec![1..8]);
+        assert!(plan_history_fold(&history[..3], 1).is_empty());
+    }
+
+    #[test]
+    fn history_fold_falls_back_to_the_last_two_messages() {
+        let big = "x".repeat(3_000);
+        let history = vec![
+            message("user", "Q0"),
+            message("assistant", "A0"),
+            message("user", "Q1"),
+            message("tool_call", "<tool_call>{}</tool_call>"),
+            message("tool_result", &big),
+            message("tool_call", "<tool_call>{}</tool_call>"),
+            message("tool_result", &big),
+        ];
+        assert_eq!(plan_history_fold(&history, 500), vec![1..2, 2..5]);
+    }
+
+    #[test]
+    fn history_fold_puts_an_appendable_summary_after_the_first_message() {
+        let history = conversation(10);
+        let plan = plan_history_fold(&history, 500);
+        let folded = fold_history(&history, &plan, fake_summary).unwrap();
+        assert_eq!(folded[0], history[0]);
+        assert_eq!(
+            folded[1],
+            message("assistant", &format!("{SUMMARY_LABEL}\nS[A0x]"))
+        );
+        assert_eq!(&folded[2..], &history[8..]);
+
+        // A later fold extends the summary instead of rewriting it, and
+        // never folds the summary itself.
+        let plan = plan_history_fold(&folded, 500);
+        assert_eq!(plan.first().map(|range| range.start), Some(2));
+        let refolded = fold_history(&folded, &plan, fake_summary).unwrap();
+        assert!(refolded[1].content.starts_with(&folded[1].content));
+        assert_eq!(refolded[1].content.matches(SUMMARY_LABEL).count(), 1);
+    }
+
+    #[test]
+    fn history_fold_is_repeatable_so_the_next_turn_reuses_the_prefix() {
+        let fold = |history: &[AgentMessage]| {
+            let plan = plan_history_fold(history, 500);
+            fold_history(history, &plan, fake_summary).unwrap()
+        };
+        let this_turn = fold(&conversation(10));
+        let next_turn = fold(&conversation(11));
+        assert_eq!(&next_turn[..this_turn.len()], &this_turn[..]);
+    }
+
+    #[test]
+    fn history_fold_gives_up_on_a_failed_or_empty_summary() {
+        let history = conversation(10);
+        let plan = [1..8, 8..16];
+        assert!(fold_history(&history, &plan, |_| Err::<String, _>(())).is_none());
+        assert!(fold_history(&history, &plan, |_| Ok::<_, ()>("  ".into())).is_none());
+        let mut calls = 0;
+        let fails_second = |block: &[AgentMessage]| {
+            calls += 1;
+            if calls == 2 {
+                Err(())
+            } else {
+                fake_summary(block)
+            }
+        };
+        assert!(fold_history(&history, &plan, fails_second).is_none());
+        assert!(fold_history(&history, &[], fake_summary).is_none());
     }
 }
