@@ -450,12 +450,20 @@ fn fold_history<E>(
 /// Returns `history` unchanged on any error.
 fn summarize_history(
     engine: &Arc<LlmEngine>,
+    agent_session: &InferenceSession,
     system_prompt: &str,
     history: Vec<AgentMessage>,
     excess_tokens: usize,
 ) -> Vec<AgentMessage> {
     let plan = plan_history_fold(&history, excess_tokens);
-    let summarize = |block: &[AgentMessage]| summarize_block(engine, system_prompt, block);
+    // Keyed by task and the conversation's patient record: summaries of this
+    // patient's conversations share the system prompt and patient context.
+    let session = InferenceSession::one_off(
+        super::context_cache::OneOffTask::HistorySummary,
+        agent_session.patient().as_ref(),
+    );
+    let summarize =
+        |block: &[AgentMessage]| summarize_block(engine, &session, system_prompt, block);
     match fold_history(&history, &plan, summarize) {
         Some(folded) => {
             log::info!(
@@ -472,6 +480,7 @@ fn summarize_history(
 /// Summarise one block of history with the LLM.
 fn summarize_block(
     engine: &LlmEngine,
+    session: &InferenceSession,
     system_prompt: &str,
     block: &[AgentMessage],
 ) -> Result<String, AppError> {
@@ -485,7 +494,8 @@ fn summarize_block(
          Antworte NUR mit der Zusammenfassung, ohne Einleitung:\n\n{digest}"
     );
     let mut summary = String::new();
-    engine.generate_streaming(
+    engine.generate_streaming_with_session(
+        Some(session),
         system_prompt,
         &summary_prompt,
         SUMMARY_MAX_TOKENS,
@@ -571,6 +581,7 @@ pub fn run_agent_loop(
             );
             history = summarize_history(
                 engine,
+                &inference_session,
                 &system_prompt,
                 history,
                 estimated_tokens - summarize_threshold,

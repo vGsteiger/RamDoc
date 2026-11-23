@@ -303,6 +303,7 @@ ${activeDiagnoses ? `Aktive Diagnosen:\n${activeDiagnoses}` : ''}
         sessionNotes: editedNotes || session.notes || '',
         systemPrompt: null,
         thinkingEffort: get(thinkingEffort),
+        patientId,
       });
     } catch (e) {
       error = parseError(e);

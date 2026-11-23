@@ -10,6 +10,31 @@ use serde::Serialize;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 
+/// The record revision that keys `patient_id`'s one-off generations (the same
+/// revision agent conversations are keyed by). Without a patient, or if the
+/// lookup fails, the generation keeps the prompt-digest key, which only
+/// costs prefix reuse.
+fn patient_record(
+    state: &AppState,
+    patient_id: Option<&str>,
+) -> Option<llm::context_cache::PatientRevision> {
+    let patient_id = patient_id?;
+    let revision = state.get_db().and_then(|pool| {
+        let conn = pool.conn()?;
+        evidence::provenance::patient_revision(&conn, patient_id)
+    });
+    match revision {
+        Ok(revision) => Some(llm::context_cache::PatientRevision {
+            patient_id: patient_id.to_string(),
+            revision,
+        }),
+        Err(error) => {
+            log::warn!("Patient revision unavailable; keying generation by prompt: {error}");
+            None
+        }
+    }
+}
+
 /// Validate a model filename to prevent path traversal attacks.
 /// Returns an error if the filename contains path separators or parent directory components.
 fn validate_model_filename(filename: &str) -> Result<(), AppError> {
@@ -657,9 +682,11 @@ pub async fn generate_report(
     thinking_effort: Option<ThinkingEffort>,
     sampler: Option<SamplerConfig>,
     generation_id: Option<String>,
+    patient_id: Option<String>,
 ) -> Result<String, AppError> {
     // Check authentication before processing patient data
     check_auth(&state)?;
+    let record = patient_record(&state, patient_id.as_deref());
 
     let rt = match report_type.as_str() {
         "Befundbericht" => ReportType::Befundbericht,
@@ -702,6 +729,7 @@ pub async fn generate_report(
             thinking_effort.unwrap_or_default(),
             sampler,
             Some(&generation_id_for_task),
+            record.as_ref(),
         )
     })
     .await
@@ -816,8 +844,10 @@ pub async fn generate_session_summary(
     session_notes: String,
     system_prompt: Option<String>,
     thinking_effort: Option<ThinkingEffort>,
+    patient_id: Option<String>,
 ) -> Result<String, AppError> {
     check_auth(&state)?;
+    let record = patient_record(&state, patient_id.as_deref());
 
     let engine = {
         let llm = state.llm.lock().map_err(|_| llm_lock_poisoned())?;
@@ -838,6 +868,7 @@ pub async fn generate_session_summary(
             &session_notes,
             &prompt,
             thinking_effort.unwrap_or_default(),
+            record.as_ref(),
         )
     })
     .await
@@ -862,6 +893,7 @@ pub async fn generate_letter(
     recipient_name: Option<String>,
     system_prompt: Option<String>,
     thinking_effort: Option<ThinkingEffort>,
+    patient_id: Option<String>,
 ) -> Result<String, AppError> {
     check_auth(&state)?;
 
@@ -899,6 +931,7 @@ pub async fn generate_letter(
         }
     });
 
+    let record = patient_record(&state, patient_id.as_deref());
     let app_clone = app.clone();
     let recipient_name_clone = recipient_name.clone();
     let letter = tokio::task::spawn_blocking(move || {
@@ -912,6 +945,7 @@ pub async fn generate_letter(
             recipient_name_clone.as_deref(),
             &prompt,
             thinking_effort.unwrap_or_default(),
+            record.as_ref(),
         )
     })
     .await
@@ -1034,6 +1068,7 @@ pub async fn query_patient_history(
     let engine_clone = Arc::clone(&engine);
     let evidence_block = assembled.evidence.clone();
     let question_clone = question.clone();
+    let record = patient_record(&state, Some(&patient_id));
     let answer = tokio::task::spawn_blocking(move || {
         llm::generate_evidence_answer_streaming(
             &app_clone,
@@ -1042,6 +1077,7 @@ pub async fn query_patient_history(
             &question_clone,
             &prompt,
             thinking,
+            record.as_ref(),
         )
     })
     .await

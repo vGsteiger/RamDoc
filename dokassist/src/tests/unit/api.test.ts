@@ -370,8 +370,18 @@ describe('generateReport', () => {
       systemPrompt: undefined,
       thinkingEffort: null,
       sampler: null,
+      patientId: null,
     });
     expect(result).toBe('Generated report text');
+  });
+
+  it('passes the patient id that keys the context cache', async () => {
+    mockInvoke.mockResolvedValueOnce('');
+    await generateReport('ctx', 'type', 'notes', undefined, undefined, undefined, 'p1');
+    expect(mockInvoke).toHaveBeenCalledWith(
+      'generate_report',
+      expect.objectContaining({ patientId: 'p1' })
+    );
   });
 
   it('passes a sampler override when provided', async () => {
@@ -1472,8 +1482,18 @@ describe('generateSessionSummary', () => {
       sessionNotes: 'Patient reports feeling anxious',
       systemPrompt: undefined,
       thinkingEffort: null,
+      patientId: null,
     });
     expect(result).toBe(summary);
+  });
+
+  it('passes the patient id that keys the context cache', async () => {
+    mockInvoke.mockResolvedValueOnce('');
+    await generateSessionSummary('Patient: John Doe', 'Notes', undefined, 'low', 'p1');
+    expect(mockInvoke).toHaveBeenCalledWith(
+      'generate_session_summary',
+      expect.objectContaining({ patientId: 'p1', thinkingEffort: 'low' })
+    );
   });
 
   it('calls generate_session_summary with optional systemPrompt', async () => {
@@ -1489,6 +1509,7 @@ describe('generateSessionSummary', () => {
       sessionNotes: 'Session notes',
       systemPrompt: 'Use professional psychiatric terminology',
       thinkingEffort: null,
+      patientId: null,
     });
   });
 
@@ -1501,6 +1522,7 @@ describe('generateSessionSummary', () => {
       sessionNotes: '',
       systemPrompt: undefined,
       thinkingEffort: null,
+      patientId: null,
     });
     expect(result).toBe(summary);
   });
@@ -1855,8 +1877,18 @@ describe('generateLetter', () => {
       recipientName: 'Dr. Müller',
       systemPrompt: undefined,
       thinkingEffort: null,
+      patientId: null,
     });
     expect(result).toBe('Dear Dr. Müller, I am writing to refer...');
+  });
+
+  it('passes the patient id that keys the context cache', async () => {
+    mockInvoke.mockResolvedValueOnce('');
+    await generateLetter('referral', 'de', 'ctx', 'summary', undefined, undefined, 'medium', 'p1');
+    expect(mockInvoke).toHaveBeenCalledWith(
+      'generate_letter',
+      expect.objectContaining({ patientId: 'p1' })
+    );
   });
 });
 

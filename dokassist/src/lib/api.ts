@@ -1246,13 +1246,19 @@ export async function deleteReport(id: string): Promise<void> {
   return await invoke<void>('delete_report', { id });
 }
 
+/**
+ * `patientId` names the patient `patientContext` was built from. The backend
+ * then keys the model's context cache by patient record, so regenerating for
+ * the same patient reuses the already-processed prompt prefix.
+ */
 export async function generateReport(
   patientContext: string,
   reportType: string,
   sessionNotes: string,
   systemPrompt?: string,
   thinkingEffort?: ThinkingEffort,
-  sampler?: SamplerConfig
+  sampler?: SamplerConfig,
+  patientId?: string
 ): Promise<string> {
   return await invoke<string>('generate_report', {
     patientContext,
@@ -1261,20 +1267,24 @@ export async function generateReport(
     systemPrompt,
     thinkingEffort: thinkingEffort ?? null,
     sampler: sampler ?? null,
+    patientId: patientId ?? null,
   });
 }
 
+/** `patientId`: see {@link generateReport}. */
 export async function generateSessionSummary(
   patientContext: string,
   sessionNotes: string,
   systemPrompt?: string,
-  thinkingEffort?: ThinkingEffort
+  thinkingEffort?: ThinkingEffort,
+  patientId?: string
 ): Promise<string> {
   return await invoke<string>('generate_session_summary', {
     patientContext,
     sessionNotes,
     systemPrompt,
     thinkingEffort: thinkingEffort ?? null,
+    patientId: patientId ?? null,
   });
 }
 
@@ -1664,6 +1674,7 @@ export async function markLetterAsSent(id: string): Promise<Letter> {
   return await invoke<Letter>('mark_letter_as_sent', { id });
 }
 
+/** `patientId`: see {@link generateReport}. */
 export async function generateLetter(
   letterType: LetterType,
   language: LetterLanguage,
@@ -1671,7 +1682,8 @@ export async function generateLetter(
   clinicalSummary: string,
   recipientName?: string,
   systemPrompt?: string,
-  thinkingEffort?: ThinkingEffort
+  thinkingEffort?: ThinkingEffort,
+  patientId?: string
 ): Promise<string> {
   return await invoke<string>('generate_letter', {
     letterType,
@@ -1681,6 +1693,7 @@ export async function generateLetter(
     recipientName,
     systemPrompt,
     thinkingEffort: thinkingEffort ?? null,
+    patientId: patientId ?? null,
   });
 }
 

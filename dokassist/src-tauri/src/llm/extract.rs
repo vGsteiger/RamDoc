@@ -32,6 +32,12 @@ pub fn extract_metadata_with_prompt(
         &user_message,
         profile.max_tokens,
         profile.sampler,
+        // Keyed by task, so consecutive extractions reuse the system prompt
+        // and instruction that precede the document.
+        Some(&super::context_cache::InferenceSession::one_off(
+            super::context_cache::OneOffTask::Extract,
+            None,
+        )),
     )?;
     // Models that reason regardless of the switch still emit a `<think>` block.
     let response = harness::strip_think_blocks(&response);

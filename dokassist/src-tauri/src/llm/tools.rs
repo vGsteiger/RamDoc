@@ -326,6 +326,12 @@ fn tool_write_report(
     let focus = sanitize_for_prompt(opt_str_arg(args, "session_notes").unwrap_or_default());
     let patient_context =
         assemble_report_context(conn, engine, &patient_id, &rt, &focus, thinking_effort)?;
+    // Same revision the agent conversation is keyed by, so a regenerated
+    // report for this record reuses the resident prompt prefix.
+    let record = crate::llm::context_cache::PatientRevision {
+        revision: crate::llm::evidence::provenance::patient_revision(conn, &patient_id)?,
+        patient_id: patient_id.clone(),
+    };
 
     let content = crate::llm::generate_report_streaming_with_prompt(
         app,
@@ -337,6 +343,7 @@ fn tool_write_report(
         None,
         crate::llm::SYSTEM_PROMPT_DE,
         thinking_effort,
+        Some(&record),
     )?;
     let content = crate::llm::sanitize::polish_document_text(&content);
 

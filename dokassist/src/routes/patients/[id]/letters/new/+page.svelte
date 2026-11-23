@@ -160,7 +160,8 @@
         clinicalSummary,
         recipientName || undefined,
         undefined,
-        get(thinkingEffort)
+        get(thinkingEffort),
+        patientId
       );
     } catch (err) {
       error = String(err);

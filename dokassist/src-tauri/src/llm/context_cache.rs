@@ -3,6 +3,9 @@ use serde::{Deserialize, Serialize};
 /// Bump whenever the agent system/tool prompt semantics change.
 pub const AGENT_PROMPT_VERSION: &str = "agent-v3";
 
+/// Prompt version of task-keyed one-off sessions ([`InferenceSession::one_off`]).
+pub const ONE_OFF_PROMPT_VERSION: &str = "task-v1";
+
 /// What a context is kept for, which decides eviction order: one-off
 /// generations (reports, summaries, metadata extraction) are evicted before
 /// agent conversations, whose next turn would otherwise prefill from zero.
@@ -12,8 +15,51 @@ pub enum SessionKind {
     /// A multi-turn agent conversation whose prefix the next turn reuses.
     #[default]
     Conversation,
-    /// A single generation keyed by its prompt digest (`raw:`/`think:`).
+    /// A single generation, keyed by task family and patient
+    /// ([`InferenceSession::one_off`]) or by its prompt digest (`raw:`/`think:`).
     OneOff,
+}
+
+/// Task family of a one-off generation. Consecutive generations of one
+/// family for one patient record share a key, so the next one finds the
+/// previous context resident and reuses their common token prefix.
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub enum OneOffTask {
+    Report,
+    Letter,
+    Summary,
+    Evidence,
+    Improve,
+    Extract,
+    /// Agent history condensed when a conversation nears the context limit.
+    HistorySummary,
+    /// Patient context and notes condensed before a report, letter or summary.
+    Condense,
+}
+
+impl OneOffTask {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Report => "report",
+            Self::Letter => "letter",
+            Self::Summary => "summary",
+            Self::Evidence => "evidence",
+            Self::Improve => "improve",
+            Self::Extract => "extract",
+            Self::HistorySummary => "history-summary",
+            Self::Condense => "condense",
+        }
+    }
+}
+
+/// A patient record at one revision (`evidence::provenance::patient_revision`,
+/// the revision agent conversations are keyed by too). Identity and
+/// revision travel together, so a patient-keyed context cannot outlive an
+/// edit to the record.
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct PatientRevision {
+    pub patient_id: String,
+    pub revision: String,
 }
 
 /// The caller-owned portion of an inference-context identity.
@@ -47,6 +93,32 @@ impl InferenceSession {
         }
     }
 
+    /// A one-off generation keyed by task family and, when it reads a patient
+    /// record, by that patient and record revision. The same task for two
+    /// patients, or for two revisions of one record, never shares a key;
+    /// `reusable_prefix` still limits reuse within a key to identical tokens.
+    pub fn one_off(task: OneOffTask, patient: Option<&PatientRevision>) -> Self {
+        Self {
+            conversation_id: format!("task:{}", task.as_str()),
+            patient_id: patient.map(|patient| patient.patient_id.clone()),
+            patient_revision: patient.map(|patient| patient.revision.clone()),
+            prompt_version: ONE_OFF_PROMPT_VERSION.to_string(),
+            adapter_hash: "none".to_string(),
+            kind: SessionKind::OneOff,
+        }
+    }
+
+    /// The patient record this session is bound to, when it has both an id
+    /// and a revision.
+    pub fn patient(&self) -> Option<PatientRevision> {
+        Some(PatientRevision {
+            patient_id: self.patient_id.clone()?,
+            revision: self.patient_revision.clone()?,
+        })
+    }
+
+    /// A one-off keyed by the prompt digest: only an exact repeat of the
+    /// prompt finds it resident. The fallback when no task session is given.
     pub fn isolated(id: impl Into<String>) -> Self {
         Self {
             conversation_id: id.into(),
@@ -511,6 +583,188 @@ mod tests {
         let plan = plan_slot(&[(&report, 1), (&stale_q8, 2)], &current, 3);
         assert_eq!(plan.action, SlotAction::Create);
         assert_eq!(plan.evict, vec![1]);
+    }
+
+    fn record(patient: &str, revision: &str) -> PatientRevision {
+        PatientRevision {
+            patient_id: patient.into(),
+            revision: revision.into(),
+        }
+    }
+
+    /// The context key the engine derives from `session` (see
+    /// `LlmEngine::context_key`), with a fixed runtime profile.
+    fn session_key(session: &InferenceSession) -> ContextKey {
+        let mut key = key("unused", "unused", "model-a");
+        key.prompt_version = session.prompt_version.clone();
+        key.adapter_hash = session.adapter_hash.clone();
+        key.conversation_id = session.conversation_id.clone();
+        key.patient_id = session.patient_id.clone();
+        key.patient_revision = session.patient_revision.clone();
+        key.kind = session.kind;
+        key
+    }
+
+    fn task_key(task: OneOffTask, patient: Option<(&str, &str)>) -> ContextKey {
+        let patient = patient.map(|(id, revision)| record(id, revision));
+        session_key(&InferenceSession::one_off(task, patient.as_ref()))
+    }
+
+    const TASKS: [OneOffTask; 8] = [
+        OneOffTask::Report,
+        OneOffTask::Letter,
+        OneOffTask::Summary,
+        OneOffTask::Evidence,
+        OneOffTask::Improve,
+        OneOffTask::Extract,
+        OneOffTask::HistorySummary,
+        OneOffTask::Condense,
+    ];
+
+    #[test]
+    fn one_off_sessions_are_keyed_by_task_and_patient_record() {
+        let patient = record("patient-a", "p1:abc");
+        for task in TASKS {
+            let session = InferenceSession::one_off(task, Some(&patient));
+            assert_eq!(session.conversation_id, format!("task:{}", task.as_str()));
+            assert_eq!(session.patient_id.as_deref(), Some("patient-a"));
+            assert_eq!(session.patient_revision.as_deref(), Some("p1:abc"));
+            assert_eq!(session.prompt_version, ONE_OFF_PROMPT_VERSION);
+            assert_eq!(session.kind, SessionKind::OneOff);
+            assert_eq!(session.patient(), Some(patient.clone()));
+
+            let unbound = InferenceSession::one_off(task, None);
+            assert_eq!(unbound.patient_id, None);
+            assert_eq!(unbound.patient_revision, None);
+            assert_eq!(unbound.patient(), None);
+        }
+        let mut ids: Vec<_> = TASKS.iter().map(|task| task.as_str()).collect();
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(ids.len(), TASKS.len(), "task ids must be distinct");
+
+        // Task ids never collide with digest-keyed or agent sessions.
+        assert!(!InferenceSession::isolated("raw:abc")
+            .conversation_id
+            .starts_with("task:"));
+        assert_eq!(InferenceSession::agent("chat", None, None).patient(), None);
+    }
+
+    #[test]
+    fn the_same_task_for_two_patients_never_shares_a_key() {
+        for task in TASKS {
+            let a = task_key(task, Some(("patient-a", "p1:same")));
+            let b = task_key(task, Some(("patient-b", "p1:same")));
+            assert_ne!(a, b);
+            assert_ne!(a, task_key(task, None));
+            // Two patients are never the same logical context, so neither
+            // ever invalidates or re-keys the other as "stale".
+            assert!(!a.same_logical_context(&b));
+            assert!(!a.may_share_prefix(&b));
+        }
+    }
+
+    #[test]
+    fn a_new_record_revision_is_a_new_key_for_the_same_task() {
+        let old = task_key(OneOffTask::Report, Some(("patient-a", "p1:old")));
+        let new = task_key(OneOffTask::Report, Some(("patient-a", "p1:new")));
+        assert_ne!(old, new);
+        assert!(old.same_logical_context(&new));
+        // The outdated context is re-keyed with its KV cleared in full.
+        assert_eq!(
+            plan_slot(&[(&old, 1)], &new, 2),
+            SlotPlan {
+                action: SlotAction::Reuse {
+                    index: 0,
+                    keep_prefix: false
+                },
+                evict: vec![]
+            }
+        );
+    }
+
+    #[test]
+    fn report_regeneration_for_the_same_patient_hits_the_resident_context() {
+        let report = task_key(OneOffTask::Report, Some(("patient-a", "p1:abc")));
+        let chat = conversation("chat", "patient-a");
+        // Different notes or instructions do not change the key, so the
+        // regeneration finds the previous report's context resident.
+        let again = task_key(OneOffTask::Report, Some(("patient-a", "p1:abc")));
+        let plan = plan_slot(&[(&chat, 1), (&report, 2)], &again, 2);
+        assert_eq!(plan.action, SlotAction::Hit(1));
+        assert!(plan.evict.is_empty());
+
+        // Previously every distinct prompt was a new digest key and missed.
+        let first = one_off("first");
+        assert_eq!(
+            plan_slot(&[(&chat, 1), (&first, 2)], &one_off("second"), 2).action,
+            SlotAction::Reuse {
+                index: 1,
+                keep_prefix: true
+            }
+        );
+    }
+
+    #[test]
+    fn switching_task_family_keeps_the_prefix_only_for_the_same_record() {
+        let report = task_key(OneOffTask::Report, Some(("patient-a", "p1:abc")));
+        let letter = task_key(OneOffTask::Letter, Some(("patient-a", "p1:abc")));
+        assert!(!report.same_logical_context(&letter));
+        assert_eq!(
+            plan_slot(&[(&report, 1)], &letter, 1).action,
+            SlotAction::Reuse {
+                index: 0,
+                keep_prefix: true
+            }
+        );
+        // Both stay resident when the pool has room.
+        assert_eq!(
+            plan_slot(&[(&report, 1)], &letter, 2).action,
+            SlotAction::Create
+        );
+
+        let other_patient = task_key(OneOffTask::Letter, Some(("patient-b", "p1:abc")));
+        let other_revision = task_key(OneOffTask::Letter, Some(("patient-a", "p1:new")));
+        let unbound = task_key(OneOffTask::Extract, None);
+        for next in [&other_patient, &other_revision, &unbound] {
+            assert_eq!(
+                plan_slot(&[(&report, 1)], next, 1).action,
+                SlotAction::Reuse {
+                    index: 0,
+                    keep_prefix: false
+                }
+            );
+        }
+
+        // An agent conversation on the same record revision may share the
+        // system prompt and patient context with a task context.
+        let mut chat = conversation("chat", "patient-a");
+        chat.patient_revision = Some("p1:abc".into());
+        assert_eq!(
+            plan_slot(&[(&chat, 1)], &report, 1).action,
+            SlotAction::Reuse {
+                index: 0,
+                keep_prefix: true
+            }
+        );
+    }
+
+    #[test]
+    fn task_contexts_are_evicted_before_conversations() {
+        let chat = conversation("chat", "patient-a");
+        let report = task_key(OneOffTask::Report, Some(("patient-a", "p1:abc")));
+        let plan = plan_slot(
+            &[(&chat, 1), (&report, 5)],
+            &conversation("chat-2", "patient-b"),
+            2,
+        );
+        assert_eq!(
+            plan.action,
+            SlotAction::Reuse {
+                index: 1,
+                keep_prefix: false
+            }
+        );
     }
 
     #[test]
