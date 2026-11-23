@@ -256,6 +256,22 @@ fn probe_may_still_call_tool(output: &str, starts_in_think: bool) -> bool {
     }
 }
 
+/// Closes a probe's reasoning block that ran out of budget.
+const PROBE_THINK_CLOSE: &str = "\n</think>\n\n";
+/// Tokens for the probe continuation after a force-closed reasoning block;
+/// enough for one tool call.
+const PROBE_RECOVERY_MAX_TOKENS: usize = 192;
+
+/// Whether a finished probe stopped inside a `<think>` block, i.e. it spent
+/// its budget reasoning and never reached a decision.
+fn probe_ended_in_reasoning(output: &str, starts_in_think: bool) -> bool {
+    let last_open = output.rfind(THINK_OPEN);
+    match output.rfind(THINK_CLOSE) {
+        Some(close) => last_open.is_some_and(|open| open > close),
+        None => starts_in_think || last_open.is_some(),
+    }
+}
+
 fn route_tool_decision(output: &str) -> ToolDecision {
     parse_tool_call(output)
         .map(ToolDecision::Call)
@@ -391,14 +407,12 @@ pub fn run_agent_loop(
             history = summarize_history(engine, &system_prompt, history);
         }
 
-        let prompt = probe_engine.format_chat_history_with_effort(
-            &probe_system,
-            &history,
-            probe_profile.effort,
-        )?;
+        // Reasoning is switched off for every family (the empty think block
+        // for Qwen-style templates, the native switch for Gemma 4 / Harmony),
+        // so the probe's small budget is not spent in a <think> block.
+        let prompt = probe_engine.format_chat_history_reasoning_off(&probe_system, &history)?;
 
-        // Probe: collect output to check for tool call. Thinking is forced off
-        // so Extra high effort cannot hide a tool call inside <think>.
+        // Probe: collect output to check for tool call.
         // The probe stops as soon as its output can no longer be a tool call,
         // so a direct answer costs a few tokens instead of `max_tokens`.
         let starts_in_think = prompt.trim_end().ends_with(THINK_OPEN);
@@ -417,6 +431,41 @@ pub fn run_agent_loop(
                 probe_may_still_call_tool(&probe_output, starts_in_think)
             },
         );
+        let probe_result = probe_result.and_then(|()| {
+            if !probe_ended_in_reasoning(&probe_output, starts_in_think) {
+                return Ok(());
+            }
+            // The model reasoned despite the switch and hit the budget inside
+            // the block. Treating that as "no tool needed" would answer
+            // without the data the tool would fetch, so close the block and
+            // let the model decide.
+            log::warn!(
+                "Agent iteration {iteration}: probe ended inside an unclosed <think> block \
+                 after {probe_tokens} tokens; force-closing it"
+            );
+            probe_output.push_str(PROBE_THINK_CLOSE);
+            let continued = format!(
+                "{prompt}{}",
+                probe_engine
+                    .chat_family()
+                    .native_assistant_prefix(&probe_output)
+            );
+            let mut visible = String::new();
+            probe_engine.continue_streaming_session_with_sampler(
+                &inference_session,
+                &probe_system,
+                &continued,
+                PROBE_RECOVERY_MAX_TOKENS,
+                probe_profile.sampler,
+                |token| {
+                    probe_tokens += 1;
+                    visible.push_str(token);
+                    probe_may_still_call_tool(&visible, false)
+                },
+            )?;
+            probe_output.push_str(&visible);
+            Ok(())
+        });
         if let Err(error) = probe_result {
             if using_dedicated_router {
                 log::warn!(
@@ -664,6 +713,20 @@ mod tests {
             stop_point_with("Kurz überlegt.</think>Antwort", true),
             "Kurz überlegt.</think>A"
         );
+    }
+
+    #[test]
+    fn probe_detects_a_budget_spent_inside_reasoning() {
+        assert!(probe_ended_in_reasoning("<think>Ich überlege noch", false));
+        assert!(probe_ended_in_reasoning("Ich überlege noch", true));
+        assert!(probe_ended_in_reasoning(
+            "<think>a</think>\n<think>b",
+            false
+        ));
+        assert!(!probe_ended_in_reasoning("<think>a</think>Antwort", false));
+        assert!(!probe_ended_in_reasoning("a</think><tool_call>", true));
+        assert!(!probe_ended_in_reasoning("Antwort", false));
+        assert!(!probe_ended_in_reasoning("", false));
     }
 
     #[test]

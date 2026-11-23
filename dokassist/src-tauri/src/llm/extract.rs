@@ -1,3 +1,5 @@
+use super::harness::{self, GenerationTask};
+use super::thinking::ThinkingEffort;
 use super::{engine::LlmEngine, prompts};
 use crate::error::AppError;
 use serde::{Deserialize, Serialize};
@@ -24,7 +26,15 @@ pub fn extract_metadata_with_prompt(
     system_prompt: &str,
 ) -> Result<FileMetadata, AppError> {
     let user_message = prompts::metadata_extraction_prompt(document_text);
-    let response = engine.generate(system_prompt, &user_message, 512, 0.0)?;
+    let profile = GenerationTask::Extract.profile(ThinkingEffort::Low);
+    let response = engine.generate_reasoning_off(
+        system_prompt,
+        &user_message,
+        profile.max_tokens,
+        profile.sampler,
+    )?;
+    // Models that reason regardless of the switch still emit a `<think>` block.
+    let response = harness::strip_think_blocks(&response);
     let json_str = strip_markdown_fences(&response);
     serde_json::from_str(json_str)
         .map_err(|e| AppError::Llm(format!("Failed to parse metadata JSON: {e}")))
