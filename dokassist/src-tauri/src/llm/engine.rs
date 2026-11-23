@@ -4,7 +4,7 @@ use super::context_cache::{
     ContextKey, InferenceSession, SessionKind, SlotAction,
 };
 use super::download;
-use super::harness::SamplerConfig;
+use super::harness::{SamplerConfig, SamplerFamily};
 use super::inference::{
     validate_context_budget, FlashAttentionMode, InferenceDiagnostics, InferenceProfile,
     KvCacheQuantization,
@@ -120,6 +120,8 @@ pub struct LlmEngine {
     model_name: String,
     chat_template: LlamaChatTemplate,
     chat_family: ChatFamily,
+    /// Vendor sampler defaults for the loaded model (issue #558).
+    sampler_family: SamplerFamily,
     /// Hybrid or recurrent memory: KV rollback cannot rewind the recurrent
     /// layers, so prefix reuse relies on [`StateCheckpoint`]s.
     uses_state_checkpoints: bool,
@@ -342,7 +344,14 @@ impl LlmEngine {
         let uses_state_checkpoints = model.is_hybrid() || model.is_recurrent();
         let template_uses_think_tags =
             String::from_utf8_lossy(chat_template.as_c_str().to_bytes()).contains("<think>");
-        log::info!("Chat family for '{model_name}': {chat_family:?}");
+        let sampler_family = SamplerFamily::resolve(
+            &model_name,
+            &governor_diagnostics.architecture.architecture,
+            chat_family,
+        );
+        log::info!(
+            "Chat family for '{model_name}': {chat_family:?}; sampler family: {sampler_family:?}"
+        );
 
         let max_contexts = context_pool_capacity(
             ram,
@@ -359,6 +368,7 @@ impl LlmEngine {
             model_name,
             chat_template,
             chat_family,
+            sampler_family,
             uses_state_checkpoints,
             template_uses_think_tags,
             context_size,
@@ -1254,6 +1264,13 @@ impl LlmEngine {
     /// Chat dialect detected from the loaded model's embedded template.
     pub fn chat_family(&self) -> ChatFamily {
         self.chat_family
+    }
+
+    /// Sampler family of the loaded model, for [`GenerationTask::profile_for`].
+    ///
+    /// [`GenerationTask::profile_for`]: super::harness::GenerationTask::profile_for
+    pub fn sampler_family(&self) -> SamplerFamily {
+        self.sampler_family
     }
 
     /// Format conversation history with the template embedded in the loaded GGUF.

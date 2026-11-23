@@ -510,7 +510,7 @@ mod tests {
     fn embedded_sweep_is_synthetic_and_partitioned() {
         let config = config().unwrap();
         validate_config(&config).unwrap();
-        assert_eq!(config.arms.len(), 9);
+        assert_eq!(config.arms.len(), 11);
         assert_eq!(
             config
                 .cases

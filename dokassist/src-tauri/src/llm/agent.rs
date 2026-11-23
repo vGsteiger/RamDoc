@@ -400,7 +400,9 @@ pub fn run_agent_loop(
     let session_id = inference_session.conversation_id.clone();
     let system_prompt = build_system_prompt(&scope, patient_context.as_deref());
     let probe_profile = GenerationTask::ToolProbe.profile(thinking_effort);
-    let chat_profile = GenerationTask::Chat.profile(thinking_effort);
+    // The answer uses the writing model's family defaults; the probe sampler is
+    // family-independent because the probe may run on a router model.
+    let chat_profile = GenerationTask::Chat.profile_for(engine.sampler_family(), thinking_effort);
     // Probe and answer share `system_prompt`; their instructions go on the
     // final turn (see `with_turn_instruction`).
     let probe_instruction = GenerationTask::ToolProbe.system_suffix();
