@@ -135,3 +135,24 @@ jobs:
       if: needs.changes.outputs.rust == 'true' && matrix.rust != 'stable'
       working-directory: ./dokassist/asr-worker
       run: cargo check --all-targets
+
+  # Single, stable-named check for branch protection. Requiring the matrix
+  # legs directly ("Test Suite (macos-latest, <version>)") breaks whenever the
+  # MSRV in the matrix changes: the old name never reports again and every PR
+  # waits forever. needs.test.result is "success" only if every leg passed
+  # (frontend-only PRs pass through the skipped-steps legs as success).
+  result:
+    name: Rust CI result
+    needs: test
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+    - name: Require every Test Suite toolchain to pass
+      env:
+        RESULT: ${{ needs.test.result }}
+      run: |
+        echo "Test Suite matrix result: $RESULT"
+        if [ "$RESULT" != "success" ]; then
+          echo "::error::Test Suite did not pass on every toolchain ($RESULT)"
+          exit 1
+        fi
