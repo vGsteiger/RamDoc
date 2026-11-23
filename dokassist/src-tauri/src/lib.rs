@@ -21,6 +21,9 @@ mod touch_id;
 
 #[cfg(feature = "benchmark-harness")]
 #[doc(hidden)]
+pub use llm::agent_trajectory::cli_main as agent_trajectory_benchmark_main;
+#[cfg(feature = "benchmark-harness")]
+#[doc(hidden)]
 pub use llm::benchmark_harness::cli_main as local_inference_benchmark_main;
 #[cfg(feature = "benchmark-harness")]
 #[doc(hidden)]

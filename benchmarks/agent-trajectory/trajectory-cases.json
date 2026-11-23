@@ -1,0 +1,374 @@
+{
+  "schema_version": 1,
+  "suite_id": "ramdoc-agent-trajectory-v1",
+  "data_classification": "synthetic_deidentified",
+  "today": "2026-03-02",
+  "thinking_effort": "low",
+  "cases": [
+    {
+      "id": "pt-current-medication",
+      "kind": "tool",
+      "scope": { "type": "patient", "patient_id": "synthetic-patient-560-a" },
+      "patient_context": "{\"id\":\"synthetic-patient-560-a\",\"first_name\":\"Anna\",\"last_name\":\"Beispiel\",\"date_of_birth\":\"1984-05-12\",\"gender\":\"weiblich\",\"email\":null,\"gp_name\":\"Dr. med. Lena Muster\",\"notes\":\"Synthetischer Testfall ohne reale Personendaten.\"}",
+      "user_message": "Welche Medikamente nimmt Frau Beispiel aktuell, und in welcher Dosis?",
+      "expected_calls": [
+        {
+          "name": "list_medications",
+          "args": { "patient_id": "synthetic-patient-560-a" },
+          "result": [
+            { "id": "med-560-1", "patient_id": "synthetic-patient-560-a", "substance": "Sertralin", "dosage": "100 mg", "frequency": "1x täglich morgens", "start_date": "2025-11-03", "end_date": null, "notes": "Dosis am 2026-01-12 von 50 mg erhöht" },
+            { "id": "med-560-2", "patient_id": "synthetic-patient-560-a", "substance": "Quetiapin", "dosage": "25 mg", "frequency": "zur Nacht bei Bedarf", "start_date": "2026-01-12", "end_date": null, "notes": null }
+          ]
+        }
+      ],
+      "answer": {
+        "contains_all": ["Sertralin", "100 mg", "Quetiapin", "25 mg"],
+        "excludes": ["150 mg", "Escitalopram"]
+      },
+      "reference_answer": "Frau Beispiel nimmt aktuell Sertralin 100 mg 1x täglich morgens und Quetiapin 25 mg zur Nacht bei Bedarf."
+    },
+    {
+      "id": "pt-diagnoses",
+      "kind": "tool",
+      "scope": { "type": "patient", "patient_id": "synthetic-patient-560-a" },
+      "patient_context": "{\"id\":\"synthetic-patient-560-a\",\"first_name\":\"Anna\",\"last_name\":\"Beispiel\",\"date_of_birth\":\"1984-05-12\",\"gender\":\"weiblich\",\"email\":null,\"gp_name\":\"Dr. med. Lena Muster\",\"notes\":\"Synthetischer Testfall ohne reale Personendaten.\"}",
+      "user_message": "Welche Diagnosen sind bei der Patientin dokumentiert, und welche davon sind noch aktiv?",
+      "expected_calls": [
+        {
+          "name": "list_diagnoses",
+          "args": { "patient_id": "synthetic-patient-560-a" },
+          "result": [
+            { "id": "dx-560-1", "patient_id": "synthetic-patient-560-a", "icd10_code": "F33.1", "description": "Rezidivierende depressive Störung, gegenwärtig mittelgradige Episode", "status": "active", "diagnosed_date": "2025-10-20", "resolved_date": null, "notes": null },
+            { "id": "dx-560-2", "patient_id": "synthetic-patient-560-a", "icd10_code": "F41.1", "description": "Generalisierte Angststörung", "status": "resolved", "diagnosed_date": "2019-04-02", "resolved_date": "2021-06-30", "notes": null }
+          ]
+        }
+      ],
+      "answer": {
+        "contains_all": ["F33.1", "F41.1"],
+        "contains_any": [["aktiv", "besteht"], ["abgeschlossen", "remittiert", "resolved", "nicht mehr aktiv", "abgeklungen", "erledigt"]],
+        "excludes": ["F32.2", "F43.1"]
+      },
+      "reference_answer": "Dokumentiert sind F33.1 (rezidivierende depressive Störung, gegenwärtig mittelgradig), aktiv, und F41.1 (generalisierte Angststörung), seit 2021 abgeschlossen."
+    },
+    {
+      "id": "pt-next-session",
+      "kind": "tool",
+      "scope": { "type": "patient", "patient_id": "synthetic-patient-560-a" },
+      "patient_context": "{\"id\":\"synthetic-patient-560-a\",\"first_name\":\"Anna\",\"last_name\":\"Beispiel\",\"date_of_birth\":\"1984-05-12\",\"gender\":\"weiblich\",\"email\":null,\"gp_name\":\"Dr. med. Lena Muster\",\"notes\":\"Synthetischer Testfall ohne reale Personendaten.\"}",
+      "user_message": "Wann ist die nächste Sitzung mit Frau Beispiel geplant?",
+      "expected_calls": [
+        {
+          "name": "get_calendar_events",
+          "args": { "patient_id": "synthetic-patient-560-a" },
+          "result": [
+            { "id": "ses-560-1", "patient_id": "synthetic-patient-560-a", "session_date": "2026-02-23", "session_type": "Einzeltherapie", "duration_minutes": 50, "scheduled_time": "09:00", "notes": null },
+            { "id": "ses-560-2", "patient_id": "synthetic-patient-560-a", "session_date": "2026-03-09", "session_type": "Einzeltherapie", "duration_minutes": 50, "scheduled_time": "09:00", "notes": null }
+          ]
+        }
+      ],
+      "answer": {
+        "contains_any": [["2026-03-09", "09.03.2026", "9. März", "9.3.2026", "09.03."]],
+        "excludes": ["2026-03-16"]
+      },
+      "reference_answer": "Die nächste Sitzung ist eine Einzeltherapie am 09.03.2026 um 09:00 Uhr (50 Minuten)."
+    },
+    {
+      "id": "pt-medication-then-reference",
+      "kind": "tool",
+      "scope": { "type": "patient", "patient_id": "synthetic-patient-560-a" },
+      "patient_context": "{\"id\":\"synthetic-patient-560-a\",\"first_name\":\"Anna\",\"last_name\":\"Beispiel\",\"date_of_birth\":\"1984-05-12\",\"gender\":\"weiblich\",\"email\":null,\"gp_name\":\"Dr. med. Lena Muster\",\"notes\":\"Synthetischer Testfall ohne reale Personendaten.\"}",
+      "user_message": "Prüfe die aktuelle Medikation der Patientin und schlage dann in der Arzneimittelreferenz nach, welche Kontraindikationen für ihr Antidepressivum gelten.",
+      "expected_calls": [
+        {
+          "name": "list_medications",
+          "args": { "patient_id": "synthetic-patient-560-a" },
+          "result": [
+            { "id": "med-560-1", "patient_id": "synthetic-patient-560-a", "substance": "Sertralin", "dosage": "100 mg", "frequency": "1x täglich morgens", "start_date": "2025-11-03", "end_date": null, "notes": null }
+          ]
+        },
+        {
+          "name": "lookup_medication_reference",
+          "args": { "query": "Sertralin" },
+          "result": {
+            "source": "Synthetische Testreferenz (keine Fachinformation)",
+            "results": [
+              { "id": "synthetic-ref-sertralin", "name": "Sertralin Beispiel 50 mg Filmtabletten", "atc_code": "N06AB06", "indication": "Depressive Episoden, Zwangsstörung", "contraindications": "Überempfindlichkeit gegen den Wirkstoff; gleichzeitige Anwendung von MAO-Hemmern; gleichzeitige Anwendung von Pimozid", "side_effects": "Übelkeit, Schlaflosigkeit, Diarrhoe" }
+            ]
+          }
+        }
+      ],
+      "answer": {
+        "contains_all": ["Sertralin", "MAO", "Pimozid"],
+        "excludes": ["Lithium", "Schwangerschaft"]
+      },
+      "reference_answer": "Die Patientin erhält Sertralin 100 mg. Kontraindiziert sind laut Referenz eine Überempfindlichkeit gegen den Wirkstoff sowie die gleichzeitige Anwendung von MAO-Hemmern oder Pimozid."
+    },
+    {
+      "id": "pt-diagnoses-and-plans",
+      "kind": "tool",
+      "scope": { "type": "patient", "patient_id": "synthetic-patient-560-a" },
+      "patient_context": "{\"id\":\"synthetic-patient-560-a\",\"first_name\":\"Anna\",\"last_name\":\"Beispiel\",\"date_of_birth\":\"1984-05-12\",\"gender\":\"weiblich\",\"email\":null,\"gp_name\":\"Dr. med. Lena Muster\",\"notes\":\"Synthetischer Testfall ohne reale Personendaten.\"}",
+      "user_message": "Gibt es für jede aktive Diagnose einen Behandlungsplan? Prüfe Diagnosen und Behandlungspläne.",
+      "ordered": false,
+      "expected_calls": [
+        {
+          "name": "list_diagnoses",
+          "args": { "patient_id": "synthetic-patient-560-a" },
+          "result": [
+            { "id": "dx-560-1", "patient_id": "synthetic-patient-560-a", "icd10_code": "F33.1", "description": "Rezidivierende depressive Störung, gegenwärtig mittelgradige Episode", "status": "active", "diagnosed_date": "2025-10-20", "resolved_date": null, "notes": null },
+            { "id": "dx-560-3", "patient_id": "synthetic-patient-560-a", "icd10_code": "G47.0", "description": "Ein- und Durchschlafstörungen", "status": "active", "diagnosed_date": "2026-01-12", "resolved_date": null, "notes": null }
+          ]
+        },
+        {
+          "name": "list_treatment_plans",
+          "args": { "patient_id": "synthetic-patient-560-a" },
+          "result": [
+            { "id": "plan-560-1", "patient_id": "synthetic-patient-560-a", "title": "KVT bei rezidivierender Depression", "description": "Wöchentliche kognitive Verhaltenstherapie, Aktivitätsaufbau", "start_date": "2025-11-03", "end_date": null, "status": "active", "goals": "Reduktion PHQ-9 unter 10", "interventions": "Aktivitätsaufbau, kognitive Umstrukturierung" }
+          ]
+        }
+      ],
+      "answer": {
+        "contains_all": ["F33.1", "G47.0"],
+        "contains_any": [["KVT", "Verhaltenstherapie"], ["kein Behandlungsplan", "keinen Behandlungsplan", "kein eigener", "keinen eigenen", "fehlt", "nicht abgedeckt", "ohne Behandlungsplan", "kein Plan"]]
+      },
+      "reference_answer": "Für F33.1 besteht der Behandlungsplan «KVT bei rezidivierender Depression». Für G47.0 (Ein- und Durchschlafstörungen) gibt es keinen eigenen Behandlungsplan."
+    },
+    {
+      "id": "pt-propose-session",
+      "kind": "tool",
+      "scope": { "type": "patient", "patient_id": "synthetic-patient-560-a" },
+      "patient_context": "{\"id\":\"synthetic-patient-560-a\",\"first_name\":\"Anna\",\"last_name\":\"Beispiel\",\"date_of_birth\":\"1984-05-12\",\"gender\":\"weiblich\",\"email\":null,\"gp_name\":\"Dr. med. Lena Muster\",\"notes\":\"Synthetischer Testfall ohne reale Personendaten.\"}",
+      "user_message": "Plane für Frau Beispiel eine Einzeltherapie am 2026-03-16 mit 50 Minuten Dauer ein.",
+      "expected_calls": [
+        {
+          "name": "create_calendar_event",
+          "args": { "patient_id": "synthetic-patient-560-a", "date": "2026-03-16", "duration_minutes": 50 },
+          "result": {
+            "status": "pending_clinician_confirmation",
+            "action": "create_session",
+            "proposal": { "patient_id": "synthetic-patient-560-a", "session_date": "2026-03-16", "session_type": "Einzeltherapie", "duration_minutes": 50, "scheduled_time": null, "notes": null, "amdp_data": null },
+            "message": "Dieser Vorschlag wurde nicht gespeichert. Bitte prüfen und über die Benutzeroberfläche ausdrücklich bestätigen."
+          }
+        }
+      ],
+      "answer": {
+        "contains_any": [["bestätig", "Bestätigung"], ["16.03.2026", "2026-03-16", "16. März", "16.3.2026"]],
+        "excludes": ["wurde gespeichert", "ist gespeichert", "erfolgreich gespeichert", "wurde eingetragen"]
+      },
+      "reference_answer": "Ich habe einen Vorschlag für eine Einzeltherapie am 16.03.2026 (50 Minuten) erstellt. Bitte bestätige ihn in der Benutzeroberfläche."
+    },
+    {
+      "id": "pt-literature-maintenance",
+      "kind": "tool",
+      "scope": { "type": "patient", "patient_id": "synthetic-patient-560-a" },
+      "patient_context": "{\"id\":\"synthetic-patient-560-a\",\"first_name\":\"Anna\",\"last_name\":\"Beispiel\",\"date_of_birth\":\"1984-05-12\",\"gender\":\"weiblich\",\"email\":null,\"gp_name\":\"Dr. med. Lena Muster\",\"notes\":\"Synthetischer Testfall ohne reale Personendaten.\"}",
+      "user_message": "Was steht in der hinterlegten Fachliteratur zur Dauer einer Erhaltungstherapie bei rezidivierender Depression?",
+      "expected_calls": [
+        {
+          "name": "search_literature",
+          "args": {},
+          "result": [
+            { "document": "Synthetische Beispiel-Leitlinie Depression (Testdokument)", "page": 12, "text": "Bei rezidivierenden depressiven Störungen soll die Erhaltungstherapie nach Remission mit unveränderter Dosis mindestens 2 Jahre fortgeführt werden." }
+          ]
+        }
+      ],
+      "answer": {
+        "contains_any": [["2 Jahre", "zwei Jahre"]],
+        "excludes": ["6 Monate", "sechs Monate"]
+      },
+      "reference_answer": "Laut der hinterlegten Beispiel-Leitlinie soll die Erhaltungstherapie nach Remission mit unveränderter Dosis mindestens 2 Jahre fortgeführt werden."
+    },
+    {
+      "id": "pt-email-address-missing",
+      "kind": "no_tool",
+      "scope": { "type": "patient", "patient_id": "synthetic-patient-560-a" },
+      "patient_context": "{\"id\":\"synthetic-patient-560-a\",\"first_name\":\"Anna\",\"last_name\":\"Beispiel\",\"date_of_birth\":\"1984-05-12\",\"gender\":\"weiblich\",\"email\":null,\"gp_name\":\"Dr. med. Lena Muster\",\"notes\":\"Synthetischer Testfall ohne reale Personendaten.\"}",
+      "user_message": "Schreib Frau Beispiel eine E-Mail mit der Bestätigung ihres nächsten Termins.",
+      "expected_calls": [],
+      "answer": {
+        "contains_any": [["E-Mail-Adresse", "Mailadresse", "E-Mail Adresse"]]
+      },
+      "reference_answer": "Für Frau Beispiel ist keine E-Mail-Adresse hinterlegt. Bitte ergänze sie zuerst in den Patientendaten."
+    },
+    {
+      "id": "pt-gp-from-loaded-context",
+      "kind": "no_tool",
+      "scope": { "type": "patient", "patient_id": "synthetic-patient-560-a" },
+      "patient_context": "{\"id\":\"synthetic-patient-560-a\",\"first_name\":\"Anna\",\"last_name\":\"Beispiel\",\"date_of_birth\":\"1984-05-12\",\"gender\":\"weiblich\",\"email\":null,\"gp_name\":\"Dr. med. Lena Muster\",\"notes\":\"Synthetischer Testfall ohne reale Personendaten.\"}",
+      "user_message": "Wer ist die Hausärztin von Frau Beispiel?",
+      "expected_calls": [],
+      "answer": {
+        "contains_all": ["Lena Muster"]
+      },
+      "reference_answer": "Die Hausärztin von Frau Beispiel ist Dr. med. Lena Muster."
+    },
+    {
+      "id": "pt-rephrase-previous-answer",
+      "kind": "no_tool",
+      "scope": { "type": "patient", "patient_id": "synthetic-patient-560-a" },
+      "patient_context": "{\"id\":\"synthetic-patient-560-a\",\"first_name\":\"Anna\",\"last_name\":\"Beispiel\",\"date_of_birth\":\"1984-05-12\",\"gender\":\"weiblich\",\"email\":null,\"gp_name\":\"Dr. med. Lena Muster\",\"notes\":\"Synthetischer Testfall ohne reale Personendaten.\"}",
+      "history": [
+        { "role": "user", "content": "Welche Medikamente nimmt Frau Beispiel aktuell?" },
+        { "role": "tool_call", "content": "<tool_call>{\"name\":\"list_medications\",\"args\":{\"patient_id\":\"synthetic-patient-560-a\"}}</tool_call>" },
+        { "role": "tool_result", "content": "<tool_result>[{\"substance\":\"Sertralin\",\"dosage\":\"100 mg\",\"frequency\":\"1x täglich morgens\",\"start_date\":\"2025-11-03\"}]</tool_result>" },
+        { "role": "assistant", "content": "Frau Beispiel nimmt aktuell Sertralin 100 mg einmal täglich morgens, seit dem 03.11.2025." }
+      ],
+      "user_message": "Formuliere das bitte als einen Satz für den Verlaufsbericht.",
+      "expected_calls": [],
+      "answer": {
+        "contains_all": ["Sertralin", "100 mg"],
+        "excludes": ["Quetiapin", "50 mg"]
+      },
+      "reference_answer": "Die Patientin erhält seit dem 03.11.2025 Sertralin 100 mg einmal täglich morgens."
+    },
+    {
+      "id": "pt-general-knowledge-phq9",
+      "kind": "no_tool",
+      "scope": { "type": "patient", "patient_id": "synthetic-patient-560-a" },
+      "patient_context": "{\"id\":\"synthetic-patient-560-a\",\"first_name\":\"Anna\",\"last_name\":\"Beispiel\",\"date_of_birth\":\"1984-05-12\",\"gender\":\"weiblich\",\"email\":null,\"gp_name\":\"Dr. med. Lena Muster\",\"notes\":\"Synthetischer Testfall ohne reale Personendaten.\"}",
+      "user_message": "Erkläre mir in zwei Sätzen, was der PHQ-9 misst.",
+      "expected_calls": [],
+      "answer": {
+        "contains_any": [["Depress"]]
+      },
+      "reference_answer": "Der PHQ-9 ist ein Selbstbeurteilungsfragebogen mit neun Fragen, der den Schweregrad depressiver Symptome der letzten zwei Wochen erfasst."
+    },
+    {
+      "id": "gl-count-patients",
+      "kind": "tool",
+      "scope": { "type": "global" },
+      "user_message": "Wie viele Patientinnen und Patienten sind aktuell in der Praxis erfasst?",
+      "expected_calls": [
+        {
+          "name": "list_patients",
+          "args": {},
+          "result": [
+            { "id": "synthetic-patient-560-a", "first_name": "Anna", "last_name": "Beispiel", "date_of_birth": "1984-05-12" },
+            { "id": "synthetic-patient-560-b", "first_name": "Bruno", "last_name": "Beispiel", "date_of_birth": "1971-09-30" },
+            { "id": "synthetic-patient-560-c", "first_name": "Clara", "last_name": "Muster", "date_of_birth": "1999-02-14" }
+          ]
+        }
+      ],
+      "answer": {
+        "contains_any": [["3 Patient", "drei Patient", "3 Personen", "drei Personen", "insgesamt 3", "insgesamt drei"]],
+        "excludes": ["4 Patient", "vier Patient"]
+      },
+      "reference_answer": "Aktuell sind 3 Patientinnen und Patienten erfasst: Anna Beispiel, Bruno Beispiel und Clara Muster."
+    },
+    {
+      "id": "gl-search-then-medication",
+      "kind": "tool",
+      "scope": { "type": "global" },
+      "user_message": "Welche Medikation hat Herr Bruno Beispiel aktuell?",
+      "expected_calls": [
+        {
+          "name": "search",
+          "args": { "query": "Bruno" },
+          "result": [
+            { "kind": "patient", "id": "synthetic-patient-560-b", "title": "Bruno Beispiel", "snippet": "geb. 1971-09-30, synthetischer Testpatient" }
+          ]
+        },
+        {
+          "name": "list_medications",
+          "args": { "patient_id": "synthetic-patient-560-b" },
+          "result": [
+            { "id": "med-560-7", "patient_id": "synthetic-patient-560-b", "substance": "Lithiumcarbonat", "dosage": "450 mg", "frequency": "2x täglich", "start_date": "2024-06-01", "end_date": null, "notes": "Zielspiegel 0.6-0.8 mmol/l" }
+          ]
+        }
+      ],
+      "answer": {
+        "contains_all": ["Lithium", "450 mg"],
+        "excludes": ["Sertralin", "Quetiapin"]
+      },
+      "reference_answer": "Herr Bruno Beispiel erhält aktuell Lithiumcarbonat 450 mg 2x täglich (Zielspiegel 0.6-0.8 mmol/l)."
+    },
+    {
+      "id": "gl-sessions-on-day",
+      "kind": "tool",
+      "scope": { "type": "global" },
+      "user_message": "Welche Termine stehen am 2026-03-04 an?",
+      "expected_calls": [
+        {
+          "name": "get_calendar_events",
+          "args": { "start": "2026-03-04" },
+          "result": [
+            { "id": "ses-560-4", "patient_id": "synthetic-patient-560-b", "session_date": "2026-03-04", "session_type": "Verlaufskontrolle", "duration_minutes": 25, "scheduled_time": "10:00", "notes": "Lithiumspiegel besprechen" },
+            { "id": "ses-560-5", "patient_id": "synthetic-patient-560-c", "session_date": "2026-03-04", "session_type": "Erstgespräch", "duration_minutes": 50, "scheduled_time": "14:30", "notes": null }
+          ]
+        }
+      ],
+      "answer": {
+        "contains_all": ["10:00", "14:30"],
+        "contains_any": [["Erstgespräch", "Erstgespraech"]],
+        "excludes": ["09:00"]
+      },
+      "reference_answer": "Am 04.03.2026 sind zwei Termine geplant: um 10:00 eine Verlaufskontrolle (25 Minuten, Lithiumspiegel besprechen) und um 14:30 ein Erstgespräch (50 Minuten)."
+    },
+    {
+      "id": "gl-compare-two-medications",
+      "kind": "tool",
+      "scope": { "type": "global" },
+      "user_message": "Vergleiche Sertralin und Escitalopram anhand der Arzneimittelreferenz. Suche zuerst beide Wirkstoffe nach und vergleiche sie dann.",
+      "ordered": false,
+      "expected_calls": [
+        {
+          "name": "lookup_medication_reference",
+          "args": { "query": "Sertralin" },
+          "result": { "source": "Synthetische Testreferenz (keine Fachinformation)", "results": [ { "id": "synthetic-ref-sertralin", "name": "Sertralin Beispiel 50 mg", "atc_code": "N06AB06" } ] }
+        },
+        {
+          "name": "lookup_medication_reference",
+          "args": { "query": "Escitalopram" },
+          "result": { "source": "Synthetische Testreferenz (keine Fachinformation)", "results": [ { "id": "synthetic-ref-escitalopram", "name": "Escitalopram Beispiel 10 mg", "atc_code": "N06AB10" } ] }
+        },
+        {
+          "name": "compare_medications",
+          "args": { "current_substance_id": "synthetic-ref-sertralin", "replacement_substance_id": "synthetic-ref-escitalopram" },
+          "result": {
+            "source": "Synthetische Testreferenz (keine Fachinformation)",
+            "current": { "id": "synthetic-ref-sertralin", "name": "Sertralin Beispiel 50 mg", "side_effects": "Übelkeit, Diarrhoe, Schlaflosigkeit" },
+            "replacement": { "id": "synthetic-ref-escitalopram", "name": "Escitalopram Beispiel 10 mg", "side_effects": "Übelkeit, QT-Verlängerung, Schwitzen", "warnings": "Dosisabhängige QT-Verlängerung; EKG-Kontrolle bei Risikofaktoren" }
+          }
+        }
+      ],
+      "answer": {
+        "contains_all": ["Sertralin", "Escitalopram", "QT"],
+        "excludes": ["Lithium", "Quetiapin"]
+      },
+      "reference_answer": "Beide sind SSRI. Sertralin verursacht laut Referenz vor allem Übelkeit, Diarrhoe und Schlaflosigkeit; bei Escitalopram ist zusätzlich eine dosisabhängige QT-Verlängerung zu beachten, bei Risikofaktoren mit EKG-Kontrolle."
+    },
+    {
+      "id": "gl-icd-code-meaning",
+      "kind": "no_tool",
+      "scope": { "type": "global" },
+      "user_message": "Wofür steht der ICD-10-Code F43.1?",
+      "expected_calls": [],
+      "answer": {
+        "contains_any": [["posttraumatische", "PTBS"]]
+      },
+      "reference_answer": "F43.1 bezeichnet die posttraumatische Belastungsstörung (PTBS)."
+    },
+    {
+      "id": "gl-closing-thanks",
+      "kind": "no_tool",
+      "scope": { "type": "global" },
+      "user_message": "Danke, das war alles für heute.",
+      "expected_calls": [],
+      "answer": {
+        "excludes": ["<tool_call>", "tool_call"]
+      },
+      "reference_answer": "Gern geschehen. Bis zum nächsten Mal!"
+    },
+    {
+      "id": "gl-referral-letter-wording",
+      "kind": "no_tool",
+      "scope": { "type": "global" },
+      "user_message": "Gib mir eine kurze, allgemeine Grussformel für den Schluss eines Überweisungsschreibens an eine Kollegin.",
+      "expected_calls": [],
+      "answer": {
+        "contains_any": [["Grüss", "Grüß", "Gruss", "Gruß"]]
+      },
+      "reference_answer": "Für Rückfragen stehe ich gerne zur Verfügung. Mit freundlichen kollegialen Grüssen"
+    }
+  ]
+}
