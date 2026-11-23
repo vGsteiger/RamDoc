@@ -185,6 +185,93 @@ fn parse_tool_call(output: &str) -> Option<ToolCallRequest> {
     serde_json::from_str(json).ok()
 }
 
+const TOOL_CALL_OPEN: &str = "<tool_call>";
+const TOOL_CALL_CLOSE: &str = "</tool_call>";
+const THINK_OPEN: &str = "<think>";
+const THINK_CLOSE: &str = "</think>";
+
+/// Streaming stop rule for the tool probe: `true` while the output so far can
+/// still become a tool call, `false` as soon as it cannot.
+///
+/// A probe that answers directly is discarded and the answer is generated
+/// again with the chat settings, so every token after the decision is wasted
+/// (up to the probe's `max_tokens`). Reasoning (canonical `<think>` blocks) is
+/// skipped because a tool call may follow it; the first visible text must be a
+/// `<tool_call>` (optionally behind a Markdown code fence, which small models
+/// tend to add). Generation stops once that call is closed.
+///
+/// `starts_in_think` is set when the formatted prompt already opened a
+/// `<think>` block (some Qwen templates do), so the output begins mid-reasoning
+/// and only carries the closing tag.
+fn probe_may_still_call_tool(output: &str, starts_in_think: bool) -> bool {
+    let mut rest = output;
+    if starts_in_think {
+        match rest.find(THINK_CLOSE) {
+            Some(end) => rest = &rest[end + THINK_CLOSE.len()..],
+            None => return true,
+        }
+    }
+    loop {
+        rest = rest.trim_start();
+        if let Some(after_open) = rest.strip_prefix(THINK_OPEN) {
+            match after_open.find(THINK_CLOSE) {
+                Some(end) => rest = &after_open[end + THINK_CLOSE.len()..],
+                // Still reasoning; a tool call may follow.
+                None => return true,
+            }
+        } else if THINK_OPEN.starts_with(rest) {
+            // Empty, or a partial `<think>` tag.
+            return true;
+        } else {
+            break;
+        }
+    }
+
+    if let Some(after_fence) = rest.strip_prefix("```") {
+        // Allow an optional language tag (```json / ```xml) on the fence line.
+        match after_fence.find('\n') {
+            Some(newline) => {
+                let tag = &after_fence[..newline];
+                if !tag.trim().chars().all(|c| c.is_ascii_alphanumeric()) {
+                    return false;
+                }
+                rest = after_fence[newline + 1..].trim_start();
+            }
+            None => {
+                return after_fence
+                    .trim()
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric())
+                    && after_fence.len() <= 16;
+            }
+        }
+    } else if "```".starts_with(rest) {
+        return true;
+    }
+
+    if let Some(call_body) = rest.strip_prefix(TOOL_CALL_OPEN) {
+        !call_body.contains(TOOL_CALL_CLOSE)
+    } else {
+        TOOL_CALL_OPEN.starts_with(rest)
+    }
+}
+
+/// Closes a probe's reasoning block that ran out of budget.
+const PROBE_THINK_CLOSE: &str = "\n</think>\n\n";
+/// Tokens for the probe continuation after a force-closed reasoning block;
+/// enough for one tool call.
+const PROBE_RECOVERY_MAX_TOKENS: usize = 192;
+
+/// Whether a finished probe stopped inside a `<think>` block, i.e. it spent
+/// its budget reasoning and never reached a decision.
+fn probe_ended_in_reasoning(output: &str, starts_in_think: bool) -> bool {
+    let last_open = output.rfind(THINK_OPEN);
+    match output.rfind(THINK_CLOSE) {
+        Some(close) => last_open.is_some_and(|open| open > close),
+        None => starts_in_think || last_open.is_some(),
+    }
+}
+
 fn route_tool_decision(output: &str) -> ToolDecision {
     parse_tool_call(output)
         .map(ToolDecision::Call)
@@ -320,27 +407,63 @@ pub fn run_agent_loop(
             history = summarize_history(engine, &system_prompt, history);
         }
 
-        let prompt = probe_engine.format_chat_history_with_effort(
-            &probe_system,
-            &history,
-            probe_profile.effort,
-        )?;
+        // Reasoning is switched off for every family (the empty think block
+        // for Qwen-style templates, the native switch for Gemma 4 / Harmony),
+        // so the probe's small budget is not spent in a <think> block.
+        let prompt = probe_engine.format_chat_history_reasoning_off(&probe_system, &history)?;
 
-        // Probe: collect output to check for tool call. Thinking is forced off
-        // so Extra high effort cannot hide a tool call inside <think>.
+        // Probe: collect output to check for tool call.
+        // The probe stops as soon as its output can no longer be a tool call,
+        // so a direct answer costs a few tokens instead of `max_tokens`.
+        let starts_in_think = prompt.trim_end().ends_with(THINK_OPEN);
         let mut probe_output = String::new();
+        let mut probe_tokens = 0_usize;
         let probe_started = std::time::Instant::now();
         let probe_result = probe_engine.generate_streaming_session_with_sampler(
             &inference_session,
-            &probe_system,
             &prompt,
             probe_profile.max_tokens,
             probe_profile.sampler,
             |token| {
+                probe_tokens += 1;
                 probe_output.push_str(token);
-                !probe_output.contains("</tool_call>")
+                probe_may_still_call_tool(&probe_output, starts_in_think)
             },
         );
+        let probe_result = probe_result.and_then(|()| {
+            if !probe_ended_in_reasoning(&probe_output, starts_in_think) {
+                return Ok(());
+            }
+            // The model reasoned despite the switch and hit the budget inside
+            // the block. Treating that as "no tool needed" would answer
+            // without the data the tool would fetch, so close the block and
+            // let the model decide.
+            log::warn!(
+                "Agent iteration {iteration}: probe ended inside an unclosed <think> block \
+                 after {probe_tokens} tokens; force-closing it"
+            );
+            probe_output.push_str(PROBE_THINK_CLOSE);
+            let continued = format!(
+                "{prompt}{}",
+                probe_engine
+                    .chat_family()
+                    .native_assistant_prefix(&probe_output)
+            );
+            let mut visible = String::new();
+            probe_engine.continue_streaming_session_with_sampler(
+                &inference_session,
+                &continued,
+                PROBE_RECOVERY_MAX_TOKENS,
+                probe_profile.sampler,
+                |token| {
+                    probe_tokens += 1;
+                    visible.push_str(token);
+                    probe_may_still_call_tool(&visible, false)
+                },
+            )?;
+            probe_output.push_str(&visible);
+            Ok(())
+        });
         if let Err(error) = probe_result {
             if using_dedicated_router {
                 log::warn!(
@@ -361,8 +484,17 @@ pub fn run_agent_loop(
         );
 
         let probe_trimmed = probe_output.trim();
+        let decision = route_tool_decision(probe_trimmed);
+        log::info!(
+            "Agent iteration {iteration}: probe produced {probe_tokens} tokens ({})",
+            if matches!(decision, ToolDecision::Call(_)) {
+                "tool call"
+            } else {
+                "answer"
+            }
+        );
 
-        if let ToolDecision::Call(call) = route_tool_decision(probe_trimmed) {
+        if let ToolDecision::Call(call) = decision {
             log::info!(
                 "Agent iteration {}: calling tool '{}'",
                 iteration,
@@ -526,6 +658,92 @@ mod tests {
         let call = parse_tool_call(output).unwrap();
         assert_eq!(call.name, "get_patient");
         assert_eq!(call.args["patient_id"], "p1");
+    }
+
+    /// Feed `output` to the stop rule one char at a time, as the stream would,
+    /// and return the prefix at which generation stops (or all of it).
+    fn probe_stop_point(output: &str) -> &str {
+        stop_point_with(output, false)
+    }
+
+    fn stop_point_with(output: &str, starts_in_think: bool) -> &str {
+        for (idx, ch) in output.char_indices() {
+            let end = idx + ch.len_utf8();
+            if !probe_may_still_call_tool(&output[..end], starts_in_think) {
+                return &output[..end];
+            }
+        }
+        output
+    }
+
+    #[test]
+    fn probe_stops_on_the_first_char_of_a_direct_answer() {
+        assert_eq!(
+            probe_stop_point("Herr Muster hat nächste Woche keinen Termin."),
+            "H"
+        );
+        assert_eq!(probe_stop_point("\n\n  Gerne."), "\n\n  G");
+    }
+
+    #[test]
+    fn probe_runs_until_the_tool_call_is_closed() {
+        let call = r#"<tool_call>{"name": "list_patients", "args": {}}</tool_call>"#;
+        assert_eq!(probe_stop_point(&format!("{call}\nTrailing text")), call);
+        assert!(parse_tool_call(probe_stop_point(call)).is_some());
+    }
+
+    #[test]
+    fn probe_skips_reasoning_before_deciding() {
+        let with_call = "<think>Ich brauche die Akte.</think>\n<tool_call>{\"name\": \"get_patient\", \"args\": {}}</tool_call>";
+        assert_eq!(probe_stop_point(with_call), with_call);
+
+        let with_answer = "<think>\n\n</think>\n\nDie Antwort";
+        assert_eq!(probe_stop_point(with_answer), "<think>\n\n</think>\n\nD");
+    }
+
+    #[test]
+    fn probe_handles_a_think_block_opened_by_the_prompt() {
+        let with_call = "Ich brauche die Akte.\n</think>\n\n<tool_call>{\"name\": \"get_patient\", \"args\": {}}</tool_call>";
+        assert_eq!(stop_point_with(with_call, true), with_call);
+        assert!(parse_tool_call(with_call).is_some());
+
+        assert_eq!(
+            stop_point_with("Kurz überlegt.</think>Antwort", true),
+            "Kurz überlegt.</think>A"
+        );
+    }
+
+    #[test]
+    fn probe_detects_a_budget_spent_inside_reasoning() {
+        assert!(probe_ended_in_reasoning("<think>Ich überlege noch", false));
+        assert!(probe_ended_in_reasoning("Ich überlege noch", true));
+        assert!(probe_ended_in_reasoning(
+            "<think>a</think>\n<think>b",
+            false
+        ));
+        assert!(!probe_ended_in_reasoning("<think>a</think>Antwort", false));
+        assert!(!probe_ended_in_reasoning("a</think><tool_call>", true));
+        assert!(!probe_ended_in_reasoning("Antwort", false));
+        assert!(!probe_ended_in_reasoning("", false));
+    }
+
+    #[test]
+    fn probe_tolerates_a_code_fence_around_the_call() {
+        let fenced =
+            "```json\n<tool_call>{\"name\": \"list_patients\", \"args\": {}}</tool_call>\n```";
+        let stopped = probe_stop_point(fenced);
+        assert!(stopped.ends_with("</tool_call>"));
+        assert!(parse_tool_call(stopped).is_some());
+
+        // A fence that opens ordinary content is still an answer.
+        assert_eq!(probe_stop_point("```\nfoo"), "```\nf");
+        assert_eq!(probe_stop_point("``` ja klar"), "``` ja k");
+    }
+
+    #[test]
+    fn probe_rejects_text_that_diverges_from_the_tool_tag() {
+        assert_eq!(probe_stop_point("<b>Hinweis</b>"), "<b");
+        assert_eq!(probe_stop_point("<tool>"), "<tool>");
     }
 
     #[test]

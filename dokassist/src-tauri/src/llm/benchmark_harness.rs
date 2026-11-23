@@ -1213,17 +1213,10 @@ fn generate_session_turn(
         .map_err(|error| error.to_string())?;
     let mut answer = String::new();
     engine
-        .generate_streaming_session(
-            session,
-            system_prompt,
-            &prompt,
-            max_tokens,
-            temperature,
-            |piece| {
-                answer.push_str(piece);
-                true
-            },
-        )
+        .generate_streaming_session(session, &prompt, max_tokens, temperature, |piece| {
+            answer.push_str(piece);
+            true
+        })
         .map_err(|error| error.to_string())?;
     let stats = engine
         .last_generation_stats()
