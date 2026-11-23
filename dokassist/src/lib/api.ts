@@ -121,6 +121,7 @@ export interface GenerationStats {
   estimated_prefill_saved_ms: number;
   total_latency_ms: number;
   peak_rss_bytes: number;
+  session_kind?: 'conversation' | 'one_off';
 }
 
 export interface ContextCacheTelemetry {
@@ -135,6 +136,8 @@ export interface ContextCacheTelemetry {
   max_contexts: number;
   checkpoint_restores?: number;
   checkpoints_created?: number;
+  contexts_created?: number;
+  context_allocations_reused?: number;
 }
 
 export interface LlmEngineStatus {
