@@ -1083,7 +1083,8 @@ mod tests {
             },
         ] {
             let names = scope_tool_names(&scope);
-            let listed: Vec<_> = tool_list(&scope)
+            let list = tool_list(&scope);
+            let listed: Vec<_> = list
                 .lines()
                 .map(|line| line.split('(').next().unwrap())
                 .collect();
