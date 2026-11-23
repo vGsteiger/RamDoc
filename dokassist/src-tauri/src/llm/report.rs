@@ -1,4 +1,5 @@
 use super::{
+    context_cache::{InferenceSession, OneOffTask, PatientRevision},
     engine::{AgentMessage, LlmEngine},
     harness::{GenerationTask, SamplerConfig},
     prompts::{self, LetterType, ReportType},
@@ -15,6 +16,18 @@ const SUMMARIZE_MAX_TOKENS: usize = 800;
 /// Char limits for truncating inputs before the summarizer pass (prevents summarizer overflow).
 const MAX_CONTEXT_CHARS: usize = 16_000;
 const MAX_NOTES_CHARS: usize = 6_000;
+
+/// The KV-context session for a generation from `patient`'s record: keyed by
+/// task and record revision, so regenerating with other notes or
+/// instructions reuses the resident system prompt and patient data. Without
+/// a patient, `None` keeps the prompt-digest key: the context string comes
+/// from the caller and may belong to any patient.
+fn patient_session(
+    task: OneOffTask,
+    patient: Option<&PatientRevision>,
+) -> Option<InferenceSession> {
+    patient.map(|patient| InferenceSession::one_off(task, Some(patient)))
+}
 
 /// Returns `true` when the model-formatted prompt would leave insufficient
 /// output headroom in the active context window.
@@ -45,11 +58,18 @@ fn run_summarization(
     system_prompt: &str,
     patient_context: &str,
     session_notes: &str,
+    patient: Option<&PatientRevision>,
 ) -> Result<String, AppError> {
     let ctx = utf8::truncate_to_boundary(patient_context, MAX_CONTEXT_CHARS);
     let notes = utf8::truncate_to_boundary(session_notes, MAX_NOTES_CHARS);
     let summarization_msg = prompts::context_summarization_prompt(ctx, notes);
-    engine.generate(system_prompt, &summarization_msg, SUMMARIZE_MAX_TOKENS, 0.3)
+    engine.generate_with_session(
+        patient_session(OneOffTask::Condense, patient).as_ref(),
+        system_prompt,
+        &summarization_msg,
+        SUMMARIZE_MAX_TOKENS,
+        0.3,
+    )
 }
 
 /// Generate a report using the built-in system prompt.
@@ -59,6 +79,7 @@ pub fn generate_report_streaming(
     report_type: ReportType,
     patient_context: &str,
     session_notes: &str,
+    patient: Option<&PatientRevision>,
 ) -> Result<String, AppError> {
     generate_report_streaming_with_prompt(
         app,
@@ -70,6 +91,7 @@ pub fn generate_report_streaming(
         None,
         prompts::SYSTEM_PROMPT_DE,
         ThinkingEffort::Medium,
+        patient,
     )
 }
 
@@ -77,6 +99,9 @@ pub fn generate_report_streaming(
 /// Emits `"report-chunk"` Tauri events for each token as it is produced.
 /// If inputs are too long, emits `"report-summarizing"` then condenses them first.
 /// Returns the full completed report string.
+///
+/// `patient` is the record `patient_context` was built from. With it, the
+/// KV context is keyed by task and record revision (see [`patient_session`]).
 #[allow(clippy::too_many_arguments)]
 pub fn generate_report_streaming_with_prompt(
     app: &tauri::AppHandle,
@@ -88,6 +113,7 @@ pub fn generate_report_streaming_with_prompt(
     instructions: Option<&str>,
     system_prompt: &str,
     thinking_effort: ThinkingEffort,
+    patient: Option<&PatientRevision>,
 ) -> Result<String, AppError> {
     generate_report_streaming_with_sampler(
         app,
@@ -100,6 +126,7 @@ pub fn generate_report_streaming_with_prompt(
         system_prompt,
         thinking_effort,
         None,
+        patient,
     )
 }
 
@@ -117,6 +144,7 @@ pub fn generate_report_streaming_with_sampler(
     system_prompt: &str,
     thinking_effort: ThinkingEffort,
     sampler: Option<SamplerConfig>,
+    patient: Option<&PatientRevision>,
 ) -> Result<String, AppError> {
     generate_report_streaming_with_sampler_and_stream_id(
         app,
@@ -130,6 +158,7 @@ pub fn generate_report_streaming_with_sampler(
         thinking_effort,
         sampler,
         None,
+        patient,
     )
 }
 
@@ -148,6 +177,7 @@ pub fn generate_report_streaming_with_sampler_and_stream_id(
     thinking_effort: ThinkingEffort,
     sampler: Option<SamplerConfig>,
     stream_id: Option<&str>,
+    patient: Option<&PatientRevision>,
 ) -> Result<String, AppError> {
     let summary_opt = if needs_summarization(
         engine,
@@ -168,6 +198,7 @@ pub fn generate_report_streaming_with_sampler_and_stream_id(
             system_prompt,
             patient_context,
             session_notes,
+            patient,
         )?)
     } else {
         None
@@ -191,6 +222,7 @@ pub fn generate_report_streaming_with_sampler_and_stream_id(
         &user_message,
         GenerationTask::Report,
         thinking_effort,
+        patient_session(OneOffTask::Report, patient).as_ref(),
         sampler,
         &|token| {
             let _ = app.emit("report-chunk", token);
@@ -236,12 +268,17 @@ pub fn improve_text_streaming_with_prompt(
     let safe_instruction = sanitize_for_prompt(instruction);
     let user_message = build_delimited_prompt(&safe_instruction, &safe_text);
 
-    thinking::generate_with_think_budget(
+    // Keyed by task alone: the caller names no patient, and the text is
+    // compared token by token (`reusable_prefix`) like any digest-keyed
+    // context, so only the shared system prompt and instruction are reused.
+    thinking::generate_with_think_budget_and_sampler(
         engine,
         system_prompt,
         &user_message,
         GenerationTask::Improve,
         thinking_effort,
+        Some(&InferenceSession::one_off(OneOffTask::Improve, None)),
+        None,
         &|token| {
             let _ = app.emit("text-improvement-chunk", token);
         },
@@ -254,6 +291,7 @@ pub fn generate_session_summary_streaming(
     engine: &LlmEngine,
     patient_context: &str,
     session_notes: &str,
+    patient: Option<&PatientRevision>,
 ) -> Result<String, AppError> {
     generate_session_summary_streaming_with_prompt(
         app,
@@ -262,6 +300,7 @@ pub fn generate_session_summary_streaming(
         session_notes,
         prompts::SYSTEM_PROMPT_DE,
         ThinkingEffort::Medium,
+        patient,
     )
 }
 
@@ -276,6 +315,7 @@ pub fn generate_session_summary_streaming_with_prompt(
     session_notes: &str,
     system_prompt: &str,
     thinking_effort: ThinkingEffort,
+    patient: Option<&PatientRevision>,
 ) -> Result<String, AppError> {
     let summary_opt = if needs_summarization(
         engine,
@@ -290,6 +330,7 @@ pub fn generate_session_summary_streaming_with_prompt(
             system_prompt,
             patient_context,
             session_notes,
+            patient,
         )?)
     } else {
         None
@@ -301,12 +342,14 @@ pub fn generate_session_summary_streaming_with_prompt(
 
     let user_message = prompts::session_summary_prompt(eff_ctx, eff_notes);
 
-    thinking::generate_with_think_budget(
+    thinking::generate_with_think_budget_and_sampler(
         engine,
         system_prompt,
         &user_message,
         GenerationTask::Summary,
         thinking_effort,
+        patient_session(OneOffTask::Summary, patient).as_ref(),
+        None,
         &|token| {
             let _ = app.emit("session-summary-chunk", token);
         },
@@ -328,6 +371,7 @@ pub fn generate_letter_streaming_with_prompt(
     recipient_name: Option<&str>,
     system_prompt: &str,
     thinking_effort: ThinkingEffort,
+    patient: Option<&PatientRevision>,
 ) -> Result<String, AppError> {
     let summary_opt = if needs_summarization(
         engine,
@@ -342,6 +386,7 @@ pub fn generate_letter_streaming_with_prompt(
             system_prompt,
             patient_context,
             clinical_summary,
+            patient,
         )?)
     } else {
         None
@@ -359,12 +404,14 @@ pub fn generate_letter_streaming_with_prompt(
         recipient_name,
     );
 
-    thinking::generate_with_think_budget(
+    thinking::generate_with_think_budget_and_sampler(
         engine,
         system_prompt,
         &user_message,
         GenerationTask::Letter,
         thinking_effort,
+        patient_session(OneOffTask::Letter, patient).as_ref(),
+        None,
         &|token| {
             let _ = app.emit("letter-chunk", token);
         },
@@ -384,14 +431,17 @@ pub fn generate_evidence_answer_streaming(
     question: &str,
     system_prompt: &str,
     thinking_effort: ThinkingEffort,
+    patient: Option<&PatientRevision>,
 ) -> Result<String, AppError> {
     let user_message = prompts::evidence_query_prompt(evidence, question);
-    thinking::generate_with_think_budget(
+    thinking::generate_with_think_budget_and_sampler(
         engine,
         system_prompt,
         &user_message,
         GenerationTask::Evidence,
         thinking_effort,
+        patient_session(OneOffTask::Evidence, patient).as_ref(),
+        None,
         &|token| {
             let _ = app.emit("patient-history-chunk", token);
         },

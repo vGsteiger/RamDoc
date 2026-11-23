@@ -96,6 +96,7 @@ pub fn generate_with_think_budget(
         task,
         effort,
         None,
+        None,
         emit,
     )
 }
@@ -103,12 +104,16 @@ pub fn generate_with_think_budget(
 /// Like [`generate_with_think_budget`], with an optional validated sampler
 /// override. This is intentionally separate from reasoning effort: effort
 /// controls the token budget, while the sampler controls token selection.
+/// `session` keys the KV context (e.g. [`InferenceSession::one_off`] for the
+/// task and patient record); `None` keys it by the prompt digest.
+#[allow(clippy::too_many_arguments)]
 pub fn generate_with_think_budget_and_sampler(
     engine: &LlmEngine,
     system_prompt: &str,
     user_message: &str,
     task: GenerationTask,
     effort: ThinkingEffort,
+    session: Option<&InferenceSession>,
     sampler: Option<SamplerConfig>,
     emit: &dyn Fn(&str),
 ) -> Result<String, AppError> {
@@ -127,7 +132,7 @@ pub fn generate_with_think_budget_and_sampler(
         None,
         user_message,
         profile,
-        None,
+        session,
         emit,
     )
 }

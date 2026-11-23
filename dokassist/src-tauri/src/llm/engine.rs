@@ -508,8 +508,22 @@ impl LlmEngine {
         max_tokens: usize,
         temperature: f32,
     ) -> Result<String, AppError> {
+        self.generate_with_session(None, system_prompt, user_message, max_tokens, temperature)
+    }
+
+    /// Like [`Self::generate`], in the context of `session` (see
+    /// [`Self::generate_streaming_with_session`]).
+    pub fn generate_with_session(
+        &self,
+        session: Option<&InferenceSession>,
+        system_prompt: &str,
+        user_message: &str,
+        max_tokens: usize,
+        temperature: f32,
+    ) -> Result<String, AppError> {
         let mut result = String::new();
-        self.generate_streaming(
+        self.generate_streaming_with_session(
+            session,
             system_prompt,
             user_message,
             max_tokens,
@@ -532,6 +546,29 @@ impl LlmEngine {
         temperature: f32,
         on_token: impl FnMut(&str) -> bool,
     ) -> Result<(), AppError> {
+        self.generate_streaming_with_session(
+            None,
+            system_prompt,
+            user_message,
+            max_tokens,
+            temperature,
+            on_token,
+        )
+    }
+
+    /// Like [`Self::generate_streaming`], with the KV context keyed by
+    /// `session` (e.g. [`InferenceSession::one_off`]) so the next generation
+    /// of the same task and patient record reuses the common prompt prefix.
+    /// `None` keys it by the prompt digest: only an exact repeat reuses it.
+    pub fn generate_streaming_with_session(
+        &self,
+        session: Option<&InferenceSession>,
+        system_prompt: &str,
+        user_message: &str,
+        max_tokens: usize,
+        temperature: f32,
+        on_token: impl FnMut(&str) -> bool,
+    ) -> Result<(), AppError> {
         let prompt = self.format_chat_history(
             system_prompt,
             &[AgentMessage {
@@ -539,7 +576,8 @@ impl LlmEngine {
                 content: user_message.to_string(),
             }],
         )?;
-        self.generate_streaming_raw_with_sampler(
+        self.generate_streaming_raw_keyed(
+            session,
             &prompt,
             max_tokens,
             SamplerConfig::from_temperature(temperature),
@@ -555,14 +593,29 @@ impl LlmEngine {
         sampler: SamplerConfig,
         on_token: impl FnMut(&str) -> bool,
     ) -> Result<(), AppError> {
-        let digest = sha256_bytes(prompt.as_bytes());
-        self.generate_streaming_cached(
-            &InferenceSession::isolated(format!("raw:{digest}")),
-            prompt,
-            max_tokens,
-            sampler,
-            on_token,
-        )
+        self.generate_streaming_raw_keyed(None, prompt, max_tokens, sampler, on_token)
+    }
+
+    /// Generate from a pre-formatted prompt in `session`'s context, or, with
+    /// `None`, in an isolated context keyed by the prompt digest.
+    fn generate_streaming_raw_keyed(
+        &self,
+        session: Option<&InferenceSession>,
+        prompt: &str,
+        max_tokens: usize,
+        sampler: SamplerConfig,
+        on_token: impl FnMut(&str) -> bool,
+    ) -> Result<(), AppError> {
+        let isolated;
+        let session = match session {
+            Some(session) => session,
+            None => {
+                isolated =
+                    InferenceSession::isolated(format!("raw:{}", sha256_bytes(prompt.as_bytes())));
+                &isolated
+            }
+        };
+        self.generate_streaming_cached(session, prompt, max_tokens, sampler, on_token)
     }
 
     /// Reference cold path retained for equivalence tests and benchmarks.
@@ -749,9 +802,8 @@ impl LlmEngine {
         temperature: f32,
         on_token: impl FnMut(&str) -> bool,
     ) -> Result<(), AppError> {
-        let digest = sha256_bytes(prompt.as_bytes());
-        self.generate_streaming_cached(
-            &InferenceSession::isolated(format!("raw:{digest}")),
+        self.generate_streaming_raw_keyed(
+            None,
             prompt,
             max_tokens,
             SamplerConfig::from_temperature(temperature),
@@ -1330,13 +1382,15 @@ impl LlmEngine {
     /// One-off completion with reasoning switched off, for tasks that need a
     /// direct structured answer (metadata extraction). Reasoning would spend
     /// the small token limit before the answer appears, and greedy decoding
-    /// inside a `<think>` block tends to loop.
+    /// inside a `<think>` block tends to loop. `session` keys the context as
+    /// in [`Self::generate_streaming_with_session`].
     pub fn generate_reasoning_off(
         &self,
         system_prompt: &str,
         user_message: &str,
         max_tokens: usize,
         sampler: SamplerConfig,
+        session: Option<&InferenceSession>,
     ) -> Result<String, AppError> {
         let prompt = self.format_chat_history_reasoning_off(
             system_prompt,
@@ -1346,7 +1400,7 @@ impl LlmEngine {
             }],
         )?;
         let mut result = String::new();
-        self.generate_streaming_raw_with_sampler(&prompt, max_tokens, sampler, |token| {
+        self.generate_streaming_raw_keyed(session, &prompt, max_tokens, sampler, |token| {
             result.push_str(token);
             true
         })?;
@@ -1736,6 +1790,7 @@ mod tests {
                 "Fasse zusammen: Schlaf verbessert, Angst reduziert.",
                 crate::llm::harness::GenerationTask::Summary,
                 effort,
+                None,
                 Some(SamplerConfig::from_temperature(0.0)),
                 &|piece| collected.borrow_mut().push_str(piece),
             )
@@ -1959,6 +2014,71 @@ mod tests {
         } else {
             assert_eq!(telemetry.contexts_created, 1);
             assert_eq!(telemetry.context_allocations_reused, 3);
+        }
+    }
+
+    /// Real-GGUF check for issue #550: one-off generations are keyed by task
+    /// and patient record instead of the prompt digest. A second metadata
+    /// extraction reuses the system prompt and instruction before the
+    /// document; a same-patient report with another instruction reuses the
+    /// system prompt; another patient's report reuses nothing.
+    #[test]
+    #[ignore = "requires a local GGUF model"]
+    fn task_keyed_one_offs_reuse_their_prefix() {
+        use crate::llm::context_cache::{OneOffTask, PatientRevision};
+
+        let path = PathBuf::from(
+            std::env::var("RAMDOC_BENCH_MODEL").expect("RAMDOC_BENCH_MODEL is required"),
+        );
+        let engine = LlmEngine::load(path, "task-key-check".into()).unwrap();
+
+        let mut extractions = Vec::new();
+        for document in [
+            "Arztbrief vom 3. März: Depressive Episode, Sertralin 100 mg.",
+            "Laborbefund vom 9. April: TSH im Normbereich, Lithiumspiegel 0.7 mmol/l.",
+        ] {
+            // Only the cache statistics matter here, not whether the small
+            // output budget yields parseable JSON.
+            let _ = super::super::extract::extract_metadata(&engine, document);
+            extractions.push(engine.last_generation_stats().unwrap());
+        }
+
+        let system = format!(
+            "Sie sind ein klinischer Assistent.\n{}",
+            "Patientendaten: Sertralin 100 mg 1-0-0, Schlafstörung, Grübeln. ".repeat(60)
+        );
+        let report = |patient: &str, instruction: &str| {
+            let record = PatientRevision {
+                patient_id: patient.into(),
+                revision: "p1:revision".into(),
+            };
+            let session = InferenceSession::one_off(OneOffTask::Report, Some(&record));
+            engine
+                .generate_with_session(Some(&session), &system, instruction, 8, 0.0)
+                .unwrap();
+            engine.last_generation_stats().unwrap()
+        };
+        report("patient-a", "Schreibe einen Befundbericht.");
+        let regenerated = report("patient-a", "Schreibe einen Verlaufsbericht.");
+        let other_patient = report("patient-b", "Schreibe einen Verlaufsbericht.");
+        println!(
+            "{}",
+            serde_json::json!({
+                "second_extraction": extractions[1],
+                "regenerated": regenerated,
+                "other_patient": other_patient,
+            })
+        );
+
+        assert!(!other_patient.cache_hit);
+        assert_eq!(other_patient.reused_prompt_tokens, 0);
+        // Hybrid/recurrent models resume only from a checkpoint near the
+        // previous prompt's end, which lies past the shared prefix here.
+        if !engine.uses_state_checkpoints {
+            assert!(extractions[1].cache_hit);
+            assert!(extractions[1].reused_prompt_tokens > 0);
+            assert!(regenerated.cache_hit);
+            assert!(regenerated.reused_prompt_tokens >= engine.count_tokens(&system) / 2);
         }
     }
 
