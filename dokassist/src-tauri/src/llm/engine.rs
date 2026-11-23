@@ -523,7 +523,6 @@ impl LlmEngine {
         let digest = sha256_bytes(prompt.as_bytes());
         self.generate_streaming_cached(
             &InferenceSession::isolated(format!("raw:{digest}")),
-            &digest,
             prompt,
             max_tokens,
             sampler,
@@ -717,7 +716,6 @@ impl LlmEngine {
         let digest = sha256_bytes(prompt.as_bytes());
         self.generate_streaming_cached(
             &InferenceSession::isolated(format!("raw:{digest}")),
-            &digest,
             prompt,
             max_tokens,
             SamplerConfig::from_temperature(temperature),
@@ -729,7 +727,6 @@ impl LlmEngine {
     pub fn generate_streaming_session(
         &self,
         session: &InferenceSession,
-        system_prompt: &str,
         prompt: &str,
         max_tokens: usize,
         temperature: f32,
@@ -737,7 +734,6 @@ impl LlmEngine {
     ) -> Result<(), AppError> {
         self.generate_streaming_session_with_sampler(
             session,
-            system_prompt,
             prompt,
             max_tokens,
             SamplerConfig::from_temperature(temperature),
@@ -745,35 +741,25 @@ impl LlmEngine {
         )
     }
 
+    /// The KV context is keyed by session, not by system prompt: generations
+    /// with different system prompts in one conversation (agent probe and
+    /// final answer) share one context and reuse their common token prefix.
+    /// `reusable_prefix` already limits reuse to identical tokens.
     pub fn generate_streaming_session_with_sampler(
         &self,
         session: &InferenceSession,
-        system_prompt: &str,
         prompt: &str,
         max_tokens: usize,
         sampler: SamplerConfig,
         on_token: impl FnMut(&str) -> bool,
     ) -> Result<(), AppError> {
-        self.generate_streaming_cached(
-            session,
-            &sha256_bytes(system_prompt.as_bytes()),
-            prompt,
-            max_tokens,
-            sampler,
-            on_token,
-        )
+        self.generate_streaming_cached(session, prompt, max_tokens, sampler, on_token)
     }
 
-    fn context_key(
-        &self,
-        session: &InferenceSession,
-        system_prompt_hash: &str,
-        runtime: &InferenceRuntime,
-    ) -> ContextKey {
+    fn context_key(&self, session: &InferenceSession, runtime: &InferenceRuntime) -> ContextKey {
         ContextKey {
             model_hash: self.model_hash.clone(),
             chat_template_hash: self.chat_template_hash.clone(),
-            system_prompt_hash: system_prompt_hash.to_string(),
             prompt_version: session.prompt_version.clone(),
             adapter_hash: session.adapter_hash.clone(),
             context_size: runtime.profile.n_ctx,
@@ -800,7 +786,6 @@ impl LlmEngine {
     pub fn continue_streaming_session_with_sampler(
         &self,
         session: &InferenceSession,
-        system_prompt: &str,
         prompt: &str,
         max_tokens: usize,
         sampler: SamplerConfig,
@@ -810,7 +795,6 @@ impl LlmEngine {
         let max_tokens = continuation_budget(self.context_size, prompt_tokens, max_tokens)?;
         self.generate_streaming_cached_with_headroom(
             session,
-            &sha256_bytes(system_prompt.as_bytes()),
             prompt,
             max_tokens,
             sampler,
@@ -822,7 +806,6 @@ impl LlmEngine {
     fn generate_streaming_cached(
         &self,
         session: &InferenceSession,
-        system_prompt_hash: &str,
         prompt: &str,
         max_tokens: usize,
         sampler_config: SamplerConfig,
@@ -830,7 +813,6 @@ impl LlmEngine {
     ) -> Result<(), AppError> {
         self.generate_streaming_cached_with_headroom(
             session,
-            system_prompt_hash,
             prompt,
             max_tokens,
             sampler_config,
@@ -844,7 +826,6 @@ impl LlmEngine {
     fn generate_streaming_cached_with_headroom(
         &self,
         session: &InferenceSession,
-        system_prompt_hash: &str,
         prompt: &str,
         max_tokens: usize,
         sampler_config: SamplerConfig,
@@ -863,7 +844,7 @@ impl LlmEngine {
             max_tokens,
             completion_headroom.unwrap_or(runtime.profile.completion_headroom),
         )?;
-        let mut key = self.context_key(session, system_prompt_hash, &runtime);
+        let mut key = self.context_key(session, &runtime);
 
         // Holding this guard is the context lease. It serializes inference and
         // context creation, bounding transient model/KV memory during swaps.
@@ -908,7 +889,7 @@ impl LlmEngine {
             let context =
                 unsafe { std::mem::transmute::<LlamaContext<'_>, LlamaContext<'static>>(context) };
             // Context creation may have selected a safe fallback profile.
-            key = self.context_key(session, system_prompt_hash, &self.inference_runtime()?);
+            key = self.context_key(session, &self.inference_runtime()?);
             pool.entries.push(CachedContext {
                 context,
                 tokens: Vec::new(),
@@ -1688,7 +1669,6 @@ mod tests {
             engine
                 .generate_streaming_session_with_sampler(
                     &session,
-                    system,
                     &prompt,
                     48,
                     SamplerConfig::from_temperature(0.0),
@@ -1735,6 +1715,57 @@ mod tests {
         assert!(second.reused_prompt_tokens > first.prompt_tokens / 2);
     }
 
+    /// Real-GGUF check for issue #549: the agent probe and the final answer
+    /// use different system prompts in one session. They must share one pool
+    /// entry, without invalidation or a new context, and the answer must reuse
+    /// the shared system-prompt prefix.
+    #[test]
+    #[ignore = "requires a local GGUF model"]
+    fn probe_and_answer_share_one_context() {
+        let path = PathBuf::from(
+            std::env::var("RAMDOC_BENCH_MODEL").expect("RAMDOC_BENCH_MODEL is required"),
+        );
+        let engine = LlmEngine::load(path, "shared-context-check".into()).unwrap();
+        let base = format!(
+            "Sie sind ein klinischer Assistent.\n{}",
+            "Patientendaten: Sertralin 100 mg 1-0-0, Schlafstörung, Grübeln. ".repeat(120)
+        );
+        let probe_system = format!("{base}\n\nGib nur einen <tool_call>-Block aus.");
+        let answer_system = format!("{base}\n\nErfinden Sie keine Daten.");
+        let messages = [AgentMessage {
+            role: "user".into(),
+            content: "Welche Dosis ist dokumentiert?".into(),
+        }];
+        let session = InferenceSession::agent("shared-context-check", None, None);
+        let run = |system: &str| {
+            let prompt = engine.format_chat_history(system, &messages).unwrap();
+            engine
+                .generate_streaming_session_with_sampler(
+                    &session,
+                    &prompt,
+                    8,
+                    SamplerConfig::from_temperature(0.0),
+                    |_| true,
+                )
+                .unwrap();
+            engine.last_generation_stats().unwrap()
+        };
+        run(&probe_system);
+        let before = engine.contexts.lock().unwrap().telemetry.clone();
+        let answer = run(&answer_system);
+        let after = engine.contexts.lock().unwrap().telemetry.clone();
+
+        assert_eq!(after.resident_contexts, 1);
+        // Hybrid/recurrent models cannot roll back to an arbitrary prefix and
+        // only resume from a checkpoint near the probe prompt's end, so the
+        // shared prefix is not reusable there yet.
+        if !engine.uses_state_checkpoints {
+            assert_eq!(after.invalidations, before.invalidations);
+            assert!(answer.cache_hit);
+            assert!(answer.reused_prompt_tokens >= engine.count_tokens(&base) / 2);
+        }
+    }
+
     /// Hardware benchmark harness for issue #400. It is ignored because CI has
     /// no approved GGUF; run it on a target Mac with RAMDOC_BENCH_MODEL set.
     #[test]
@@ -1774,31 +1805,17 @@ mod tests {
         );
         let mut first_answer = String::new();
         engine
-            .generate_streaming_session(
-                &session,
-                "You are a concise clinical assistant.",
-                &prompt,
-                64,
-                0.0,
-                |piece| {
-                    first_answer.push_str(piece);
-                    true
-                },
-            )
+            .generate_streaming_session(&session, &prompt, 64, 0.0, |piece| {
+                first_answer.push_str(piece);
+                true
+            })
             .unwrap();
         let mut warm_answer = String::new();
         engine
-            .generate_streaming_session(
-                &session,
-                "You are a concise clinical assistant.",
-                &prompt,
-                64,
-                0.0,
-                |piece| {
-                    warm_answer.push_str(piece);
-                    true
-                },
-            )
+            .generate_streaming_session(&session, &prompt, 64, 0.0, |piece| {
+                warm_answer.push_str(piece);
+                true
+            })
             .unwrap();
         let warm = engine.last_generation_stats().unwrap();
 

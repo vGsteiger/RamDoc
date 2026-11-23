@@ -49,7 +49,6 @@ impl InferenceSession {
 pub(crate) struct ContextKey {
     pub model_hash: String,
     pub chat_template_hash: String,
-    pub system_prompt_hash: String,
     pub prompt_version: String,
     pub adapter_hash: String,
     pub context_size: usize,
@@ -132,7 +131,6 @@ mod tests {
         ContextKey {
             model_hash: model.into(),
             chat_template_hash: "template".into(),
-            system_prompt_hash: "prompt".into(),
             prompt_version: AGENT_PROMPT_VERSION.into(),
             adapter_hash: "none".into(),
             context_size: 16_384,
