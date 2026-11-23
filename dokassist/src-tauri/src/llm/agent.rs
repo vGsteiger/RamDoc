@@ -86,6 +86,10 @@ pub struct AgentTurnInput {
 /// * `patient_context` is pre-fetched patient JSON injected directly so the
 ///   model never needs to call `get_patient` just to learn who it is talking
 ///   about.
+///
+/// Stable content comes first so the KV cache can reuse it: persona, tools
+/// and tool-call format are identical for every conversation in a scope, the
+/// patient section changes per patient, and the date last.
 fn build_system_prompt(scope: &AgentScope, patient_context: Option<&str>) -> String {
     let today = {
         let now = std::time::SystemTime::now()
@@ -97,7 +101,14 @@ fn build_system_prompt(scope: &AgentScope, patient_context: Option<&str>) -> Str
         let (y, m, d) = days_from_epoch(days_since_epoch);
         format!("{y:04}-{m:02}-{d:02}")
     };
+    build_system_prompt_for_date(scope, patient_context, &today)
+}
 
+fn build_system_prompt_for_date(
+    scope: &AgentScope,
+    patient_context: Option<&str>,
+    today: &str,
+) -> String {
     let tools = match scope {
         AgentScope::Patient { .. } => concat!(
             "get_patient(patient_id: string) - Holt Patientendaten für eine gegebene ID.\n",
@@ -147,14 +158,41 @@ fn build_system_prompt(scope: &AgentScope, patient_context: Option<&str>) -> Str
 
     format!(
         "Du bist DokAssist, ein hilfreicher medizinischer Assistent für psychiatrische Praxen.\n\
-         Heutiges Datum: {today}.\n\
          Du antwortest auf Deutsch und hast Zugriff auf folgende Tools:\n\n\
          <tools>\n{tools}\n</tools>\n\n\
          Um ein Tool aufzurufen, antworte AUSSCHLIESSLICH mit einem JSON-Block in folgendem Format (keine anderen Texte):\n\
          <tool_call>{{\"name\": \"tool_name\", \"args\": {{...}}}}</tool_call>\n\n\
          Wenn du die endgültige Antwort geben kannst (kein Tool mehr nötig), antworte direkt auf Deutsch ohne <tool_call>-Block.\n\
-         WICHTIG: Gib bei tool_call-Antworten KEINEN anderen Text aus – nur den Block.{patient_section}"
+         WICHTIG: Gib bei tool_call-Antworten KEINEN anderen Text aus – nur den Block.{patient_section}\n\n\
+         Heutiges Datum: {today}."
     )
+}
+
+/// The conversation with a per-call instruction attached to its final turn.
+///
+/// Probe and answer need different instructions (tool-call format vs.
+/// grounding and effort). Putting them in the system message made the two
+/// prompts diverge before the history, so neither could reuse the other's
+/// KV cache for it. Attached to the final turn, they share the system prompt
+/// and every earlier message. The final turn is always the user's message or
+/// a tool result, both rendered as user turns, so the instruction is appended
+/// to it rather than added as a second consecutive user message (which some
+/// templates reject).
+fn with_turn_instruction(history: &[AgentMessage], instruction: &str) -> Vec<AgentMessage> {
+    let mut messages = history.to_vec();
+    if instruction.is_empty() {
+        return messages;
+    }
+    match messages.last_mut() {
+        Some(last) if matches!(last.role.as_str(), "user" | "tool_result") => {
+            last.content.push_str(instruction);
+        }
+        _ => messages.push(AgentMessage {
+            role: "user".to_string(),
+            content: instruction.trim_start().to_string(),
+        }),
+    }
+    messages
 }
 
 /// Convert days since Unix epoch (1970-01-01) to (year, month, day).
@@ -366,17 +404,22 @@ pub fn run_agent_loop(
     let system_prompt = build_system_prompt(&scope, patient_context.as_deref());
     let probe_profile = GenerationTask::ToolProbe.profile(thinking_effort);
     let chat_profile = GenerationTask::Chat.profile(thinking_effort);
-    let probe_system = GenerationTask::ToolProbe.apply_to_system_prompt(&system_prompt);
-    let answer_system = {
+    // Probe and answer share `system_prompt`; their instructions go on the
+    // final turn (see `with_turn_instruction`).
+    let probe_instruction = GenerationTask::ToolProbe.system_suffix();
+    let answer_instruction = {
         // Families with a native reasoning switch get it through the chat
         // format instead of a `<think>`-worded instruction.
-        let with_effort = if engine.chat_family().uses_plain_think_tags() {
-            chat_profile.effort.apply_to_system_prompt(&system_prompt)
+        let effort = if engine.chat_family().uses_plain_think_tags() {
+            chat_profile.effort.system_suffix()
         } else {
-            system_prompt.clone()
+            ""
         };
-        GenerationTask::Chat.apply_to_system_prompt(&with_effort)
+        format!("{effort}{}", GenerationTask::Chat.system_suffix())
     };
+    // Only used if the answer overflows the context and is continued as a
+    // fresh single-turn prompt, which has no conversation to attach to.
+    let answer_system = format!("{system_prompt}{answer_instruction}");
 
     history.push(AgentMessage {
         role: "user".to_string(),
@@ -395,8 +438,8 @@ pub fn run_agent_loop(
     for iteration in 0..MAX_ITERATIONS {
         // Summarize history if it is getting too large to fit in the context window
         let formatted = engine.format_chat_history_with_effort(
-            &answer_system,
-            &history,
+            &system_prompt,
+            &with_turn_instruction(&history, &answer_instruction),
             chat_profile.effort,
         )?;
         let estimated_tokens = estimate_tokens(&formatted);
@@ -410,7 +453,10 @@ pub fn run_agent_loop(
         // Reasoning is switched off for every family (the empty think block
         // for Qwen-style templates, the native switch for Gemma 4 / Harmony),
         // so the probe's small budget is not spent in a <think> block.
-        let prompt = probe_engine.format_chat_history_reasoning_off(&probe_system, &history)?;
+        let prompt = probe_engine.format_chat_history_reasoning_off(
+            &system_prompt,
+            &with_turn_instruction(&history, probe_instruction),
+        )?;
 
         // Probe: collect output to check for tool call.
         // The probe stops as soon as its output can no longer be a tool call,
@@ -563,8 +609,8 @@ pub fn run_agent_loop(
             // user-selected think budget. The probe stays short so tool
             // selection is not spent on a long <think> block.
             let final_prompt = engine.format_chat_history_with_effort(
-                &answer_system,
-                &history,
+                &system_prompt,
+                &with_turn_instruction(&history, &answer_instruction),
                 chat_profile.effort,
             )?;
             let final_answer = thinking::generate_with_think_budget_from_prompt(
@@ -595,8 +641,11 @@ pub fn run_agent_loop(
     }
 
     // Exceeded MAX_ITERATIONS — force a final answer from accumulated history
-    let final_prompt =
-        engine.format_chat_history_with_effort(&answer_system, &history, chat_profile.effort)?;
+    let final_prompt = engine.format_chat_history_with_effort(
+        &system_prompt,
+        &with_turn_instruction(&history, &answer_instruction),
+        chat_profile.effort,
+    )?;
     let final_answer = thinking::generate_with_think_budget_from_prompt(
         engine,
         &answer_system,
@@ -744,6 +793,63 @@ mod tests {
     fn probe_rejects_text_that_diverges_from_the_tool_tag() {
         assert_eq!(probe_stop_point("<b>Hinweis</b>"), "<b");
         assert_eq!(probe_stop_point("<tool>"), "<tool>");
+    }
+
+    fn message(role: &str, content: &str) -> AgentMessage {
+        AgentMessage {
+            role: role.into(),
+            content: content.into(),
+        }
+    }
+
+    #[test]
+    fn system_prompt_is_stable_across_dates_up_to_the_date_line() {
+        let scope = AgentScope::Patient {
+            patient_id: "p1".into(),
+        };
+        let monday = build_system_prompt_for_date(&scope, Some("{\"name\":\"A\"}"), "2026-11-23");
+        let tuesday = build_system_prompt_for_date(&scope, Some("{\"name\":\"A\"}"), "2026-11-24");
+        let date_line = monday.rfind("Heutiges Datum").unwrap();
+        assert_eq!(monday[..date_line], tuesday[..date_line]);
+        // Tools and the patient section both precede the date.
+        assert!(monday.find("<tools>").unwrap() < date_line);
+        assert!(monday.find("Patientendaten").unwrap() < date_line);
+        assert!(monday.trim_end().ends_with("Heutiges Datum: 2026-11-23."));
+    }
+
+    #[test]
+    fn probe_and_answer_share_everything_but_the_final_instruction() {
+        let history = vec![
+            message("user", "Wie geht es Frau A?"),
+            message("assistant", "Stabil."),
+            message("user", "Welche Dosis Sertralin?"),
+        ];
+        let probe = with_turn_instruction(&history, GenerationTask::ToolProbe.system_suffix());
+        let answer = with_turn_instruction(&history, GenerationTask::Chat.system_suffix());
+
+        assert_eq!(probe.len(), history.len());
+        assert_eq!(probe[..2], answer[..2]);
+        assert_eq!(probe[..2], history[..2]);
+        for messages in [&probe, &answer] {
+            assert!(messages[2].content.starts_with("Welche Dosis Sertralin?"));
+        }
+        assert_ne!(probe[2].content, answer[2].content);
+    }
+
+    #[test]
+    fn turn_instruction_follows_a_tool_result() {
+        let history = vec![
+            message("user", "Termine?"),
+            message("tool_call", "<tool_call>{}</tool_call>"),
+            message("tool_result", "<tool_result>[]</tool_result>"),
+        ];
+        let messages = with_turn_instruction(&history, "\n\nHinweis.");
+        assert_eq!(messages.len(), 3);
+        assert_eq!(
+            messages[2].content,
+            "<tool_result>[]</tool_result>\n\nHinweis."
+        );
+        assert_eq!(with_turn_instruction(&history, ""), history);
     }
 
     #[test]

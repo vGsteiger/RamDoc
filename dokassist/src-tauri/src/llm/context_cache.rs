@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Bump whenever the agent system/tool prompt semantics change.
-pub const AGENT_PROMPT_VERSION: &str = "agent-v1";
+pub const AGENT_PROMPT_VERSION: &str = "agent-v2";
 
 /// The caller-owned portion of an inference-context identity.
 ///
@@ -172,7 +172,7 @@ mod tests {
         assert_ne!(base, template_changed);
 
         let mut prompt_changed = base.clone();
-        prompt_changed.prompt_version = "agent-v2".into();
+        prompt_changed.prompt_version = format!("{AGENT_PROMPT_VERSION}-next");
         assert_ne!(base, prompt_changed);
 
         let mut adapter_changed = base.clone();

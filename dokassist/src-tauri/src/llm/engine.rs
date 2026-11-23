@@ -1513,7 +1513,7 @@ fn new_chat_message(role: &str, content: &str) -> Result<LlamaChatMessage, AppEr
 }
 
 /// A message in an agent conversation history.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentMessage {
     pub role: String,
     pub content: String,
