@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Bump whenever the agent system/tool prompt semantics change.
-pub const AGENT_PROMPT_VERSION: &str = "agent-v1";
+pub const AGENT_PROMPT_VERSION: &str = "agent-v2";
 
 /// The caller-owned portion of an inference-context identity.
 ///
