@@ -421,7 +421,6 @@ pub fn run_agent_loop(
         let probe_started = std::time::Instant::now();
         let probe_result = probe_engine.generate_streaming_session_with_sampler(
             &inference_session,
-            &probe_system,
             &prompt,
             probe_profile.max_tokens,
             probe_profile.sampler,
@@ -453,7 +452,6 @@ pub fn run_agent_loop(
             let mut visible = String::new();
             probe_engine.continue_streaming_session_with_sampler(
                 &inference_session,
-                &probe_system,
                 &continued,
                 PROBE_RECOVERY_MAX_TOKENS,
                 probe_profile.sampler,

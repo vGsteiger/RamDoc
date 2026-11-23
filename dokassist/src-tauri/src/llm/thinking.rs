@@ -186,7 +186,6 @@ pub fn generate_with_think_budget_from_prompt(
     let phase1 = |on_token: &mut dyn FnMut(&str) -> bool| -> Result<(), AppError> {
         engine.generate_streaming_session_with_sampler(
             session,
-            system_prompt,
             &base_prompt,
             max_tokens,
             profile.sampler,
@@ -242,7 +241,6 @@ pub fn generate_with_think_budget_from_prompt(
         );
         engine.continue_streaming_session_with_sampler(
             session,
-            system_prompt,
             &continued,
             max_tokens.saturating_sub(max_think_tokens),
             profile.sampler,
