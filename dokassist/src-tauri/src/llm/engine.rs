@@ -4,6 +4,7 @@ use super::context_cache::{
     ContextKey, InferenceSession, SessionKind, SlotAction,
 };
 use super::download;
+use super::grammar::{self, Grammar};
 use super::harness::{SamplerConfig, SamplerFamily};
 use super::inference::{
     validate_context_budget, FlashAttentionMode, InferenceDiagnostics, InferenceProfile,
@@ -581,6 +582,7 @@ impl LlmEngine {
             &prompt,
             max_tokens,
             SamplerConfig::from_temperature(temperature),
+            None,
             on_token,
         )
     }
@@ -593,17 +595,19 @@ impl LlmEngine {
         sampler: SamplerConfig,
         on_token: impl FnMut(&str) -> bool,
     ) -> Result<(), AppError> {
-        self.generate_streaming_raw_keyed(None, prompt, max_tokens, sampler, on_token)
+        self.generate_streaming_raw_keyed(None, prompt, max_tokens, sampler, None, on_token)
     }
 
     /// Generate from a pre-formatted prompt in `session`'s context, or, with
-    /// `None`, in an isolated context keyed by the prompt digest.
+    /// `None`, in an isolated context keyed by the prompt digest. `grammar`,
+    /// when given, constrains the output (see [`grammar::sampler_chain`]).
     fn generate_streaming_raw_keyed(
         &self,
         session: Option<&InferenceSession>,
         prompt: &str,
         max_tokens: usize,
         sampler: SamplerConfig,
+        grammar: Option<&Grammar>,
         on_token: impl FnMut(&str) -> bool,
     ) -> Result<(), AppError> {
         let isolated;
@@ -615,7 +619,9 @@ impl LlmEngine {
                 &isolated
             }
         };
-        self.generate_streaming_cached(session, prompt, max_tokens, sampler, on_token)
+        self.generate_streaming_cached_with_headroom(
+            session, prompt, max_tokens, sampler, None, grammar, on_token,
+        )
     }
 
     /// Reference cold path retained for equivalence tests and benchmarks.
@@ -807,6 +813,7 @@ impl LlmEngine {
             prompt,
             max_tokens,
             SamplerConfig::from_temperature(temperature),
+            None,
             on_token,
         )
     }
@@ -842,6 +849,22 @@ impl LlmEngine {
         on_token: impl FnMut(&str) -> bool,
     ) -> Result<(), AppError> {
         self.generate_streaming_cached(session, prompt, max_tokens, sampler, on_token)
+    }
+
+    /// Like [`Self::generate_streaming_session_with_sampler`], constrained by
+    /// `grammar` when given (see [`grammar::sampler_chain`]).
+    pub fn generate_streaming_session_with_grammar(
+        &self,
+        session: &InferenceSession,
+        prompt: &str,
+        max_tokens: usize,
+        sampler: SamplerConfig,
+        grammar: Option<&Grammar>,
+        on_token: impl FnMut(&str) -> bool,
+    ) -> Result<(), AppError> {
+        self.generate_streaming_cached_with_headroom(
+            session, prompt, max_tokens, sampler, None, grammar, on_token,
+        )
     }
 
     fn context_key(&self, session: &InferenceSession, runtime: &InferenceRuntime) -> ContextKey {
@@ -880,6 +903,23 @@ impl LlmEngine {
         sampler: SamplerConfig,
         on_token: impl FnMut(&str) -> bool,
     ) -> Result<(), AppError> {
+        self.continue_streaming_session_with_grammar(
+            session, prompt, max_tokens, sampler, None, on_token,
+        )
+    }
+
+    /// Like [`Self::continue_streaming_session_with_sampler`], constrained by
+    /// `grammar` when given. The grammar starts fresh: it sees only the
+    /// continuation, not the output being continued.
+    pub fn continue_streaming_session_with_grammar(
+        &self,
+        session: &InferenceSession,
+        prompt: &str,
+        max_tokens: usize,
+        sampler: SamplerConfig,
+        grammar: Option<&Grammar>,
+        on_token: impl FnMut(&str) -> bool,
+    ) -> Result<(), AppError> {
         let prompt_tokens = self.count_tokens(prompt);
         let max_tokens = continuation_budget(self.context_size, prompt_tokens, max_tokens)?;
         self.generate_streaming_cached_with_headroom(
@@ -888,6 +928,7 @@ impl LlmEngine {
             max_tokens,
             sampler,
             Some(max_tokens),
+            grammar,
             on_token,
         )
     }
@@ -906,11 +947,13 @@ impl LlmEngine {
             max_tokens,
             sampler_config,
             None,
+            None,
             on_token,
         )
     }
 
     /// `completion_headroom` overrides the profile's reservation; `None` keeps it.
+    /// `grammar`, when given, constrains the output (see [`grammar::sampler_chain`]).
     #[allow(clippy::too_many_arguments)]
     fn generate_streaming_cached_with_headroom(
         &self,
@@ -919,6 +962,7 @@ impl LlmEngine {
         max_tokens: usize,
         sampler_config: SamplerConfig,
         completion_headroom: Option<usize>,
+        grammar: Option<&Grammar>,
         mut on_token: impl FnMut(&str) -> bool,
     ) -> Result<(), AppError> {
         let model = self
@@ -1105,7 +1149,7 @@ impl LlmEngine {
         let estimated_saved_ms = reused as f64 * historical_ms_per_token;
         let gen_phase_start = Instant::now();
 
-        let mut sampler = sampler_config.build(model.n_vocab());
+        let mut sampler = grammar::sampler_chain(model, sampler_config, grammar);
         let mut utf8_dec = UTF_8.new_decoder();
         let decode_special = self.chat_family.decodes_special_tokens();
         let mut normalizer = self.chat_family.normalizer();
@@ -1113,8 +1157,10 @@ impl LlmEngine {
         let mut completion_tokens = 0usize;
 
         for _ in 0..max_tokens {
+            // `llama_sampler_sample` already accepts the token into every
+            // sampler of the chain. A second `accept` would feed a grammar the
+            // token twice and break its state.
             let token = sampler.sample(&pool.entries[index].context, -1);
-            sampler.accept(token);
             if model.vocab().is_eog(token) {
                 break;
             }
@@ -1383,7 +1429,8 @@ impl LlmEngine {
     /// direct structured answer (metadata extraction). Reasoning would spend
     /// the small token limit before the answer appears, and greedy decoding
     /// inside a `<think>` block tends to loop. `session` keys the context as
-    /// in [`Self::generate_streaming_with_session`].
+    /// in [`Self::generate_streaming_with_session`]. `grammar`, when given,
+    /// constrains the answer's shape.
     pub fn generate_reasoning_off(
         &self,
         system_prompt: &str,
@@ -1391,6 +1438,7 @@ impl LlmEngine {
         max_tokens: usize,
         sampler: SamplerConfig,
         session: Option<&InferenceSession>,
+        grammar: Option<&Grammar>,
     ) -> Result<String, AppError> {
         let prompt = self.format_chat_history_reasoning_off(
             system_prompt,
@@ -1400,10 +1448,17 @@ impl LlmEngine {
             }],
         )?;
         let mut result = String::new();
-        self.generate_streaming_raw_keyed(session, &prompt, max_tokens, sampler, |token| {
-            result.push_str(token);
-            true
-        })?;
+        self.generate_streaming_raw_keyed(
+            session,
+            &prompt,
+            max_tokens,
+            sampler,
+            grammar,
+            |token| {
+                result.push_str(token);
+                true
+            },
+        )?;
         Ok(result)
     }
 
@@ -2140,5 +2195,47 @@ mod tests {
         assert!(warm.cache_hit);
         assert!(warm.reused_prompt_tokens > 0);
         println!("{}", serde_json::json!({"cold": cold, "warm": warm}));
+    }
+
+    /// Real-GGUF check for issue #555: llama.cpp accepts the generated
+    /// grammars, and constrained output parses.
+    #[test]
+    #[ignore = "requires a local GGUF model"]
+    fn grammar_constrained_extraction_and_tool_call() {
+        let path = PathBuf::from(
+            std::env::var("RAMDOC_BENCH_MODEL").expect("RAMDOC_BENCH_MODEL is required"),
+        );
+        let engine = LlmEngine::load(path, "grammar-check".into()).unwrap();
+
+        let document = "Arztbrief, 12.03.2024, Dr. med. A. Muster, Psychiatrie Bern.\n\
+                        Diagnosen: F32.1 mittelgradige depressive Episode; F41.1 generalisierte \
+                        Angststörung.\nMedikation: Sertralin 100 mg 1-0-0, Quetiapin 25 mg 0-0-1.\n\
+                        Verlauf: Stimmung stabilisiert, Schlaf verbessert.";
+        let metadata = crate::llm::extract::extract_metadata(&engine, document)
+            .expect("constrained extraction must parse");
+        println!("{metadata:?}");
+        assert!(!metadata.diagnoses.is_empty());
+
+        let grammar = Grammar::tool_call(&["get_patient", "list_patients"], false);
+        let output = engine
+            .generate_reasoning_off(
+                "Du hast die Tools get_patient(patient_id: string) und list_patients(). \
+                 Um ein Tool aufzurufen, antworte nur mit \
+                 <tool_call>{\"name\": \"tool_name\", \"args\": {...}}</tool_call>.",
+                "Liste alle Patienten auf.",
+                128,
+                SamplerConfig::from_temperature(0.0),
+                None,
+                Some(&grammar),
+            )
+            .unwrap();
+        println!("{output}");
+        let visible = crate::llm::harness::strip_think_blocks(&output);
+        let start = visible.find("<tool_call>").expect("no tool call");
+        let body = &visible[start + "<tool_call>".len()..];
+        let end = body.find("</tool_call>").expect("unclosed tool call");
+        let call: serde_json::Value = serde_json::from_str(body[..end].trim()).unwrap();
+        assert!(["get_patient", "list_patients"].contains(&call["name"].as_str().unwrap()));
+        assert!(call["args"].is_object());
     }
 }

@@ -10,6 +10,7 @@ pub mod embed;
 pub mod engine;
 pub mod evidence;
 mod extract;
+pub mod grammar;
 pub mod harness;
 pub mod inference;
 pub mod memory_governor;

@@ -3,6 +3,7 @@
 
 use super::context_cache::InferenceSession;
 use super::engine::{AgentMessage, LlmEngine};
+use super::grammar::Grammar;
 use super::harness::{self, GenerationTask};
 use super::thinking::{self, ThinkingEffort};
 use crate::database::DbPool;
@@ -40,9 +41,10 @@ pub struct ToolCallRequest {
 
 /// The router's typed interpretation of a probe completion.
 ///
-/// Keeping this decision separate from the text parser gives a future
-/// grammar-constrained/tool-router implementation one narrow replacement
-/// point.  It deliberately does not change tool dispatch or scope checks.
+/// The probe is grammar-constrained once it opens a `<tool_call>` (see
+/// [`Grammar::tool_call`]); the parser still validates the output, since the
+/// grammar is lazy and is dropped if llama.cpp rejects it. Tool dispatch and
+/// scope checks are unchanged.
 #[derive(Debug, Clone, PartialEq)]
 enum ToolDecision {
     Call(ToolCallRequest),
@@ -77,6 +79,96 @@ pub struct AgentTurnInput {
     pub thinking_effort: ThinkingEffort,
 }
 
+/// Tools the agent may call, in prompt order: the name and the rest of its
+/// prompt line (signature and description). The single source for the
+/// prompt's tool list and the probe's tool-call grammar.
+const AGENT_TOOLS: &[(&str, &str)] = &[
+    (
+        "get_patient",
+        "(patient_id: string) - Holt Patientendaten für eine gegebene ID.",
+    ),
+    (
+        "list_patients",
+        "() - Listet alle Patienten auf.",
+    ),
+    (
+        "get_calendar_events",
+        "(start?: string, end?: string, patient_id?: string) - Listet Therapiesitzungen. Datum im Format YYYY-MM-DD.",
+    ),
+    (
+        "create_calendar_event",
+        "(patient_id: string, date: string, session_type: string, duration_minutes: number, notes?: string) - Erstellt einen Vorschlag für eine neue Therapiesitzung; dieser wird erst nach ausdrücklicher Bestätigung durch den Behandler gespeichert.",
+    ),
+    (
+        "list_diagnoses",
+        "(patient_id: string) - Listet ICD-10-Diagnosen des Patienten.",
+    ),
+    (
+        "create_diagnosis",
+        "(patient_id: string, icd10_code: string, description: string, diagnosed_date: string, status?: string, notes?: string) - Erstellt nur einen Diagnosevorschlag; Speichern erfordert ausdrückliche Bestätigung durch den Behandler. status: active | resolved | chronic.",
+    ),
+    (
+        "list_medications",
+        "(patient_id: string) - Listet aktuelle Medikationen des Patienten.",
+    ),
+    (
+        "create_medication",
+        "(patient_id: string, substance: string, dosage: string, frequency: string, start_date: string, notes?: string) - Erstellt nur einen Medikationsvorschlag; Speichern erfordert ausdrückliche Bestätigung durch den Behandler (start_date: YYYY-MM-DD).",
+    ),
+    (
+        "lookup_medication_reference",
+        "(query: string) - Sucht nach Wirkstoff- oder Handelsnamen in der lokal installierten Swissmedic-AIPS-Referenz und gibt ATC-Code, Indikation, Nebenwirkungen und Kontraindikationen zurück. Nutze dieses Tool für Fragen zu einzelnen Medikamenten.",
+    ),
+    (
+        "compare_medications",
+        "(current_substance_id: string, replacement_substance_id: string) - Vergleicht zwei Medikamente anhand ihrer Kompendium-IDs. Gibt detaillierte Informationen zu beiden Medikamenten zurück (Indikation, Nebenwirkungen, Kontraindikationen) für eine fundierte Entscheidungsfindung bei Medikamentenwechsel.",
+    ),
+    (
+        "draft_email",
+        "(patient_id: string, recipient_email: string, subject: string, body: string) - Erstellt nur einen E-Mail-Vorschlag; Speichern als Entwurf erfordert ausdrückliche Bestätigung durch den Behandler. Falls die E-Mail-Adresse des Patienten fehlt (null), rufe dieses Tool NICHT auf – weise den Benutzer stattdessen darauf hin, die E-Mail-Adresse zuerst in den Patientendaten zu ergänzen.",
+    ),
+    (
+        "list_treatment_plans",
+        "(patient_id: string) - Listet Behandlungspläne des Patienten.",
+    ),
+    (
+        "search",
+        "(query: string) - Volltextsuche über Patienten, Diagnosen, Sitzungen und Berichte.",
+    ),
+    (
+        "search_literature",
+        "(query: string) - Semantische Suche in Fachliteratur (z.B. Medikamentenrichtlinien, Behandlungsleitlinien). Gibt relevante Textausschnitte zurück.",
+    ),
+    (
+        "write_report",
+        "(patient_id: string, report_type: string, session_notes?: string) - Generiert nur einen Berichtsvorschlag aus der Patientenakte, die automatisch geladen wird; Speichern erfordert ausdrückliche Bestätigung durch den Behandler. report_type: Befundbericht | Verlaufsbericht | Ueberweisungsschreiben. session_notes: nur das Anliegen oder neue Angaben des Behandlers, nicht die Akte abschreiben.",
+    ),
+];
+
+/// Tools hidden in patient scope. Dispatch blocks them too, but hiding them
+/// keeps the model from wasting an iteration on them.
+const GLOBAL_ONLY_TOOLS: &[&str] = &["list_patients"];
+
+/// Names of the tools available in `scope`, in prompt order.
+fn scope_tool_names(scope: &AgentScope) -> Vec<&'static str> {
+    AGENT_TOOLS
+        .iter()
+        .map(|(name, _)| *name)
+        .filter(|name| matches!(scope, AgentScope::Global) || !GLOBAL_ONLY_TOOLS.contains(name))
+        .collect()
+}
+
+/// The `<tools>` list of the system prompt for `scope`.
+fn tool_list(scope: &AgentScope) -> String {
+    let names = scope_tool_names(scope);
+    AGENT_TOOLS
+        .iter()
+        .filter(|(name, _)| names.contains(name))
+        .map(|(name, rest)| format!("{name}{rest}"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 /// Build a scope-specific system prompt.
 ///
 /// * In **patient scope** `list_patients` is omitted (it is blocked at tool
@@ -107,41 +199,7 @@ fn build_system_prompt_for_date(
     patient_context: Option<&str>,
     today: &str,
 ) -> String {
-    let tools = match scope {
-        AgentScope::Patient { .. } => concat!(
-            "get_patient(patient_id: string) - Holt Patientendaten für eine gegebene ID.\n",
-            "get_calendar_events(start?: string, end?: string, patient_id?: string) - Listet Therapiesitzungen. Datum im Format YYYY-MM-DD.\n",
-            "create_calendar_event(patient_id: string, date: string, session_type: string, duration_minutes: number, notes?: string) - Erstellt einen Vorschlag für eine neue Therapiesitzung; dieser wird erst nach ausdrücklicher Bestätigung durch den Behandler gespeichert.\n",
-            "list_diagnoses(patient_id: string) - Listet ICD-10-Diagnosen des Patienten.\n",
-            "create_diagnosis(patient_id: string, icd10_code: string, description: string, diagnosed_date: string, status?: string, notes?: string) - Erstellt nur einen Diagnosevorschlag; Speichern erfordert ausdrückliche Bestätigung durch den Behandler. status: active | resolved | chronic.\n",
-            "list_medications(patient_id: string) - Listet aktuelle Medikationen des Patienten.\n",
-            "create_medication(patient_id: string, substance: string, dosage: string, frequency: string, start_date: string, notes?: string) - Erstellt nur einen Medikationsvorschlag; Speichern erfordert ausdrückliche Bestätigung durch den Behandler (start_date: YYYY-MM-DD).\n",
-            "lookup_medication_reference(query: string) - Sucht nach Wirkstoff- oder Handelsnamen in der lokal installierten Swissmedic-AIPS-Referenz und gibt ATC-Code, Indikation, Nebenwirkungen und Kontraindikationen zurück. Nutze dieses Tool für Fragen zu einzelnen Medikamenten.\n",
-            "compare_medications(current_substance_id: string, replacement_substance_id: string) - Vergleicht zwei Medikamente anhand ihrer Kompendium-IDs. Gibt detaillierte Informationen zu beiden Medikamenten zurück (Indikation, Nebenwirkungen, Kontraindikationen) für eine fundierte Entscheidungsfindung bei Medikamentenwechsel.\n",
-            "draft_email(patient_id: string, recipient_email: string, subject: string, body: string) - Erstellt nur einen E-Mail-Vorschlag; Speichern als Entwurf erfordert ausdrückliche Bestätigung durch den Behandler. Falls die E-Mail-Adresse des Patienten fehlt (null), rufe dieses Tool NICHT auf – weise den Benutzer stattdessen darauf hin, die E-Mail-Adresse zuerst in den Patientendaten zu ergänzen.\n",
-            "list_treatment_plans(patient_id: string) - Listet Behandlungspläne des Patienten.\n",
-            "search(query: string) - Volltextsuche über Patienten, Diagnosen, Sitzungen und Berichte.\n",
-            "search_literature(query: string) - Semantische Suche in Fachliteratur (z.B. Medikamentenrichtlinien, Behandlungsleitlinien). Gibt relevante Textausschnitte zurück.\n",
-            "write_report(patient_id: string, report_type: string, session_notes?: string) - Generiert nur einen Berichtsvorschlag aus der Patientenakte, die automatisch geladen wird; Speichern erfordert ausdrückliche Bestätigung durch den Behandler. report_type: Befundbericht | Verlaufsbericht | Ueberweisungsschreiben. session_notes: nur das Anliegen oder neue Angaben des Behandlers, nicht die Akte abschreiben.",
-        ),
-        AgentScope::Global => concat!(
-            "get_patient(patient_id: string) - Holt Patientendaten für eine gegebene ID.\n",
-            "list_patients() - Listet alle Patienten auf.\n",
-            "get_calendar_events(start?: string, end?: string, patient_id?: string) - Listet Therapiesitzungen. Datum im Format YYYY-MM-DD.\n",
-            "create_calendar_event(patient_id: string, date: string, session_type: string, duration_minutes: number, notes?: string) - Erstellt einen Vorschlag für eine neue Therapiesitzung; dieser wird erst nach ausdrücklicher Bestätigung durch den Behandler gespeichert.\n",
-            "list_diagnoses(patient_id: string) - Listet ICD-10-Diagnosen des Patienten.\n",
-            "create_diagnosis(patient_id: string, icd10_code: string, description: string, diagnosed_date: string, status?: string, notes?: string) - Erstellt nur einen Diagnosevorschlag; Speichern erfordert ausdrückliche Bestätigung durch den Behandler. status: active | resolved | chronic.\n",
-            "list_medications(patient_id: string) - Listet aktuelle Medikationen des Patienten.\n",
-            "create_medication(patient_id: string, substance: string, dosage: string, frequency: string, start_date: string, notes?: string) - Erstellt nur einen Medikationsvorschlag; Speichern erfordert ausdrückliche Bestätigung durch den Behandler (start_date: YYYY-MM-DD).\n",
-            "lookup_medication_reference(query: string) - Sucht nach Wirkstoff- oder Handelsnamen in der lokal installierten Swissmedic-AIPS-Referenz und gibt ATC-Code, Indikation, Nebenwirkungen und Kontraindikationen zurück. Nutze dieses Tool für Fragen zu einzelnen Medikamenten.\n",
-            "compare_medications(current_substance_id: string, replacement_substance_id: string) - Vergleicht zwei Medikamente anhand ihrer Kompendium-IDs. Gibt detaillierte Informationen zu beiden Medikamenten zurück (Indikation, Nebenwirkungen, Kontraindikationen) für eine fundierte Entscheidungsfindung bei Medikamentenwechsel.\n",
-            "draft_email(patient_id: string, recipient_email: string, subject: string, body: string) - Erstellt nur einen E-Mail-Vorschlag; Speichern als Entwurf erfordert ausdrückliche Bestätigung durch den Behandler. Falls die E-Mail-Adresse des Patienten fehlt (null), rufe dieses Tool NICHT auf – weise den Benutzer stattdessen darauf hin, die E-Mail-Adresse zuerst in den Patientendaten zu ergänzen.\n",
-            "list_treatment_plans(patient_id: string) - Listet Behandlungspläne des Patienten.\n",
-            "search(query: string) - Volltextsuche über Patienten, Diagnosen, Sitzungen und Berichte.\n",
-            "search_literature(query: string) - Semantische Suche in Fachliteratur (z.B. Medikamentenrichtlinien, Behandlungsleitlinien). Gibt relevante Textausschnitte zurück.\n",
-            "write_report(patient_id: string, report_type: string, session_notes?: string) - Generiert nur einen Berichtsvorschlag aus der Patientenakte, die automatisch geladen wird; Speichern erfordert ausdrückliche Bestätigung durch den Behandler. report_type: Befundbericht | Verlaufsbericht | Ueberweisungsschreiben. session_notes: nur das Anliegen oder neue Angaben des Behandlers, nicht die Akte abschreiben.",
-        ),
-    };
+    let tools = tool_list(scope);
 
     let patient_section = match (scope, patient_context) {
         (AgentScope::Patient { patient_id }, Some(ctx)) => format!(
@@ -600,14 +658,20 @@ pub fn run_agent_loop(
         // The probe stops as soon as its output can no longer be a tool call,
         // so a direct answer costs a few tokens instead of `max_tokens`.
         let starts_in_think = prompt.trim_end().ends_with(THINK_OPEN);
+        // Once the probe opens a `<tool_call>`, the grammar holds it to a
+        // well-formed call of a tool in this scope (#555). Free text stays
+        // unconstrained; the stop rule ends it.
+        let tool_names = scope_tool_names(&scope);
+        let tool_grammar = Grammar::tool_call(&tool_names, starts_in_think);
         let mut probe_output = String::new();
         let mut probe_tokens = 0_usize;
         let probe_started = std::time::Instant::now();
-        let probe_result = probe_engine.generate_streaming_session_with_sampler(
+        let probe_result = probe_engine.generate_streaming_session_with_grammar(
             &inference_session,
             &prompt,
             probe_profile.max_tokens,
             probe_profile.sampler,
+            Some(&tool_grammar),
             |token| {
                 probe_tokens += 1;
                 probe_output.push_str(token);
@@ -634,11 +698,14 @@ pub fn run_agent_loop(
                     .native_assistant_prefix(&probe_output)
             );
             let mut visible = String::new();
-            probe_engine.continue_streaming_session_with_sampler(
+            // The continuation starts after the closed block.
+            let recovery_grammar = Grammar::tool_call(&tool_names, false);
+            probe_engine.continue_streaming_session_with_grammar(
                 &inference_session,
                 &continued,
                 PROBE_RECOVERY_MAX_TOKENS,
                 probe_profile.sampler,
+                Some(&recovery_grammar),
                 |token| {
                     probe_tokens += 1;
                     visible.push_str(token);
@@ -985,6 +1052,58 @@ mod tests {
             "<tool_result>[]</tool_result>\n\nHinweis."
         );
         assert_eq!(with_turn_instruction(&history, ""), history);
+    }
+
+    #[test]
+    fn patient_scope_hides_global_only_tools() {
+        let patient = AgentScope::Patient {
+            patient_id: "p1".into(),
+        };
+        let global_names = scope_tool_names(&AgentScope::Global);
+        let patient_names = scope_tool_names(&patient);
+        assert_eq!(global_names.len(), AGENT_TOOLS.len());
+        assert!(global_names.contains(&"list_patients"));
+        assert!(!patient_names.contains(&"list_patients"));
+        assert_eq!(patient_names.len(), global_names.len() - 1);
+
+        let prompt = build_system_prompt_for_date(&patient, None, "2026-11-23");
+        assert!(!prompt.contains("list_patients("));
+        assert!(
+            build_system_prompt_for_date(&AgentScope::Global, None, "2026-11-23")
+                .contains("\nlist_patients() - Listet alle Patienten auf.\n")
+        );
+    }
+
+    #[test]
+    fn prompt_and_tool_grammar_list_the_same_tools() {
+        for scope in [
+            AgentScope::Global,
+            AgentScope::Patient {
+                patient_id: "p1".into(),
+            },
+        ] {
+            let names = scope_tool_names(&scope);
+            let listed: Vec<_> = tool_list(&scope)
+                .lines()
+                .map(|line| line.split('(').next().unwrap())
+                .collect();
+            assert_eq!(listed, names);
+
+            let grammar = Grammar::tool_call(&names, false);
+            let rule = grammar
+                .gbnf()
+                .lines()
+                .find(|line| line.starts_with("tool-name ::="))
+                .unwrap();
+            for (name, _) in AGENT_TOOLS {
+                let literal = format!(r#""\"{name}\"""#);
+                assert_eq!(
+                    rule.contains(&literal),
+                    names.contains(name),
+                    "{name} in {scope:?}"
+                );
+            }
+        }
     }
 
     #[test]
