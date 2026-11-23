@@ -158,7 +158,14 @@ pub async fn run_agent_turn(
             .iter()
             .map(|m| AgentMessage {
                 role: m.role.clone(),
-                content: m.content.clone(),
+                // Tool results are persisted in full (#552); feed the model
+                // the same bounded, structurally shortened form it saw in
+                // the turn that produced them.
+                content: if m.role == "tool_result" {
+                    crate::llm::tool_result::model_facing(&m.content)
+                } else {
+                    m.content.clone()
+                },
             })
             .collect();
 
