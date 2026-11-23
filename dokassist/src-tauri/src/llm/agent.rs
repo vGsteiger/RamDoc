@@ -5,7 +5,6 @@ use super::context_cache::InferenceSession;
 use super::engine::{AgentMessage, LlmEngine};
 use super::harness::{self, GenerationTask};
 use super::thinking::{self, ThinkingEffort};
-use super::utf8;
 use crate::database::DbPool;
 use crate::error::AppError;
 use serde::{Deserialize, Serialize};
@@ -15,8 +14,6 @@ use tauri::Emitter;
 /// Maximum tool-call iterations per agent turn before forcing a final answer.
 const MAX_ITERATIONS: usize = 8;
 
-/// Maximum chars of a tool result that are fed back into the LLM.
-const TOOL_RESULT_TRIM: usize = 4_000;
 /// Tokens budget for the summarization call itself.
 const SUMMARY_MAX_TOKENS: usize = 512;
 /// Rough estimate: 1 token ≈ 3 UTF-8 bytes (conservative for German medical text).
@@ -517,18 +514,15 @@ pub fn run_agent_loop(
                 super::tools::dispatch_tool(&conn, app, engine, &scope, &call, thinking_effort)
             };
 
+            // The full result is what the UI, persistence and draft versions
+            // consume (a `write_report` proposal carries the whole report).
+            // Only the model-facing copy in `history` is shortened, and that
+            // structurally, so it stays valid JSON (#552).
             let result_json = match result {
-                Ok(val) => {
-                    let s = val.to_string();
-                    if s.len() > TOOL_RESULT_TRIM {
-                        let end = utf8::find_boundary_backward(&s, TOOL_RESULT_TRIM);
-                        s[..end].to_string()
-                    } else {
-                        s
-                    }
-                }
+                Ok(val) => val.to_string(),
                 Err(e) => serde_json::json!({"error": e.to_string()}).to_string(),
             };
+            let model_result_json = super::tool_result::model_facing(&result_json);
 
             let _ = app.emit(
                 "agent-tool-called",
@@ -556,7 +550,7 @@ pub fn run_agent_loop(
             });
             history.push(AgentMessage {
                 role: "tool_result".to_string(),
-                content: format!("<tool_result>{}</tool_result>", result_json),
+                content: format!("<tool_result>{}</tool_result>", model_result_json),
             });
         } else {
             // No tool call — this is the final answer. Stream it with the

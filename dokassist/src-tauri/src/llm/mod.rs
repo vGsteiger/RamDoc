@@ -24,6 +24,7 @@ mod report;
 pub mod router;
 pub mod sanitize;
 pub mod thinking;
+pub mod tool_result;
 pub mod tools;
 pub mod utf8;
 
