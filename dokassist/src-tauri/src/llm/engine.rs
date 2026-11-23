@@ -1,7 +1,7 @@
 use super::chat_format::ChatFamily;
 use super::context_cache::{
-    checkpoint_for_prefix, checkpoint_position, reusable_prefix, ContextCacheTelemetry, ContextKey,
-    InferenceSession,
+    checkpoint_for_prefix, checkpoint_position, plan_slot, reusable_prefix, ContextCacheTelemetry,
+    ContextKey, InferenceSession, SessionKind, SlotAction,
 };
 use super::download;
 use super::harness::SamplerConfig;
@@ -9,7 +9,7 @@ use super::inference::{
     validate_context_budget, FlashAttentionMode, InferenceDiagnostics, InferenceProfile,
     KvCacheQuantization,
 };
-use super::memory_governor::{MemoryGovernor, MemoryGovernorDiagnostics};
+use super::memory_governor::{MemoryEstimate, MemoryGovernor, MemoryGovernorDiagnostics};
 use super::thinking::ThinkingEffort;
 use crate::error::AppError;
 use encoding_rs::UTF_8;
@@ -54,6 +54,10 @@ pub struct GenerationStats {
     pub estimated_prefill_saved_ms: f64,
     pub total_latency_ms: f64,
     pub peak_rss_bytes: u64,
+    /// Workload class of the generation, so cache hit rates can be split
+    /// between agent conversations and one-off generations.
+    #[serde(default)]
+    pub session_kind: SessionKind,
 }
 
 struct CachedContext {
@@ -125,6 +129,9 @@ pub struct LlmEngine {
     inference: Mutex<InferenceRuntime>,
     model_hash: String,
     chat_template_hash: String,
+    /// Sizes the context pool from the per-context memory estimate.
+    governor: MemoryGovernor,
+    total_ram: u64,
     backend: LlamaBackend,
     last_stats: Mutex<Option<GenerationStats>>,
 }
@@ -337,8 +344,15 @@ impl LlmEngine {
             String::from_utf8_lossy(chat_template.as_c_str().to_bytes()).contains("<think>");
         log::info!("Chat family for '{model_name}': {chat_family:?}");
 
+        let max_contexts = context_pool_capacity(
+            ram,
+            &governor_diagnostics.estimate,
+            governor_diagnostics.inference_budget_bytes,
+        );
+        log::info!("LLM context pool capacity: {max_contexts}");
+
         Ok(Self {
-            contexts: Mutex::new(ContextPool::new(max_persistent_contexts_for_ram(ram))),
+            contexts: Mutex::new(ContextPool::new(max_contexts)),
             backend,
             model: Some(model),
             model_path,
@@ -356,8 +370,19 @@ impl LlmEngine {
             }),
             model_hash,
             chat_template_hash,
+            governor,
+            total_ram: ram,
             last_stats: Mutex::new(None),
         })
+    }
+
+    /// Contexts the pool may keep resident for `profile`.
+    fn pool_capacity(&self, profile: &InferenceProfile) -> usize {
+        context_pool_capacity(
+            self.total_ram,
+            &self.governor.estimate(profile),
+            self.governor.inference_budget_bytes(),
+        )
     }
 
     fn context_params(profile: &InferenceProfile) -> LlamaContextParams {
@@ -660,6 +685,7 @@ impl LlmEngine {
                     estimated_prefill_saved_ms: 0.0,
                     total_latency_ms: wall_start.elapsed().as_secs_f64() * 1000.0,
                     peak_rss_bytes: peak_rss_bytes(),
+                    session_kind: SessionKind::OneOff,
                 });
             }
         }
@@ -773,6 +799,7 @@ impl LlmEngine {
             conversation_id: session.conversation_id.clone(),
             patient_id: session.patient_id.clone(),
             patient_revision: session.patient_revision.clone(),
+            kind: session.kind,
         }
     }
 
@@ -848,56 +875,88 @@ impl LlmEngine {
 
         // Holding this guard is the context lease. It serializes inference and
         // context creation, bounding transient model/KV memory during swaps.
-        let mut pool = self
+        let mut lease = self
             .contexts
             .lock()
             .map_err(|_| AppError::Llm("Inference context pool mutex poisoned".to_string()))?;
+        let pool = &mut *lease;
         pool.clock = pool.clock.wrapping_add(1);
         let use_clock = pool.clock;
 
-        let stale = pool
-            .entries
-            .iter()
-            .filter(|entry| entry.key.same_logical_context(&key) && entry.key != key)
-            .count();
-        if stale > 0 {
-            pool.entries
-                .retain(|entry| !entry.key.same_logical_context(&key) || entry.key == key);
-            pool.telemetry.invalidations += stale as u64;
-        }
+        let plan = {
+            let resident: Vec<(&ContextKey, u64)> = pool
+                .entries
+                .iter()
+                .map(|entry| (&entry.key, entry.last_used))
+                .collect();
+            plan_slot(&resident, &key, pool.telemetry.max_contexts)
+        };
 
-        let entry_found = pool.entries.iter().any(|entry| entry.key == key);
-        let index = if let Some(index) = pool.entries.iter().position(|entry| entry.key == key) {
-            index
-        } else {
-            while pool.entries.len() >= pool.telemetry.max_contexts.max(1) {
-                if let Some((oldest, _)) = pool
-                    .entries
-                    .iter()
-                    .enumerate()
-                    .min_by_key(|(_, entry)| entry.last_used)
-                {
+        for &evicted in &plan.evict {
+            count_departure(&mut pool.telemetry, &pool.entries[evicted].key, &key);
+        }
+        for &evicted in plan.evict.iter().rev() {
+            pool.entries.remove(evicted);
+        }
+        let shifted = |index: usize| index - plan.evict.iter().filter(|&&e| e < index).count();
+
+        let index = match plan.action {
+            SlotAction::Hit(index) => shifted(index),
+            SlotAction::Reuse { index, keep_prefix } => {
+                // Same runtime profile: re-key the allocation instead of
+                // freeing it and allocating a new KV cache and compute buffers.
+                let index = shifted(index);
+                let entry = &mut pool.entries[index];
+                count_departure(&mut pool.telemetry, &entry.key, &key);
+                if !keep_prefix {
+                    entry.context.clear_kv_cache();
+                    entry.tokens.clear();
+                    entry.checkpoints.clear();
+                }
+                entry.key = key;
+                pool.telemetry.context_allocations_reused += 1;
+                index
+            }
+            SlotAction::Create => {
+                let context = self.create_context(model)?;
+                // SAFETY: the model is boxed, so its address remains stable. The
+                // context pool is declared before `model`, guaranteeing contexts
+                // are dropped first, and access is serialized by the pool mutex.
+                let context = unsafe {
+                    std::mem::transmute::<LlamaContext<'_>, LlamaContext<'static>>(context)
+                };
+                pool.telemetry.contexts_created += 1;
+                // Context creation may have selected a safe fallback profile.
+                let runtime = self.inference_runtime()?;
+                key = self.context_key(session, &runtime);
+                // After a fallback no future key can match an older entry's
+                // KV layout, and the pool size is re-derived for the new one.
+                let resident_before = pool.entries.len();
+                pool.entries
+                    .retain(|entry| entry.key.same_runtime_profile(&key));
+                pool.telemetry.evictions += (resident_before - pool.entries.len()) as u64;
+                pool.telemetry.max_contexts = self.pool_capacity(&runtime.profile);
+                while pool.entries.len() >= pool.telemetry.max_contexts.max(1) {
+                    let Some((oldest, _)) = pool
+                        .entries
+                        .iter()
+                        .enumerate()
+                        .min_by_key(|(_, entry)| entry.last_used)
+                    else {
+                        break;
+                    };
                     pool.entries.remove(oldest);
                     pool.telemetry.evictions += 1;
                 }
+                pool.entries.push(CachedContext {
+                    context,
+                    tokens: Vec::new(),
+                    key,
+                    last_used: use_clock,
+                    checkpoints: Vec::new(),
+                });
+                pool.entries.len() - 1
             }
-
-            let context = self.create_context(model)?;
-            // SAFETY: the model is boxed, so its address remains stable. The
-            // context pool is declared before `model`, guaranteeing contexts
-            // are dropped first, and access is serialized by the pool mutex.
-            let context =
-                unsafe { std::mem::transmute::<LlamaContext<'_>, LlamaContext<'static>>(context) };
-            // Context creation may have selected a safe fallback profile.
-            key = self.context_key(session, &self.inference_runtime()?);
-            pool.entries.push(CachedContext {
-                context,
-                tokens: Vec::new(),
-                key,
-                last_used: use_clock,
-                checkpoints: Vec::new(),
-            });
-            pool.entries.len() - 1
         };
 
         pool.entries[index].last_used = use_clock;
@@ -928,10 +987,11 @@ impl LlmEngine {
         pool.entries[index]
             .checkpoints
             .retain(|checkpoint| checkpoint.n_tokens <= reused);
-        // A resident entry is only a real cache hit when at least one prompt
-        // token survives validation and rollback. This keeps UI and telemetry
+        // A context is only a real cache hit when at least one prompt token
+        // survives validation and rollback (a re-keyed context of the same
+        // patient record may keep one too). This keeps UI and telemetry
         // aligned with actual prefill work avoided.
-        let cache_hit = entry_found && reused > 0;
+        let cache_hit = reused > 0;
         if cache_hit {
             pool.telemetry.hits += 1;
         } else {
@@ -1054,6 +1114,7 @@ impl LlmEngine {
                 estimated_prefill_saved_ms: estimated_saved_ms,
                 total_latency_ms: wall_start.elapsed().as_secs_f64() * 1000.0,
                 peak_rss_bytes: peak_rss_bytes(),
+                session_kind: session.kind,
             });
         }
         Ok(())
@@ -1173,6 +1234,7 @@ impl LlmEngine {
                     estimated_prefill_saved_ms: 0.0,
                     total_latency_ms: wall_start.elapsed().as_secs_f64() * 1000.0,
                     peak_rss_bytes: peak_rss_bytes(),
+                    session_kind: SessionKind::OneOff,
                 });
             }
         }
@@ -1393,6 +1455,23 @@ fn max_persistent_contexts_for_ram(ram: u64) -> usize {
     }
 }
 
+/// Contexts the pool may keep resident: two when the governor's estimate
+/// leaves room for a second KV cache and compute buffer in the inference
+/// budget (so a one-off generation does not evict the open chat), and never
+/// fewer than the RAM tier allows.
+fn context_pool_capacity(ram: u64, estimate: &MemoryEstimate, budget_bytes: u64) -> usize {
+    let with_second_context = estimate
+        .total_bytes
+        .saturating_add(estimate.kv_cache_bytes)
+        .saturating_add(estimate.graph_bytes);
+    let governed = if with_second_context <= budget_bytes {
+        2
+    } else {
+        1
+    };
+    governed.max(max_persistent_contexts_for_ram(ram))
+}
+
 fn is_selectable_metal_device(backend: &str, name: &str) -> bool {
     backend.eq_ignore_ascii_case("metal") || name.to_ascii_lowercase().starts_with("mtl")
 }
@@ -1432,6 +1511,17 @@ fn peak_rss_bytes() -> u64 {
     #[cfg(not(target_os = "macos"))]
     {
         rss.saturating_mul(1024)
+    }
+}
+
+/// Record a context leaving its key: a stale entry of the same conversation
+/// (outdated record revision or configuration) is an invalidation, any other
+/// an eviction.
+fn count_departure(telemetry: &mut ContextCacheTelemetry, departed: &ContextKey, key: &ContextKey) {
+    if departed.same_logical_context(key) {
+        telemetry.invalidations += 1;
+    } else {
+        telemetry.evictions += 1;
     }
 }
 
@@ -1580,6 +1670,23 @@ mod tests {
         assert_eq!(max_persistent_contexts_for_ram(16 * GB), 1);
         assert_eq!(max_persistent_contexts_for_ram(32 * GB), 1);
         assert_eq!(max_persistent_contexts_for_ram(48 * GB), 2);
+    }
+
+    #[test]
+    fn pool_holds_a_second_context_only_when_the_budget_covers_it() {
+        const GB: u64 = 1024 * 1024 * 1024;
+        let estimate = MemoryEstimate {
+            weights_bytes: 6 * GB,
+            kv_cache_bytes: 2 * GB,
+            graph_bytes: GB,
+            runtime_bytes: GB,
+            total_bytes: 10 * GB,
+        };
+        // A second context needs another KV cache and compute buffer: 13 GiB.
+        assert_eq!(context_pool_capacity(16 * GB, &estimate, 12 * GB), 1);
+        assert_eq!(context_pool_capacity(32 * GB, &estimate, 13 * GB), 2);
+        // The RAM tier remains a floor.
+        assert_eq!(context_pool_capacity(48 * GB, &estimate, 12 * GB), 2);
     }
 
     #[test]
@@ -1763,6 +1870,78 @@ mod tests {
             assert_eq!(after.invalidations, before.invalidations);
             assert!(answer.cache_hit);
             assert!(answer.reused_prompt_tokens >= engine.count_tokens(&base) / 2);
+        }
+    }
+
+    /// Real-GGUF check for issue #548: one-off generations between two chat
+    /// turns never allocate a context for an unchanged profile. With a
+    /// one-context pool they re-key the chat's allocation; with two they
+    /// take the second slot and the chat's next turn is still a cache hit.
+    #[test]
+    #[ignore = "requires a local GGUF model"]
+    fn one_off_between_chat_turns_reuses_the_allocation() {
+        let path = PathBuf::from(
+            std::env::var("RAMDOC_BENCH_MODEL").expect("RAMDOC_BENCH_MODEL is required"),
+        );
+        let engine = LlmEngine::load(path, "reuse-check".into()).unwrap();
+        let system = format!(
+            "Sie sind ein klinischer Assistent.\n{}",
+            "Patientendaten: Sertralin 100 mg 1-0-0, Schlafstörung, Grübeln. ".repeat(60)
+        );
+        let prompt = engine
+            .format_chat_history(
+                &system,
+                &[AgentMessage {
+                    role: "user".into(),
+                    content: "Welche Dosis ist dokumentiert?".into(),
+                }],
+            )
+            .unwrap();
+        let session = InferenceSession::agent(
+            "reuse-check",
+            Some("patient-a".into()),
+            Some("revision-1".into()),
+        );
+        let chat_turn = || {
+            engine
+                .generate_streaming_session_with_sampler(
+                    &session,
+                    &prompt,
+                    8,
+                    SamplerConfig::from_temperature(0.0),
+                    |_| true,
+                )
+                .unwrap();
+            engine.last_generation_stats().unwrap()
+        };
+
+        chat_turn();
+        for report in ["Bericht A", "Bericht B"] {
+            engine
+                .generate("Fasse kurz zusammen.", report, 8, 0.0)
+                .unwrap();
+            assert_eq!(
+                engine.last_generation_stats().unwrap().session_kind,
+                SessionKind::OneOff
+            );
+        }
+        let second_turn = chat_turn();
+        let telemetry = engine.contexts.lock().unwrap().telemetry.clone();
+        println!(
+            "{}",
+            serde_json::json!({ "telemetry": telemetry, "turn": second_turn })
+        );
+
+        assert_eq!(second_turn.session_kind, SessionKind::Conversation);
+        if telemetry.max_contexts >= 2 {
+            // Chat and one-off each hold a slot; the second one-off re-keys
+            // the first one's slot instead of the chat's.
+            assert_eq!(telemetry.contexts_created, 2);
+            assert_eq!(telemetry.context_allocations_reused, 1);
+            assert!(second_turn.cache_hit);
+        } else {
+            assert_eq!(telemetry.contexts_created, 1);
+            assert_eq!(telemetry.context_allocations_reused, 3);
         }
     }
 
