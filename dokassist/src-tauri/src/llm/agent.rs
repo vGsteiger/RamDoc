@@ -1,7 +1,7 @@
 //! Agentic loop: the LLM can call tools (patient data, calendar, search, reports)
 //! and converses with the user over multiple turns.
 
-use super::context_cache::InferenceSession;
+use super::context_cache::{InferenceSession, PrefixProbe, StaticPrefix, AGENT_PROMPT_VERSION};
 use super::engine::{AgentMessage, LlmEngine};
 use super::grammar::Grammar;
 use super::harness::{self, GenerationTask};
@@ -194,13 +194,11 @@ fn build_system_prompt(scope: &AgentScope, patient_context: Option<&str>) -> Str
     build_system_prompt_for_date(scope, patient_context, &today)
 }
 
-fn build_system_prompt_for_date(
+pub(crate) fn build_system_prompt_for_date(
     scope: &AgentScope,
     patient_context: Option<&str>,
     today: &str,
 ) -> String {
-    let tools = tool_list(scope);
-
     let patient_section = match (scope, patient_context) {
         (AgentScope::Patient { patient_id }, Some(ctx)) => format!(
             "\n\nDu arbeitest im Kontext von Patient-ID: {patient_id}.\n\
@@ -211,7 +209,13 @@ fn build_system_prompt_for_date(
         }
         _ => String::new(),
     };
+    compose_system_prompt(scope, &patient_section, today)
+}
 
+/// The system prompt: the static part for `scope` (persona, tools,
+/// tool-call format), then `patient_section` and the date.
+fn compose_system_prompt(scope: &AgentScope, patient_section: &str, today: &str) -> String {
+    let tools = tool_list(scope);
     format!(
         "Du bist DokAssist, ein hilfreicher medizinischer Assistent für psychiatrische Praxen.\n\
          Du antwortest auf Deutsch und hast Zugriff auf folgende Tools:\n\n\
@@ -222,6 +226,34 @@ fn build_system_prompt_for_date(
          WICHTIG: Gib bei tool_call-Antworten KEINEN anderen Text aus – nur den Block.{patient_section}\n\n\
          Heutiges Datum: {today}."
     )
+}
+
+/// The static prefix of every system prompt in `scope` (#551): persona,
+/// tools and tool-call format. Its two probes contain no patient data: one
+/// continues with the date line (as global-scope prompts do), the other with
+/// a dummy patient section, so their common token prefix ends exactly where
+/// any patient's section or the date begins. The engine snapshots that
+/// prefix once and seeds every new conversation in the scope from it.
+pub(crate) fn static_prefix(scope: &AgentScope) -> StaticPrefix {
+    let family = match scope {
+        AgentScope::Global => "agent:global",
+        AgentScope::Patient { .. } => "agent:patient",
+    };
+    let probe = |patient_section: &str, today: &str| PrefixProbe {
+        system: compose_system_prompt(scope, patient_section, today),
+        user: "?".to_string(),
+    };
+    StaticPrefix {
+        family: family.to_string(),
+        prompt_version: AGENT_PROMPT_VERSION.to_string(),
+        probes: [
+            probe("", "1970-01-01"),
+            probe(
+                "\n\nDu arbeitest im Kontext von Patient-ID: 0.",
+                "2099-12-31",
+            ),
+        ],
+    }
 }
 
 /// The conversation with a per-call instruction attached to its final turn.
@@ -589,6 +621,7 @@ pub fn run_agent_loop(
         thinking_effort,
     } = input;
     let session_id = inference_session.conversation_id.clone();
+    let inference_session = inference_session.with_static_prefix(Some(static_prefix(&scope)));
     let system_prompt = build_system_prompt(&scope, patient_context.as_deref());
     let probe_profile = GenerationTask::ToolProbe.profile(thinking_effort);
     // The answer uses the writing model's family defaults; the probe sampler is
@@ -1017,6 +1050,52 @@ mod tests {
         assert!(monday.find("<tools>").unwrap() < date_line);
         assert!(monday.find("Patientendaten").unwrap() < date_line);
         assert!(monday.trim_end().ends_with("Heutiges Datum: 2026-11-23."));
+    }
+
+    /// Common character prefix of two strings.
+    fn common_prefix<'a>(left: &'a str, right: &str) -> &'a str {
+        let len = left
+            .char_indices()
+            .zip(right.chars())
+            .find(|((_, l), r)| l != r)
+            .map(|((index, _), _)| index)
+            .unwrap_or_else(|| left.len().min(right.len()));
+        &left[..len]
+    }
+
+    #[test]
+    fn static_prefix_holds_no_patient_data_and_starts_every_prompt() {
+        use crate::llm::context_cache::contains_patient_marker;
+
+        let patient = AgentScope::Patient {
+            patient_id: "patient-42".into(),
+        };
+        for scope in [AgentScope::Global, patient.clone()] {
+            let prefix = static_prefix(&scope);
+            let shared = common_prefix(&prefix.probes[0].system, &prefix.probes[1].system);
+            assert!(!contains_patient_marker(shared), "{shared}");
+            assert!(!shared.contains("patient-42"));
+            assert!(!shared.contains("Heutiges Datum"));
+            assert!(shared.contains("</tools>"));
+            assert!(shared.trim_end().ends_with("nur den Block."));
+            assert_eq!(prefix.probes[0].user, prefix.probes[1].user);
+
+            for context in [None, Some("{\"name\":\"Erika Muster\"}")] {
+                let prompt = build_system_prompt_for_date(&scope, context, "2026-11-23");
+                assert!(prompt.starts_with(shared));
+            }
+        }
+        assert_ne!(
+            static_prefix(&AgentScope::Global).family,
+            static_prefix(&patient).family
+        );
+        // Every patient shares the patient-scope prefix.
+        assert_eq!(
+            static_prefix(&patient),
+            static_prefix(&AgentScope::Patient {
+                patient_id: "other".into()
+            })
+        );
     }
 
     #[test]

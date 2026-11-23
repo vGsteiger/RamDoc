@@ -75,9 +75,62 @@ pub struct InferenceSession {
     pub prompt_version: String,
     pub adapter_hash: String,
     pub kind: SessionKind,
+    /// The patient-free static part this session's prompts start with, if
+    /// the caller declared one. It does not change the context key; the
+    /// engine uses it to seed an empty context from a snapshot.
+    pub static_prefix: Option<StaticPrefix>,
+}
+
+/// Prompt version of [`StaticPrefix`]es built from the fixed one-off system
+/// prompts (`SYSTEM_PROMPT_DE`/`FR`).
+pub const SYSTEM_PROMPT_VERSION: &str = "system-v1";
+
+/// Text that starts patient-specific prompt content. A static prefix must
+/// never contain it; the engine refuses to snapshot one that does.
+pub(crate) const PATIENT_SECTION_MARKERS: &[&str] = &[
+    "Du arbeitest im Kontext von Patient-ID",
+    "Aktuelle Patientendaten",
+];
+
+/// Whether `text` contains the start of a patient section.
+pub(crate) fn contains_patient_marker(text: &str) -> bool {
+    PATIENT_SECTION_MARKERS
+        .iter()
+        .any(|marker| text.contains(marker))
+}
+
+/// One patient-free chat used to locate a static prefix.
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct PrefixProbe {
+    pub system: String,
+    pub user: String,
+}
+
+/// The static part of a family of prompts (agent persona, tools and
+/// tool-call format for one scope, or a fixed one-off system prompt).
+///
+/// It is declared by two probe chats that are identical up to the end of
+/// the static part and differ right after it, and contain no patient data.
+/// The engine formats both with the model's chat template, tokenizes them
+/// and takes their common token prefix ([`static_prefix_len`]), so the
+/// boundary follows the template without parsing it.
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct StaticPrefix {
+    /// Scope or task family, e.g. `agent:patient` or `system:de`.
+    pub family: String,
+    pub prompt_version: String,
+    pub probes: [PrefixProbe; 2],
 }
 
 impl InferenceSession {
+    /// Declare the static prefix this session's prompts start with.
+    pub fn with_static_prefix(mut self, static_prefix: Option<StaticPrefix>) -> Self {
+        if static_prefix.is_some() {
+            self.static_prefix = static_prefix;
+        }
+        self
+    }
+
     pub fn agent(
         conversation_id: impl Into<String>,
         patient_id: Option<String>,
@@ -90,6 +143,7 @@ impl InferenceSession {
             prompt_version: AGENT_PROMPT_VERSION.to_string(),
             adapter_hash: "none".to_string(),
             kind: SessionKind::Conversation,
+            static_prefix: None,
         }
     }
 
@@ -105,6 +159,7 @@ impl InferenceSession {
             prompt_version: ONE_OFF_PROMPT_VERSION.to_string(),
             adapter_hash: "none".to_string(),
             kind: SessionKind::OneOff,
+            static_prefix: None,
         }
     }
 
@@ -127,6 +182,7 @@ impl InferenceSession {
             prompt_version: "raw-v1".to_string(),
             adapter_hash: "none".to_string(),
             kind: SessionKind::OneOff,
+            static_prefix: None,
         }
     }
 }
@@ -199,6 +255,15 @@ pub struct ContextCacheTelemetry {
     /// runtime profile instead of freeing it and allocating a new one.
     #[serde(default)]
     pub context_allocations_reused: u64,
+    /// Contexts seeded from a static-prefix snapshot instead of prefilling
+    /// the system/tool prefix again (see [`PrefixSnapshotStore`]).
+    #[serde(default)]
+    pub prefix_snapshot_restores: u64,
+    #[serde(default)]
+    pub prefix_snapshots_created: u64,
+    /// Bytes currently held by static-prefix snapshots, in memory only.
+    #[serde(default)]
+    pub prefix_snapshot_bytes: u64,
 }
 
 /// How to serve a key from the resident contexts.
@@ -311,6 +376,204 @@ pub(crate) fn reusable_prefix<T: PartialEq>(cached: &[T], requested: &[T]) -> us
         // Sampling reads the logits from the last decoded token. Re-evaluate
         // that token so rollback never samples stale logits from a completion.
         .saturating_sub(1)
+}
+
+/// Segment boundaries for prefilling `tokens[reused..len]`, split at each
+/// cut strictly inside that range (checkpoint or snapshot positions), so
+/// state can be captured between segments. Ascending, starting at `reused`
+/// and ending at `len`.
+pub(crate) fn prefill_bounds(reused: usize, len: usize, cuts: &[Option<usize>]) -> Vec<usize> {
+    let mut bounds = vec![reused];
+    bounds.extend(
+        cuts.iter()
+            .flatten()
+            .copied()
+            .filter(|&at| at > reused && at < len),
+    );
+    bounds.push(len.max(reused));
+    bounds.sort_unstable();
+    bounds.dedup();
+    bounds
+}
+
+/// Length of the static prefix shared by two probe prompts: their common
+/// token prefix minus one. The last common token may still merge with what
+/// follows it in a real prompt, and a restored prefix must leave at least
+/// one prompt token to decode so sampling reads fresh logits.
+pub(crate) fn static_prefix_len<T: PartialEq>(left: &[T], right: &[T]) -> usize {
+    reusable_prefix(left, right)
+}
+
+/// Contexts with this key can restore each other's static-prefix snapshots:
+/// every input that changes the tokens or the KV layout of the prefix, and
+/// no patient or conversation identity (the prefix holds no patient data).
+/// llama.cpp rejects a state restored into another `n_ctx` or KV type with a
+/// size mismatch, so the runtime profile is part of the key.
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub(crate) struct PrefixSnapshotKey {
+    pub model_hash: String,
+    pub chat_template_hash: String,
+    pub prompt_version: String,
+    pub adapter_hash: String,
+    pub context_size: usize,
+    pub batch_size: u32,
+    pub kv_config_hash: String,
+    pub family: String,
+}
+
+impl PrefixSnapshotKey {
+    pub fn new(context: &ContextKey, prefix: &StaticPrefix) -> Self {
+        Self {
+            model_hash: context.model_hash.clone(),
+            chat_template_hash: context.chat_template_hash.clone(),
+            prompt_version: prefix.prompt_version.clone(),
+            adapter_hash: context.adapter_hash.clone(),
+            context_size: context.context_size,
+            batch_size: context.batch_size,
+            kv_config_hash: context.kv_config_hash.clone(),
+            family: prefix.family.clone(),
+        }
+    }
+
+    /// Whether a context keyed `context` has the runtime profile this
+    /// snapshot was captured with.
+    pub fn same_runtime_profile(&self, context: &ContextKey) -> bool {
+        self.model_hash == context.model_hash
+            && self.chat_template_hash == context.chat_template_hash
+            && self.adapter_hash == context.adapter_hash
+            && self.context_size == context.context_size
+            && self.batch_size == context.batch_size
+            && self.kv_config_hash == context.kv_config_hash
+    }
+}
+
+/// Snapshots kept per key. Two, because families whose chat header depends
+/// on the reasoning effort (Gemma 4, Harmony) start the probe and the answer
+/// with different prefixes.
+pub(crate) const MAX_PREFIX_SNAPSHOTS_PER_KEY: usize = 2;
+/// Snapshots kept in total, across scopes and task families.
+pub(crate) const MAX_PREFIX_SNAPSHOTS: usize = 4;
+
+pub(crate) struct PrefixSnapshot<T, S> {
+    pub key: PrefixSnapshotKey,
+    /// The prefix tokens; the state is sequence 0 right after them.
+    pub tokens: Vec<T>,
+    pub state: S,
+    pub bytes: usize,
+    last_used: u64,
+}
+
+/// In-memory store of static-prefix states (never written to disk). It is
+/// owned by the context pool, so it is dropped with the resident contexts
+/// (model unload, app lock, reset).
+pub(crate) struct PrefixSnapshotStore<T, S> {
+    entries: Vec<PrefixSnapshot<T, S>>,
+    clock: u64,
+}
+
+impl<T: PartialEq, S> Default for PrefixSnapshotStore<T, S> {
+    fn default() -> Self {
+        Self {
+            entries: Vec::new(),
+            clock: 0,
+        }
+    }
+}
+
+impl<T: PartialEq, S> PrefixSnapshotStore<T, S> {
+    /// The longest snapshot for `key` whose tokens are a strict prefix of
+    /// `prompt` (at least one prompt token must remain to be decoded).
+    pub fn find(&mut self, key: &PrefixSnapshotKey, prompt: &[T]) -> Option<usize> {
+        let index = self
+            .entries
+            .iter()
+            .enumerate()
+            .filter(|(_, entry)| {
+                entry.key == *key
+                    && !entry.tokens.is_empty()
+                    && entry.tokens.len() < prompt.len()
+                    && prompt.starts_with(&entry.tokens)
+            })
+            .max_by_key(|(_, entry)| entry.tokens.len())
+            .map(|(index, _)| index)?;
+        self.clock += 1;
+        self.entries[index].last_used = self.clock;
+        Some(index)
+    }
+
+    pub fn get(&self, index: usize) -> &PrefixSnapshot<T, S> {
+        &self.entries[index]
+    }
+
+    pub fn contains(&self, key: &PrefixSnapshotKey, tokens: &[T]) -> bool {
+        self.entries
+            .iter()
+            .any(|entry| entry.key == *key && entry.tokens == tokens)
+    }
+
+    pub fn remove(&mut self, index: usize) {
+        self.entries.remove(index);
+    }
+
+    /// Store a snapshot, replacing one with the same key and tokens and
+    /// evicting least recently used ones to stay within the per-key and
+    /// total caps and `budget_bytes`. Returns `false`, storing nothing, when
+    /// the snapshot alone exceeds the budget.
+    pub fn insert(
+        &mut self,
+        key: PrefixSnapshotKey,
+        tokens: Vec<T>,
+        state: S,
+        bytes: usize,
+        budget_bytes: usize,
+    ) -> bool {
+        self.entries
+            .retain(|entry| !(entry.key == key && entry.tokens == tokens));
+        if bytes > budget_bytes {
+            return false;
+        }
+        while self.entries.iter().filter(|entry| entry.key == key).count()
+            >= MAX_PREFIX_SNAPSHOTS_PER_KEY
+        {
+            self.evict_lru(Some(&key));
+        }
+        while !self.entries.is_empty()
+            && (self.entries.len() >= MAX_PREFIX_SNAPSHOTS
+                || self.bytes().saturating_add(bytes) > budget_bytes)
+        {
+            self.evict_lru(None);
+        }
+        self.clock += 1;
+        self.entries.push(PrefixSnapshot {
+            key,
+            tokens,
+            state,
+            bytes,
+            last_used: self.clock,
+        });
+        true
+    }
+
+    fn evict_lru(&mut self, key: Option<&PrefixSnapshotKey>) {
+        if let Some((index, _)) = self
+            .entries
+            .iter()
+            .enumerate()
+            .filter(|(_, entry)| key.is_none_or(|key| entry.key == *key))
+            .min_by_key(|(_, entry)| entry.last_used)
+        {
+            self.entries.remove(index);
+        }
+    }
+
+    /// Drop every snapshot `keep` rejects (e.g. another runtime profile).
+    pub fn retain(&mut self, keep: impl Fn(&PrefixSnapshotKey) -> bool) {
+        self.entries.retain(|entry| keep(&entry.key));
+    }
+
+    pub fn bytes(&self) -> usize {
+        self.entries.iter().map(|entry| entry.bytes).sum()
+    }
 }
 
 #[cfg(test)]
@@ -781,5 +1044,207 @@ mod tests {
             }
         );
         assert_eq!(plan.evict, vec![0, 1]);
+    }
+
+    #[test]
+    fn static_prefix_is_the_common_token_prefix_minus_one() {
+        assert_eq!(static_prefix_len(&[1, 2, 3, 4, 9], &[1, 2, 3, 4, 8]), 3);
+        // One probe a prefix of the other.
+        assert_eq!(static_prefix_len(&[1, 2, 3], &[1, 2, 3, 4]), 2);
+        assert_eq!(static_prefix_len(&[7, 2], &[8, 2]), 0);
+        assert_eq!(static_prefix_len::<u32>(&[], &[1, 2]), 0);
+        assert_eq!(static_prefix_len::<u32>(&[], &[]), 0);
+        assert_eq!(static_prefix_len(&[1], &[1]), 0);
+    }
+
+    #[test]
+    fn prefill_is_split_at_cuts_inside_the_uncached_range() {
+        assert_eq!(prefill_bounds(0, 100, &[]), vec![0, 100]);
+        assert_eq!(prefill_bounds(0, 100, &[Some(40), None]), vec![0, 40, 100]);
+        assert_eq!(
+            prefill_bounds(10, 100, &[Some(90), Some(40)]),
+            vec![10, 40, 90, 100]
+        );
+        // Cuts at or outside the range do not add a segment.
+        assert_eq!(
+            prefill_bounds(40, 100, &[Some(40), Some(100), Some(5)]),
+            vec![40, 100]
+        );
+        assert_eq!(
+            prefill_bounds(10, 100, &[Some(50), Some(50)]),
+            vec![10, 50, 100]
+        );
+        assert_eq!(prefill_bounds(7, 7, &[Some(7)]), vec![7]);
+    }
+
+    #[test]
+    fn patient_markers_are_detected() {
+        assert!(contains_patient_marker(
+            "Tools …\n\nDu arbeitest im Kontext von Patient-ID: 42."
+        ));
+        assert!(contains_patient_marker("Aktuelle Patientendaten (bereits"));
+        assert!(!contains_patient_marker(
+            "<tools>\nget_patient(...)\n</tools>"
+        ));
+    }
+
+    fn static_prefix(family: &str) -> StaticPrefix {
+        let probe = |system: &str| PrefixProbe {
+            system: system.into(),
+            user: "?".into(),
+        };
+        StaticPrefix {
+            family: family.into(),
+            prompt_version: AGENT_PROMPT_VERSION.into(),
+            probes: [probe("a"), probe("b")],
+        }
+    }
+
+    #[test]
+    fn prefix_snapshot_key_tracks_profile_and_prompt_but_not_patient() {
+        let prefix = static_prefix("agent:patient");
+        let context = key("patient-a", "revision-1", "model-a");
+        let base = PrefixSnapshotKey::new(&context, &prefix);
+        // Another patient, revision or conversation shares the snapshot.
+        assert_eq!(
+            base,
+            PrefixSnapshotKey::new(&key("patient-b", "revision-9", "model-a"), &prefix)
+        );
+        assert_eq!(
+            base,
+            PrefixSnapshotKey::new(&conversation("other", "patient-c"), &prefix)
+        );
+
+        assert_ne!(
+            base,
+            PrefixSnapshotKey::new(&key("patient-a", "revision-1", "model-b"), &prefix)
+        );
+        let mut template = context.clone();
+        template.chat_template_hash = "other-template".into();
+        assert_ne!(base, PrefixSnapshotKey::new(&template, &prefix));
+        let mut kv = context.clone();
+        kv.kv_config_hash = "q8:512:enabled".into();
+        assert_ne!(base, PrefixSnapshotKey::new(&kv, &prefix));
+        let mut n_ctx = context.clone();
+        n_ctx.context_size = 32_768;
+        assert_ne!(base, PrefixSnapshotKey::new(&n_ctx, &prefix));
+        let mut adapter = context.clone();
+        adapter.adapter_hash = "adapter-a".into();
+        assert_ne!(base, PrefixSnapshotKey::new(&adapter, &prefix));
+
+        let mut bumped = prefix.clone();
+        bumped.prompt_version = format!("{AGENT_PROMPT_VERSION}-next");
+        assert_ne!(base, PrefixSnapshotKey::new(&context, &bumped));
+        assert_ne!(
+            base,
+            PrefixSnapshotKey::new(&context, &static_prefix("agent:global"))
+        );
+
+        assert!(base.same_runtime_profile(&context));
+        assert!(!base.same_runtime_profile(&kv));
+    }
+
+    fn snapshot_key(family: &str) -> PrefixSnapshotKey {
+        PrefixSnapshotKey::new(
+            &key("patient-a", "revision-1", "model-a"),
+            &static_prefix(family),
+        )
+    }
+
+    #[test]
+    fn snapshot_lookup_needs_the_same_key_and_a_strict_token_prefix() {
+        let mut store = PrefixSnapshotStore::<u32, &str>::default();
+        let agent = snapshot_key("agent:patient");
+        assert!(store.insert(agent.clone(), vec![1, 2, 3], "state", 10, 100));
+
+        let found = store.find(&agent, &[1, 2, 3, 4, 5]).unwrap();
+        assert_eq!(store.get(found).state, "state");
+        // The prompt must continue past the prefix.
+        assert_eq!(store.find(&agent, &[1, 2, 3]), None);
+        assert_eq!(store.find(&agent, &[1, 2, 9, 4]), None);
+        // Another model, KV config or prompt version never restores it.
+        let mut model = agent.clone();
+        model.model_hash = "model-b".into();
+        assert_eq!(store.find(&model, &[1, 2, 3, 4]), None);
+        let mut kv = agent.clone();
+        kv.kv_config_hash = "q8:512:enabled".into();
+        assert_eq!(store.find(&kv, &[1, 2, 3, 4]), None);
+        let mut version = agent.clone();
+        version.prompt_version = "agent-next".into();
+        assert_eq!(store.find(&version, &[1, 2, 3, 4]), None);
+
+        // With two variants, the longest matching one wins.
+        assert!(store.insert(agent.clone(), vec![1, 2, 3, 4], "longer", 10, 100));
+        let found = store.find(&agent, &[1, 2, 3, 4, 5]).unwrap();
+        assert_eq!(store.get(found).state, "longer");
+        let found = store.find(&agent, &[1, 2, 3, 9]).unwrap();
+        assert_eq!(store.get(found).state, "state");
+
+        store.remove(found);
+        assert!(!store.contains(&agent, &[1, 2, 3]));
+        assert!(store.contains(&agent, &[1, 2, 3, 4]));
+    }
+
+    #[test]
+    fn snapshot_store_evicts_least_recently_used_within_caps() {
+        let mut store = PrefixSnapshotStore::<u32, u32>::default();
+        let agent = snapshot_key("agent:patient");
+        assert!(store.insert(agent.clone(), vec![1], 1, 10, 1_000));
+        assert!(store.insert(agent.clone(), vec![2], 2, 10, 1_000));
+        // Re-inserting the same tokens replaces, not duplicates.
+        assert!(store.insert(agent.clone(), vec![2], 3, 10, 1_000));
+        assert_eq!(store.bytes(), 20);
+        // A third variant for one key evicts that key's least recently used.
+        store.find(&agent, &[1, 0]);
+        assert!(store.insert(agent.clone(), vec![3], 4, 10, 1_000));
+        assert!(store.contains(&agent, &[1]));
+        assert!(!store.contains(&agent, &[2]));
+        assert!(store.contains(&agent, &[3]));
+
+        // The total cap evicts across keys, least recently used first.
+        let global = snapshot_key("agent:global");
+        let report = snapshot_key("system:de");
+        let letter = snapshot_key("system:fr");
+        assert!(store.insert(global, vec![5], 5, 10, 1_000));
+        assert!(store.insert(report, vec![6], 6, 10, 1_000));
+        assert_eq!(store.bytes(), 40);
+        assert!(store.insert(letter.clone(), vec![7], 7, 10, 1_000));
+        assert_eq!(store.bytes(), 40);
+        assert!(!store.contains(&agent, &[1]));
+        assert!(store.contains(&letter, &[7]));
+    }
+
+    #[test]
+    fn snapshot_store_respects_the_byte_budget() {
+        let mut store = PrefixSnapshotStore::<u32, u32>::default();
+        let agent = snapshot_key("agent:patient");
+        let report = snapshot_key("system:de");
+        // Larger than the budget: not stored at all.
+        assert!(!store.insert(agent.clone(), vec![1], 1, 200, 100));
+        assert_eq!(store.bytes(), 0);
+        assert!(store.insert(agent.clone(), vec![1], 1, 60, 100));
+        // Making room evicts the older snapshot.
+        assert!(store.insert(report, vec![2], 2, 60, 100));
+        assert!(!store.contains(&agent, &[1]));
+        assert_eq!(store.bytes(), 60);
+
+        // A profile change drops snapshots of the old profile.
+        let mut kv = key("patient-a", "revision-1", "model-a");
+        kv.kv_config_hash = "q8:512:enabled".into();
+        store.retain(|snapshot| snapshot.same_runtime_profile(&kv));
+        assert_eq!(store.bytes(), 0);
+    }
+
+    #[test]
+    fn with_static_prefix_keeps_the_context_identity() {
+        let session = InferenceSession::agent("chat", Some("p".into()), Some("r".into()));
+        let seeded = session
+            .clone()
+            .with_static_prefix(Some(static_prefix("agent:patient")));
+        assert_eq!(seeded.conversation_id, session.conversation_id);
+        assert_eq!(seeded.patient(), session.patient());
+        assert_eq!(seeded.prompt_version, session.prompt_version);
+        assert!(seeded.static_prefix.is_some());
+        assert!(session.with_static_prefix(None).static_prefix.is_none());
     }
 }

@@ -1,7 +1,8 @@
 use super::chat_format::ChatFamily;
 use super::context_cache::{
-    checkpoint_for_prefix, checkpoint_position, plan_slot, reusable_prefix, ContextCacheTelemetry,
-    ContextKey, InferenceSession, SessionKind, SlotAction,
+    checkpoint_for_prefix, checkpoint_position, contains_patient_marker, plan_slot, prefill_bounds,
+    reusable_prefix, static_prefix_len, ContextCacheTelemetry, ContextKey, InferenceSession,
+    PrefixProbe, PrefixSnapshotKey, PrefixSnapshotStore, SessionKind, SlotAction, StaticPrefix,
 };
 use super::download;
 use super::grammar::{self, Grammar};
@@ -11,6 +12,7 @@ use super::inference::{
     KvCacheQuantization,
 };
 use super::memory_governor::{MemoryEstimate, MemoryGovernor, MemoryGovernorDiagnostics};
+use super::prompts;
 use super::thinking::ThinkingEffort;
 use crate::error::AppError;
 use encoding_rs::UTF_8;
@@ -24,6 +26,7 @@ use llama_cpp_2::model::{LlamaChatMessage, LlamaChatTemplate, LlamaModel};
 use llama_cpp_2::token::LlamaToken;
 use ring::digest::{Context as DigestContext, SHA256};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 use std::num::NonZeroU32;
@@ -83,6 +86,11 @@ struct StateCheckpoint {
 const CHECKPOINT_TAIL_TOKENS: usize = 64;
 /// Snapshots kept per context; each holds one recurrent state.
 const MAX_CHECKPOINTS_PER_CONTEXT: usize = 2;
+/// Upper bound on the bytes all static-prefix snapshots may hold, below
+/// whatever the memory governor's budget leaves.
+const MAX_PREFIX_SNAPSHOT_BYTES: u64 = 512 * 1024 * 1024;
+/// Static prefixes whose probe tokens are kept; the map is reset past this.
+const MAX_STATIC_PREFIX_CANDIDATES: usize = 16;
 
 // llama.cpp permits a context to move between threads when calls are
 // serialized. ContextPool never exposes one outside its mutex lease.
@@ -93,6 +101,18 @@ struct ContextPool {
     clock: u64,
     telemetry: ContextCacheTelemetry,
     evaluated_prefill_ms: f64,
+    /// Patient-free static-prefix states (#551). In memory only, and owned
+    /// here so they are dropped with the resident contexts, on every path
+    /// that releases the engine (unload, lock, reset, model swap).
+    prefix_snapshots: PrefixSnapshotStore<LlamaToken, SeqState>,
+    /// Candidate static-prefix tokens per declared [`StaticPrefix`].
+    static_prefixes: HashMap<StaticPrefix, Vec<Vec<LlamaToken>>>,
+}
+
+/// Where the prefill should capture a static-prefix snapshot.
+struct PrefixCapture {
+    key: PrefixSnapshotKey,
+    at: usize,
 }
 
 impl ContextPool {
@@ -105,6 +125,8 @@ impl ContextPool {
                 ..ContextCacheTelemetry::default()
             },
             evaluated_prefill_ms: 0.0,
+            prefix_snapshots: PrefixSnapshotStore::default(),
+            static_prefixes: HashMap::new(),
         }
     }
 }
@@ -579,6 +601,7 @@ impl LlmEngine {
         )?;
         self.generate_streaming_raw_keyed(
             session,
+            Some(system_prompt),
             &prompt,
             max_tokens,
             SamplerConfig::from_temperature(temperature),
@@ -595,15 +618,20 @@ impl LlmEngine {
         sampler: SamplerConfig,
         on_token: impl FnMut(&str) -> bool,
     ) -> Result<(), AppError> {
-        self.generate_streaming_raw_keyed(None, prompt, max_tokens, sampler, None, on_token)
+        self.generate_streaming_raw_keyed(None, None, prompt, max_tokens, sampler, None, on_token)
     }
 
     /// Generate from a pre-formatted prompt in `session`'s context, or, with
     /// `None`, in an isolated context keyed by the prompt digest. `grammar`,
     /// when given, constrains the output (see [`grammar::sampler_chain`]).
+    /// `system_prompt`, when the prompt was formatted from one, lets a fixed
+    /// one-off system prompt seed a new context from its static-prefix
+    /// snapshot ([`prompts::static_system_prefix`]).
+    #[allow(clippy::too_many_arguments)]
     fn generate_streaming_raw_keyed(
         &self,
         session: Option<&InferenceSession>,
+        system_prompt: Option<&str>,
         prompt: &str,
         max_tokens: usize,
         sampler: SamplerConfig,
@@ -619,6 +647,8 @@ impl LlmEngine {
                 &isolated
             }
         };
+        let seeded = system_prompt.and_then(|system| prompts::with_system_prefix(session, system));
+        let session = seeded.as_ref().unwrap_or(session);
         self.generate_streaming_cached_with_headroom(
             session, prompt, max_tokens, sampler, None, grammar, on_token,
         )
@@ -809,6 +839,7 @@ impl LlmEngine {
         on_token: impl FnMut(&str) -> bool,
     ) -> Result<(), AppError> {
         self.generate_streaming_raw_keyed(
+            None,
             None,
             prompt,
             max_tokens,
@@ -1040,6 +1071,8 @@ impl LlmEngine {
                 let resident_before = pool.entries.len();
                 pool.entries
                     .retain(|entry| entry.key.same_runtime_profile(&key));
+                pool.prefix_snapshots
+                    .retain(|snapshot| snapshot.same_runtime_profile(&key));
                 pool.telemetry.evictions += (resident_before - pool.entries.len()) as u64;
                 pool.telemetry.max_contexts = self.pool_capacity(&runtime.profile);
                 while pool.entries.len() >= pool.telemetry.max_contexts.max(1) {
@@ -1093,6 +1126,10 @@ impl LlmEngine {
         pool.entries[index]
             .checkpoints
             .retain(|checkpoint| checkpoint.n_tokens <= reused);
+        // Seed from the static-prefix snapshot when it covers more of the
+        // prompt than survived, and plan to capture one if none exists yet.
+        let (reused, mut prefix_capture) =
+            self.apply_prefix_snapshot(model, pool, index, session, &tokens, reused);
         // A context is only a real cache hit when at least one prompt token
         // survives validation and rollback (a re-keyed context of the same
         // patient record may keep one too). This keeps UI and telemetry
@@ -1112,16 +1149,20 @@ impl LlmEngine {
         } else {
             None
         };
-        let segments: Vec<&[LlamaToken]> = match checkpoint_at {
-            Some(at) => vec![&tokens[reused..at], &tokens[at..]],
-            None => vec![&tokens[reused..]],
-        };
-        for (segment_index, segment) in segments.iter().enumerate() {
-            if segment_index == 1 {
+        let snapshot_at = prefix_capture.as_ref().map(|capture| capture.at);
+        let bounds = prefill_bounds(reused, tokens.len(), &[checkpoint_at, snapshot_at]);
+        for segment in bounds.windows(2) {
+            let (from, to) = (segment[0], segment[1]);
+            if checkpoint_at == Some(from) {
                 take_checkpoint(&mut pool.entries[index]);
                 pool.telemetry.checkpoints_created += 1;
             }
-            for chunk in segment.chunks(prompt_batch_size) {
+            if snapshot_at == Some(from) {
+                if let Some(capture) = prefix_capture.take() {
+                    self.capture_prefix_snapshot(pool, index, capture);
+                }
+            }
+            for chunk in tokens[from..to].chunks(prompt_batch_size) {
                 batch.clear();
                 let start = pool.entries[index].tokens.len();
                 for (offset, token) in chunk.iter().enumerate() {
@@ -1204,6 +1245,7 @@ impl LlmEngine {
         pool.telemetry.estimated_prefill_saved_ms += estimated_saved_ms;
         pool.evaluated_prefill_ms += prefill_ms;
         pool.telemetry.resident_contexts = pool.entries.len();
+        pool.telemetry.prefix_snapshot_bytes = pool.prefix_snapshots.bytes() as u64;
         log::info!(
             "LLM context cache: hit={cache_hit}, reused={reused}, evaluated={evaluated}, prompt={}",
             tokens.len()
@@ -1226,6 +1268,193 @@ impl LlmEngine {
             });
         }
         Ok(())
+    }
+
+    /// Token prefixes of `prefix`'s probes, one per distinct chat header:
+    /// families such as Gemma 4 and Harmony render the reasoning effort in
+    /// the system header, so each effort can start with different tokens.
+    /// A prefix whose text contains a patient-section marker is dropped.
+    fn static_prefix_candidates(
+        &self,
+        model: &LlamaModel,
+        prefix: &StaticPrefix,
+    ) -> Vec<Vec<LlamaToken>> {
+        let tokenize = |probe: &PrefixProbe, effort: ThinkingEffort| {
+            let message = AgentMessage {
+                role: "user".to_string(),
+                content: probe.user.clone(),
+            };
+            self.format_chat_history_with_effort(&probe.system, &[message], effort)
+                .ok()
+                .map(|prompt| model.vocab().tokenize(prompt.as_bytes(), true, true))
+        };
+        let mut candidates: Vec<Vec<LlamaToken>> = Vec::new();
+        for effort in [
+            ThinkingEffort::Low,
+            ThinkingEffort::Medium,
+            ThinkingEffort::High,
+            ThinkingEffort::ExtraHigh,
+        ] {
+            let (Some(left), Some(right)) = (
+                tokenize(&prefix.probes[0], effort),
+                tokenize(&prefix.probes[1], effort),
+            ) else {
+                continue;
+            };
+            let len = static_prefix_len(&left, &right);
+            if len == 0 || candidates.iter().any(|known| known[..] == left[..len]) {
+                continue;
+            }
+            let text = detokenize(model, &left[..len]);
+            debug_assert!(
+                !contains_patient_marker(&text),
+                "static prefix '{}' reaches into the patient section",
+                prefix.family
+            );
+            if contains_patient_marker(&text) {
+                log::error!(
+                    "LLM static prefix '{}' reaches into the patient section; not snapshotting it",
+                    prefix.family
+                );
+                continue;
+            }
+            candidates.push(left[..len].to_vec());
+        }
+        candidates
+    }
+
+    /// Seed context `index` from a static-prefix snapshot of `session`'s
+    /// declared prefix when that covers more of `tokens` than the `reused`
+    /// tokens already resident, e.g. in a new or re-keyed context. Returns the
+    /// tokens now reused and, when no snapshot of the matching prefix exists
+    /// yet, where the prefill should capture one.
+    ///
+    /// The snapshot is sequence 0's full state (attention KV and, on hybrid
+    /// or recurrent models, the recurrent state) right after the prefix, so
+    /// restoring it is equivalent to prefilling the prefix. A failed restore
+    /// drops the snapshot and falls back to a full prefill.
+    fn apply_prefix_snapshot(
+        &self,
+        model: &LlamaModel,
+        pool: &mut ContextPool,
+        index: usize,
+        session: &InferenceSession,
+        tokens: &[LlamaToken],
+        reused: usize,
+    ) -> (usize, Option<PrefixCapture>) {
+        let Some(prefix) = session.static_prefix.as_ref() else {
+            return (reused, None);
+        };
+        let key = PrefixSnapshotKey::new(&pool.entries[index].key, prefix);
+        if !pool.static_prefixes.contains_key(prefix) {
+            if pool.static_prefixes.len() >= MAX_STATIC_PREFIX_CANDIDATES {
+                pool.static_prefixes.clear();
+            }
+            let candidates = self.static_prefix_candidates(model, prefix);
+            pool.static_prefixes.insert(prefix.clone(), candidates);
+        }
+
+        let ContextPool {
+            entries,
+            telemetry,
+            prefix_snapshots,
+            static_prefixes,
+            ..
+        } = pool;
+        let entry = &mut entries[index];
+        let mut reused = reused;
+        if let Some(found) = prefix_snapshots.find(&key, tokens) {
+            let snapshot = prefix_snapshots.get(found);
+            if snapshot.tokens.len() > reused {
+                entry.context.clear_kv_cache();
+                entry.tokens.clear();
+                entry.checkpoints.clear();
+                match entry.context.state_seq_set(&snapshot.state, 0) {
+                    Ok(()) => {
+                        entry.tokens.extend_from_slice(&snapshot.tokens);
+                        reused = snapshot.tokens.len();
+                        telemetry.prefix_snapshot_restores += 1;
+                    }
+                    Err(error) => {
+                        log::warn!(
+                            "LLM static-prefix snapshot restore failed, prefilling in full: {error}"
+                        );
+                        prefix_snapshots.remove(found);
+                        entry.context.clear_kv_cache();
+                        reused = 0;
+                    }
+                }
+            }
+        }
+
+        // The longest candidate this prompt starts with, captured when the
+        // prefill crosses its end (the context then holds exactly it).
+        let capture = static_prefixes
+            .get(prefix)
+            .into_iter()
+            .flatten()
+            .filter(|candidate| {
+                candidate.len() >= reused
+                    && candidate.len() < tokens.len()
+                    && tokens.starts_with(candidate)
+            })
+            .max_by_key(|candidate| candidate.len())
+            .filter(|candidate| !prefix_snapshots.contains(&key, candidate))
+            .map(|candidate| PrefixCapture {
+                key,
+                at: candidate.len(),
+            });
+        (reused, capture)
+    }
+
+    /// Snapshot sequence 0 of context `index`, which holds exactly the
+    /// static prefix, if it fits the memory left for snapshots.
+    fn capture_prefix_snapshot(
+        &self,
+        pool: &mut ContextPool,
+        index: usize,
+        capture: PrefixCapture,
+    ) {
+        let entry = &pool.entries[index];
+        if entry.tokens.len() != capture.at {
+            return;
+        }
+        let budget = self
+            .inference_runtime()
+            .map(|runtime| {
+                prefix_snapshot_budget(
+                    self.governor.inference_budget_bytes(),
+                    &self.governor.estimate(&runtime.profile),
+                    pool.telemetry.max_contexts,
+                )
+            })
+            .unwrap_or(0);
+        let size = entry
+            .context
+            .state_seq_get_size_ext(0, LlamaStateSeqFlags::empty());
+        if size > budget {
+            log::info!(
+                "LLM static-prefix snapshot skipped: {size} bytes exceed the {budget}-byte budget"
+            );
+            return;
+        }
+        match entry.context.state_seq_get(0, LlamaStateSeqFlags::empty()) {
+            Ok(state) => {
+                let bytes = state.byte_len();
+                let tokens = entry.tokens.clone();
+                if pool
+                    .prefix_snapshots
+                    .insert(capture.key, tokens, state, bytes, budget)
+                {
+                    pool.telemetry.prefix_snapshots_created += 1;
+                    log::info!(
+                        "LLM static-prefix snapshot at {} tokens ({bytes} bytes)",
+                        capture.at
+                    );
+                }
+            }
+            Err(error) => log::warn!("LLM static-prefix snapshot skipped: {error}"),
+        }
     }
 
     /// Reference cold path retained for equivalence tests and benchmarks.
@@ -1450,6 +1679,7 @@ impl LlmEngine {
         let mut result = String::new();
         self.generate_streaming_raw_keyed(
             session,
+            Some(system_prompt),
             &prompt,
             max_tokens,
             sampler,
@@ -1651,6 +1881,33 @@ fn count_departure(telemetry: &mut ContextCacheTelemetry, departed: &ContextKey,
     }
 }
 
+/// Bytes static-prefix snapshots may hold: what the governor's inference
+/// budget leaves after the model and a full pool of `max_contexts` contexts,
+/// capped at [`MAX_PREFIX_SNAPSHOT_BYTES`]. Zero disables snapshots.
+fn prefix_snapshot_budget(
+    budget_bytes: u64,
+    estimate: &MemoryEstimate,
+    max_contexts: usize,
+) -> usize {
+    let extra_contexts = max_contexts.saturating_sub(1) as u64;
+    let resident = estimate.total_bytes.saturating_add(
+        extra_contexts.saturating_mul(estimate.kv_cache_bytes.saturating_add(estimate.graph_bytes)),
+    );
+    let headroom = budget_bytes
+        .saturating_sub(resident)
+        .min(MAX_PREFIX_SNAPSHOT_BYTES);
+    usize::try_from(headroom).unwrap_or(usize::MAX)
+}
+
+/// The text of `tokens`, special tokens included.
+fn detokenize(model: &LlamaModel, tokens: &[LlamaToken]) -> String {
+    let bytes: Vec<u8> = tokens
+        .iter()
+        .flat_map(|&token| model.vocab().token_to_piece(token, true, None))
+        .collect();
+    String::from_utf8_lossy(&bytes).into_owned()
+}
+
 /// Snapshot the recurrent part of sequence 0 at the context's current length.
 fn take_checkpoint(entry: &mut CachedContext) {
     match entry
@@ -1813,6 +2070,37 @@ mod tests {
         assert_eq!(context_pool_capacity(32 * GB, &estimate, 13 * GB), 2);
         // The RAM tier remains a floor.
         assert_eq!(context_pool_capacity(48 * GB, &estimate, 12 * GB), 2);
+    }
+
+    #[test]
+    fn prefix_snapshots_only_use_memory_the_governor_leaves() {
+        const GB: u64 = 1024 * 1024 * 1024;
+        const MB: u64 = 1024 * 1024;
+        let estimate = MemoryEstimate {
+            weights_bytes: 6 * GB,
+            kv_cache_bytes: 2 * GB,
+            graph_bytes: GB,
+            runtime_bytes: GB,
+            total_bytes: 10 * GB,
+        };
+        // One context: 10 GiB used of 10.2 GiB.
+        assert_eq!(
+            prefix_snapshot_budget(10 * GB + 200 * MB, &estimate, 1),
+            (200 * MB) as usize
+        );
+        // The cap applies when plenty is left.
+        assert_eq!(
+            prefix_snapshot_budget(20 * GB, &estimate, 1),
+            MAX_PREFIX_SNAPSHOT_BYTES as usize
+        );
+        // A second context's KV cache and compute buffer come first.
+        assert_eq!(prefix_snapshot_budget(13 * GB, &estimate, 2), 0);
+        assert_eq!(
+            prefix_snapshot_budget(13 * GB + 100 * MB, &estimate, 2),
+            (100 * MB) as usize
+        );
+        // No headroom disables snapshots.
+        assert_eq!(prefix_snapshot_budget(9 * GB, &estimate, 1), 0);
     }
 
     #[test]
@@ -2135,6 +2423,129 @@ mod tests {
             assert!(regenerated.cache_hit);
             assert!(regenerated.reused_prompt_tokens >= engine.count_tokens(&system) / 2);
         }
+    }
+
+    /// Real-GGUF check for issue #551: a new conversation for patient B,
+    /// after one for patient A, is seeded from the static-prefix snapshot
+    /// (persona, tools, tool-call format). It reuses exactly the static
+    /// prefix, never patient A's tokens, and answers like a cold prefill.
+    #[test]
+    #[ignore = "requires a local GGUF model"]
+    fn new_conversation_is_seeded_from_the_static_prefix() {
+        use crate::llm::agent::{build_system_prompt_for_date, static_prefix, AgentScope};
+
+        let path = PathBuf::from(
+            std::env::var("RAMDOC_BENCH_MODEL").expect("RAMDOC_BENCH_MODEL is required"),
+        );
+        let engine = LlmEngine::load(path, "static-prefix-check".into()).unwrap();
+        let model = engine.model.as_ref().unwrap();
+        let scope = |patient: &str| AgentScope::Patient {
+            patient_id: patient.into(),
+        };
+        let prompt_for = |patient: &str, record: &str| {
+            let system = build_system_prompt_for_date(&scope(patient), Some(record), "2026-11-23");
+            engine
+                .format_chat_history_reasoning_off(
+                    &system,
+                    &[AgentMessage {
+                        role: "user".into(),
+                        content: "Welche Dosis ist dokumentiert?".into(),
+                    }],
+                )
+                .unwrap()
+        };
+        let run = |patient: &str, prompt: &str| {
+            let session = InferenceSession::agent(
+                format!("chat-{patient}"),
+                Some(patient.into()),
+                Some("revision-1".into()),
+            )
+            .with_static_prefix(Some(static_prefix(&scope(patient))));
+            let mut answer = String::new();
+            let started = Instant::now();
+            engine
+                .generate_streaming_session_with_sampler(
+                    &session,
+                    prompt,
+                    16,
+                    SamplerConfig::from_temperature(0.0),
+                    |piece| {
+                        answer.push_str(piece);
+                        true
+                    },
+                )
+                .unwrap();
+            (
+                answer,
+                engine.last_generation_stats().unwrap(),
+                started.elapsed(),
+            )
+        };
+
+        let record_a = format!(
+            "{{\"name\":\"Anna Beispiel\",\"notes\":\"{}\"}}",
+            "Sertralin 100 mg 1-0-0, Schlafstörung, Grübeln. ".repeat(40)
+        );
+        let prompt_a = prompt_for("patient-a", &record_a);
+        let (_, first, first_wall) = run("patient-a", &prompt_a);
+        let after_a = engine.contexts.lock().unwrap().telemetry.clone();
+
+        let record_b = "{\"name\":\"Bruno Muster\",\"notes\":\"Lithium 900 mg, stabil.\"}";
+        let prompt_b = prompt_for("patient-b", record_b);
+        let (answer_b, second, second_wall) = run("patient-b", &prompt_b);
+        let telemetry = engine.contexts.lock().unwrap().telemetry.clone();
+
+        let tokens_a = model.vocab().tokenize(prompt_a.as_bytes(), true, true);
+        let tokens_b = model.vocab().tokenize(prompt_b.as_bytes(), true, true);
+        let static_len = engine
+            .static_prefix_candidates(model, &static_prefix(&scope("patient-b")))
+            .iter()
+            .filter(|candidate| tokens_b.starts_with(candidate))
+            .map(Vec::len)
+            .max()
+            .expect("the prompt starts with a static prefix");
+        let shared_ab = tokens_a
+            .iter()
+            .zip(&tokens_b)
+            .take_while(|(a, b)| a == b)
+            .count();
+        let reused_text = detokenize(model, &tokens_b[..second.reused_prompt_tokens]);
+        println!(
+            "{}",
+            serde_json::json!({
+                "hybrid": engine.uses_state_checkpoints,
+                "static_prefix_tokens": static_len,
+                "shared_a_b_tokens": shared_ab,
+                "first": first,
+                "first_wall_ms": first_wall.as_millis(),
+                "second": second,
+                "second_wall_ms": second_wall.as_millis(),
+                "telemetry": telemetry,
+            })
+        );
+
+        assert_eq!(first.reused_prompt_tokens, 0);
+        assert_eq!(after_a.prefix_snapshots_created, 1);
+        assert!(after_a.prefix_snapshot_bytes > 0);
+        assert_eq!(telemetry.prefix_snapshot_restores, 1);
+        assert!(second.cache_hit);
+        assert_eq!(second.reused_prompt_tokens, static_len);
+        // Patient A's prompt and patient B's share more than the static
+        // prefix (the patient-section header), yet only the static prefix
+        // is reused, and it holds no patient data.
+        assert!(second.reused_prompt_tokens < shared_ab);
+        assert!(!contains_patient_marker(&reused_text));
+        assert!(!reused_text.contains("Anna") && !reused_text.contains("patient-a"));
+
+        // Seeding is equivalent to prefilling the prefix.
+        let mut cold = String::new();
+        engine
+            .generate_streaming_raw_cold(&prompt_b, 16, 0.0, |piece| {
+                cold.push_str(piece);
+                true
+            })
+            .unwrap();
+        assert_eq!(cold, answer_b);
     }
 
     /// Hardware benchmark harness for issue #400. It is ignored because CI has

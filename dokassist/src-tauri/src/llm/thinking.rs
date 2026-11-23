@@ -186,6 +186,10 @@ pub fn generate_with_think_budget_from_prompt(
             &isolated_session
         }
     };
+    // A fixed one-off system prompt lets a new context start from its
+    // static-prefix snapshot (#551).
+    let seeded_session = prompts::with_system_prefix(session, system_prompt);
+    let session = seeded_session.as_ref().unwrap_or(session);
 
     let phase1 = |on_token: &mut dyn FnMut(&str) -> bool| -> Result<(), AppError> {
         engine.generate_streaming_session_with_sampler(

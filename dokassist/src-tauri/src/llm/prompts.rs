@@ -1,3 +1,5 @@
+use super::context_cache::{InferenceSession, PrefixProbe, StaticPrefix, SYSTEM_PROMPT_VERSION};
+
 /// German system prompt for a psychiatric documentation assistant.
 pub const SYSTEM_PROMPT_DE: &str = "\
 Sie sind ein medizinischer Dokumentationsassistent für psychiatrische Praxen in der Schweiz und \
@@ -25,6 +27,46 @@ Directives:\n\
 - Utilisez la terminologie psychiatrique correcte (CIM-10/DSM-5)\n\
 - Structurez les rapports selon les normes médicales françaises et suisses\n\
 - N'utilisez PAS de Markdown, PAS d'astérisques, PAS de dièses et PAS de listes à tirets. De courts intertitres sur une ligne séparée sont autorisés";
+
+/// The static prefix of one-off prompts whose system prompt starts with
+/// [`SYSTEM_PROMPT_DE`] or [`SYSTEM_PROMPT_FR`] (optionally followed by an
+/// effort or task suffix). Both constants are patient-free, so the new
+/// context of a report, letter, summary or extraction can be seeded from a
+/// snapshot of the fixed system prompt (#551). Any other system prompt gets
+/// `None`: it may carry patient data.
+pub(crate) fn static_system_prefix(system_prompt: &str) -> Option<StaticPrefix> {
+    let (family, system) = if system_prompt.starts_with(SYSTEM_PROMPT_DE) {
+        ("system:de", SYSTEM_PROMPT_DE)
+    } else if system_prompt.starts_with(SYSTEM_PROMPT_FR) {
+        ("system:fr", SYSTEM_PROMPT_FR)
+    } else {
+        return None;
+    };
+    // One probe ends the system prompt at the constant, the other continues
+    // it like a suffix would: their common prefix ends with the constant.
+    let probe = |system: String| PrefixProbe {
+        system,
+        user: "?".to_string(),
+    };
+    Some(StaticPrefix {
+        family: family.to_string(),
+        prompt_version: SYSTEM_PROMPT_VERSION.to_string(),
+        probes: [probe(system.to_string()), probe(format!("{system}\n\n-"))],
+    })
+}
+
+/// `session` with the static prefix of `system_prompt` declared, when it has
+/// none yet and `system_prompt` has one ([`static_system_prefix`]).
+pub(crate) fn with_system_prefix(
+    session: &InferenceSession,
+    system_prompt: &str,
+) -> Option<InferenceSession> {
+    if session.static_prefix.is_some() {
+        return None;
+    }
+    let prefix = static_system_prefix(system_prompt)?;
+    Some(session.clone().with_static_prefix(Some(prefix)))
+}
 
 /// Upper bound on the patient context inserted into a report prompt. The real
 /// limit is the model's token budget, enforced before this point; this only
@@ -499,6 +541,38 @@ pub fn evidence_query_prompt(evidence: &str, question: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_the_fixed_system_prompts_declare_a_static_prefix() {
+        use crate::llm::context_cache::contains_patient_marker;
+
+        for (system, family) in [
+            (SYSTEM_PROMPT_DE, "system:de"),
+            (SYSTEM_PROMPT_FR, "system:fr"),
+        ] {
+            let with_suffix = format!("{system}\n\nDenken Sie kurz nach.");
+            for prompt in [system, with_suffix.as_str()] {
+                let prefix = static_system_prefix(prompt).unwrap();
+                assert_eq!(prefix.family, family);
+                for probe in &prefix.probes {
+                    assert!(probe.system.starts_with(system));
+                    assert!(!contains_patient_marker(&probe.system));
+                }
+                assert_ne!(prefix.probes[0], prefix.probes[1]);
+            }
+        }
+        // A system prompt carrying anything before the constant, such as
+        // patient data, has no static prefix.
+        assert!(static_system_prefix("Patient: Erika Muster").is_none());
+        assert!(static_system_prefix(&format!("x{SYSTEM_PROMPT_DE}")).is_none());
+
+        let session = InferenceSession::isolated("raw:abc");
+        let seeded = with_system_prefix(&session, SYSTEM_PROMPT_DE).unwrap();
+        assert_eq!(seeded.conversation_id, session.conversation_id);
+        // A declared prefix is never replaced.
+        assert!(with_system_prefix(&seeded, SYSTEM_PROMPT_FR).is_none());
+        assert!(with_system_prefix(&session, "other").is_none());
+    }
 
     #[test]
     fn referral_prompt_prioritizes_question_and_forbids_invention() {

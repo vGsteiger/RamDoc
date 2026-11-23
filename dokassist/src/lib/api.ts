@@ -138,6 +138,11 @@ export interface ContextCacheTelemetry {
   checkpoints_created?: number;
   contexts_created?: number;
   context_allocations_reused?: number;
+  /** New contexts seeded from an in-memory static-prefix KV snapshot. */
+  prefix_snapshot_restores?: number;
+  prefix_snapshots_created?: number;
+  /** Bytes currently held by static-prefix snapshots (memory only). */
+  prefix_snapshot_bytes?: number;
 }
 
 export interface LlmEngineStatus {
