@@ -26,7 +26,7 @@ pub fn extract_metadata_with_prompt(
     system_prompt: &str,
 ) -> Result<FileMetadata, AppError> {
     let user_message = prompts::metadata_extraction_prompt(document_text);
-    let profile = GenerationTask::Extract.profile(ThinkingEffort::Low);
+    let profile = GenerationTask::Extract.profile_for(engine.sampler_family(), ThinkingEffort::Low);
     let response = engine.generate_reasoning_off(
         system_prompt,
         &user_message,
