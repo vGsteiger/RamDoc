@@ -133,7 +133,9 @@ They cover:
 - prompt injection in untrusted clinical text
 
 Four execution paths are measured: cold prompt, shared prefix, continued
-session, and multi-turn agent/tool call. Warm paths must report a real context
+session, and multi-turn agent/tool call. The agent/tool-call path checks a
+single probe answer; whole agent turns (call, result, next call, answer) are
+measured by the [agent trajectory benchmark](agent-trajectory-benchmark.md). Warm paths must report a real context
 cache hit and at least one reused token. Scoring uses declared tokens,
 exclusions, exact values, and JSON argument subsets—there is no nondeterministic
 model grader and no aggregate score that can hide a harmful category failure.

@@ -15,6 +15,11 @@ path = "src/bin/local_inference_benchmark.rs"
 required-features = ["benchmark-harness"]
 
 [[bin]]
+name = "agent-trajectory-benchmark"
+path = "src/bin/agent_trajectory_benchmark.rs"
+required-features = ["benchmark-harness"]
+
+[[bin]]
 name = "referral-quality-sweep"
 path = "src/bin/referral_quality_sweep.rs"
 required-features = ["benchmark-harness"]

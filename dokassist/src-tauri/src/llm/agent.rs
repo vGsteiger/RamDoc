@@ -14,14 +14,10 @@ use std::sync::Arc;
 use tauri::Emitter;
 
 /// Maximum tool-call iterations per agent turn before forcing a final answer.
-const MAX_ITERATIONS: usize = 8;
+pub(crate) const MAX_ITERATIONS: usize = 8;
 
 /// Tokens budget for the summarization call itself.
 const SUMMARY_MAX_TOKENS: usize = 512;
-/// Rough estimate: 1 token ≈ 3 UTF-8 bytes (conservative for German medical text).
-fn estimate_tokens(s: &str) -> usize {
-    (s.len() / 3).max(1)
-}
 
 /// Whether the agent is scoped to a single patient or has global access.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -68,6 +64,27 @@ pub struct AgentLoopResult {
     /// blocking turn, never embedded in patient-facing chat history.
     pub router_probe_count: u64,
     pub router_probe_duration_ms: u64,
+    /// One entry per probe, for the trajectory benchmark (#560). Not sent to
+    /// the frontend.
+    #[serde(skip)]
+    pub probe_trace: Vec<ProbeTrace>,
+}
+
+/// What one iteration of the agent loop saw and decided.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProbeTrace {
+    pub iteration: usize,
+    /// Exact token count (model tokenizer) of the formatted prompt that
+    /// decided whether to fold the history, before any fold.
+    pub prompt_tokens: usize,
+    /// Whether the history was folded in this iteration.
+    pub folded: bool,
+    /// Raw probe output, including any reasoning.
+    pub output: String,
+    /// Tokens the probe generated (with a forced-reasoning recovery).
+    pub generated_tokens: usize,
+    /// The parsed call, or `None` when the probe was routed to an answer.
+    pub call: Option<ToolCallRequest>,
 }
 
 pub struct AgentTurnInput {
@@ -150,7 +167,7 @@ const AGENT_TOOLS: &[(&str, &str)] = &[
 const GLOBAL_ONLY_TOOLS: &[&str] = &["list_patients"];
 
 /// Names of the tools available in `scope`, in prompt order.
-fn scope_tool_names(scope: &AgentScope) -> Vec<&'static str> {
+pub(crate) fn scope_tool_names(scope: &AgentScope) -> Vec<&'static str> {
     AGENT_TOOLS
         .iter()
         .map(|(name, _)| *name)
@@ -194,7 +211,7 @@ fn build_system_prompt(scope: &AgentScope, patient_context: Option<&str>) -> Str
     build_system_prompt_for_date(scope, patient_context, &today)
 }
 
-fn build_system_prompt_for_date(
+pub(crate) fn build_system_prompt_for_date(
     scope: &AgentScope,
     patient_context: Option<&str>,
     today: &str,
@@ -401,7 +418,15 @@ fn is_summary_message(message: &AgentMessage) -> bool {
 /// frees enough is chosen. If whole blocks are not enough, everything before
 /// the current user message is folded too (a partial block), and as a last
 /// resort everything but the last two messages (the previous behaviour).
-fn plan_history_fold(history: &[AgentMessage], excess_tokens: usize) -> Vec<Range<usize>> {
+///
+/// `count_tokens` sizes each message; the loop passes the model tokenizer.
+/// Per-message counts leave out the template's role markers, so a plan can
+/// fall slightly short; the next iteration then folds another block.
+fn plan_history_fold(
+    history: &[AgentMessage],
+    excess_tokens: usize,
+    count_tokens: impl Fn(&str) -> usize,
+) -> Vec<Range<usize>> {
     if history.len() <= 3 {
         return Vec::new();
     }
@@ -436,7 +461,7 @@ fn plan_history_fold(history: &[AgentMessage], excess_tokens: usize) -> Vec<Rang
     for cut in cuts {
         folded_tokens += history[previous..cut]
             .iter()
-            .map(|message| estimate_tokens(&message.content))
+            .map(|message| count_tokens(&message.content))
             .sum::<usize>();
         plan.push(previous..cut);
         previous = cut;
@@ -513,7 +538,7 @@ fn summarize_history(
     history: Vec<AgentMessage>,
     excess_tokens: usize,
 ) -> Vec<AgentMessage> {
-    let plan = plan_history_fold(&history, excess_tokens);
+    let plan = plan_history_fold(&history, excess_tokens, |text| engine.count_tokens(text));
     // Keyed by task and the conversation's patient record: summaries of this
     // patient's conversations share the system prompt and patient context.
     let session = InferenceSession::one_off(
@@ -580,16 +605,86 @@ pub fn run_agent_loop(
     pool: &DbPool,
     input: AgentTurnInput,
 ) -> Result<AgentLoopResult, AppError> {
+    let session_id = input.inference_session.conversation_id.clone();
+    let scope = input.scope.clone();
+    let thinking_effort = input.thinking_effort;
+    let system_prompt = build_system_prompt(&input.scope, input.patient_context.as_deref());
+
+    let mut execute_tool = |call: &ToolCallRequest| -> Result<String, AppError> {
+        let args_json = serde_json::to_string(&call.args).unwrap_or_default();
+        let _ = app.emit(
+            "agent-tool-started",
+            serde_json::json!({
+                "name": call.name,
+                "args_json": args_json,
+                "session_id": session_id,
+            }),
+        );
+
+        let result = {
+            let conn = pool.conn()?;
+            super::tools::dispatch_tool(&conn, app, engine, &scope, call, thinking_effort)
+        };
+        let result_json = match result {
+            Ok(val) => val.to_string(),
+            Err(e) => serde_json::json!({"error": e.to_string()}).to_string(),
+        };
+
+        let _ = app.emit(
+            "agent-tool-called",
+            serde_json::json!({
+                "name": call.name,
+                "args_json": args_json,
+                "result_json": result_json,
+                "session_id": session_id,
+            }),
+        );
+        Ok(result_json)
+    };
+    let emit_answer_token = |token: &str| {
+        // Keep the legacy event for existing specialised surfaces, and
+        // provide the session-bound event for the main chat.
+        let _ = app.emit("agent-chunk", token);
+        let _ = app.emit(
+            "agent-chunk-session",
+            serde_json::json!({"session_id": session_id, "token": token}),
+        );
+    };
+
+    run_agent_turn(
+        engine,
+        router_engine,
+        input,
+        &system_prompt,
+        &mut execute_tool,
+        &emit_answer_token,
+    )
+}
+
+/// The agent loop without the app: probe, parse, run the tool, repeat, then
+/// answer. [`run_agent_loop`] drives it with the real tool dispatch and UI
+/// events; the trajectory benchmark (#560) drives it with canned tool results,
+/// so the benchmark measures the loop that ships.
+///
+/// `execute_tool` runs one parsed call and returns the full result JSON (tool
+/// errors as `{"error": …}`); an `Err` aborts the turn. `on_answer_token`
+/// receives the streamed final answer.
+pub(crate) fn run_agent_turn(
+    engine: &Arc<LlmEngine>,
+    router_engine: Option<&Arc<LlmEngine>>,
+    input: AgentTurnInput,
+    system_prompt: &str,
+    execute_tool: &mut dyn FnMut(&ToolCallRequest) -> Result<String, AppError>,
+    on_answer_token: &dyn Fn(&str),
+) -> Result<AgentLoopResult, AppError> {
     let AgentTurnInput {
         inference_session,
         scope,
-        patient_context,
+        patient_context: _,
         mut history,
         user_message,
         thinking_effort,
     } = input;
-    let session_id = inference_session.conversation_id.clone();
-    let system_prompt = build_system_prompt(&scope, patient_context.as_deref());
     let probe_profile = GenerationTask::ToolProbe.profile(thinking_effort);
     // The answer uses the writing model's family defaults; the probe sampler is
     // family-independent because the probe may run on a router model.
@@ -617,6 +712,7 @@ pub fn run_agent_loop(
     });
 
     let mut tool_calls_made: Vec<ExecutedToolCall> = Vec::new();
+    let mut probe_trace: Vec<ProbeTrace> = Vec::new();
     let mut probe_engine = router_engine.unwrap_or(engine);
     let mut using_dedicated_router = router_engine.is_some();
     let mut router_probe_count = 0_u64;
@@ -626,23 +722,27 @@ pub fn run_agent_loop(
         .saturating_sub(probe_profile.max_tokens + chat_profile.max_tokens + 512);
 
     for iteration in 0..MAX_ITERATIONS {
-        // Summarize history if it is getting too large to fit in the context window
+        // Summarize history if it is getting too large to fit in the context
+        // window. Counted with the model's tokenizer, once per iteration: a
+        // byte-based estimate folded too early (losing prefix reuse, #547)
+        // or too late (#560).
         let formatted = engine.format_chat_history_with_effort(
-            &system_prompt,
+            system_prompt,
             &with_turn_instruction(&history, &answer_instruction),
             chat_profile.effort,
         )?;
-        let estimated_tokens = estimate_tokens(&formatted);
-        if estimated_tokens > summarize_threshold {
+        let prompt_tokens = engine.count_tokens(&formatted);
+        let folded = prompt_tokens > summarize_threshold;
+        if folded {
             log::warn!(
-                "Agent: prompt ~{estimated_tokens} tokens nears context limit, summarizing history"
+                "Agent: prompt {prompt_tokens} tokens nears context limit, summarizing history"
             );
             history = summarize_history(
                 engine,
                 &inference_session,
-                &system_prompt,
+                system_prompt,
                 history,
-                estimated_tokens - summarize_threshold,
+                prompt_tokens - summarize_threshold,
             );
         }
 
@@ -650,7 +750,7 @@ pub fn run_agent_loop(
         // for Qwen-style templates, the native switch for Gemma 4 / Harmony),
         // so the probe's small budget is not spent in a <think> block.
         let prompt = probe_engine.format_chat_history_reasoning_off(
-            &system_prompt,
+            system_prompt,
             &with_turn_instruction(&history, probe_instruction),
         )?;
 
@@ -744,6 +844,17 @@ pub fn run_agent_loop(
                 "answer"
             }
         );
+        probe_trace.push(ProbeTrace {
+            iteration,
+            prompt_tokens,
+            folded,
+            output: probe_output.clone(),
+            generated_tokens: probe_tokens,
+            call: match &decision {
+                ToolDecision::Call(call) => Some(call.clone()),
+                ToolDecision::Answer => None,
+            },
+        });
 
         if let ToolDecision::Call(call) = decision {
             log::info!(
@@ -753,45 +864,17 @@ pub fn run_agent_loop(
             );
 
             let args_json = serde_json::to_string(&call.args).unwrap_or_default();
-
-            let _ = app.emit(
-                "agent-tool-started",
-                serde_json::json!({
-                    "name": call.name,
-                    "args_json": args_json,
-                    "session_id": session_id,
-                }),
-            );
-
-            let result = {
-                let conn = pool.conn()?;
-                super::tools::dispatch_tool(&conn, app, engine, &scope, &call, thinking_effort)
-            };
-
             // The full result is what the UI, persistence and draft versions
             // consume (a `write_report` proposal carries the whole report).
             // Only the model-facing copy in `history` is shortened, and that
             // structurally, so it stays valid JSON (#552).
-            let result_json = match result {
-                Ok(val) => val.to_string(),
-                Err(e) => serde_json::json!({"error": e.to_string()}).to_string(),
-            };
+            let result_json = execute_tool(&call)?;
             let model_result_json = super::tool_result::model_facing(&result_json);
-
-            let _ = app.emit(
-                "agent-tool-called",
-                serde_json::json!({
-                    "name": call.name,
-                    "args_json": args_json,
-                    "result_json": result_json,
-                    "session_id": session_id,
-                }),
-            );
 
             tool_calls_made.push(ExecutedToolCall {
                 name: call.name.clone(),
-                args_json: args_json.clone(),
-                result_json: result_json.clone(),
+                args_json,
+                result_json,
             });
 
             // Append tool_call and tool_result to history
@@ -810,41 +893,14 @@ pub fn run_agent_loop(
             // No tool call — this is the final answer. Stream it with the
             // user-selected think budget. The probe stays short so tool
             // selection is not spent on a long <think> block.
-            let final_prompt = engine.format_chat_history_with_effort(
-                &system_prompt,
-                &with_turn_instruction(&history, &answer_instruction),
-                chat_profile.effort,
-            )?;
-            let final_answer = thinking::generate_with_think_budget_from_prompt(
-                engine,
-                &answer_system,
-                Some(&final_prompt),
-                &user_message,
-                chat_profile,
-                Some(&inference_session),
-                &|token| {
-                    // Keep the legacy event for existing specialised surfaces,
-                    // and provide the session-bound event for the main chat.
-                    let _ = app.emit("agent-chunk", token);
-                    let _ = app.emit(
-                        "agent-chunk-session",
-                        serde_json::json!({"session_id": session_id, "token": token}),
-                    );
-                },
-            )?;
-
-            return Ok(AgentLoopResult {
-                final_answer,
-                tool_calls_made,
-                router_probe_count,
-                router_probe_duration_ms,
-            });
+            break;
         }
     }
 
-    // Exceeded MAX_ITERATIONS — force a final answer from accumulated history
+    // A final answer, or MAX_ITERATIONS exceeded: answer from the accumulated
+    // history either way.
     let final_prompt = engine.format_chat_history_with_effort(
-        &system_prompt,
+        system_prompt,
         &with_turn_instruction(&history, &answer_instruction),
         chat_profile.effort,
     )?;
@@ -855,19 +911,14 @@ pub fn run_agent_loop(
         &user_message,
         chat_profile,
         Some(&inference_session),
-        &|token| {
-            let _ = app.emit("agent-chunk", token);
-            let _ = app.emit(
-                "agent-chunk-session",
-                serde_json::json!({"session_id": session_id, "token": token}),
-            );
-        },
+        on_answer_token,
     )?;
     Ok(AgentLoopResult {
         final_answer,
         tool_calls_made,
         router_probe_count,
         router_probe_duration_ms,
+        probe_trace,
     })
 }
 
@@ -1119,8 +1170,13 @@ mod tests {
         assert!(matches!(decision, ToolDecision::Call(call) if call.name == "list_patients"));
     }
 
+    /// Stand-in tokenizer for the fold-planning tests: 1 token per 3 bytes.
+    fn approx_tokens(text: &str) -> usize {
+        (text.len() / 3).max(1)
+    }
+
     /// `turns` completed question/answer turns followed by the current
-    /// question; every message is ~100 estimated tokens.
+    /// question; every message is ~100 `approx_tokens`.
     fn conversation(turns: usize) -> Vec<AgentMessage> {
         let mut history = Vec::new();
         for turn in 0..turns {
@@ -1141,16 +1197,22 @@ mod tests {
         // Indices: 0 = Q0, odd = answers, 2k = Qk, 20 = current question.
         let history = conversation(10);
         // One block (messages 1..8, through the answer of turn 3) frees enough.
-        assert_eq!(plan_history_fold(&history, 500), vec![1..8]);
-        assert_eq!(plan_history_fold(&history, 600), vec![1..8, 8..16]);
+        assert_eq!(plan_history_fold(&history, 500, approx_tokens), vec![1..8]);
+        assert_eq!(
+            plan_history_fold(&history, 600, approx_tokens),
+            vec![1..8, 8..16]
+        );
         // Whole blocks are not enough: fold up to the current question.
         assert_eq!(
-            plan_history_fold(&history, 1_200),
+            plan_history_fold(&history, 1_200, approx_tokens),
             vec![1..8, 8..16, 16..20]
         );
         // Boundaries do not move as the conversation grows.
-        assert_eq!(plan_history_fold(&conversation(12), 500), vec![1..8]);
-        assert!(plan_history_fold(&history[..3], 1).is_empty());
+        assert_eq!(
+            plan_history_fold(&conversation(12), 500, approx_tokens),
+            vec![1..8]
+        );
+        assert!(plan_history_fold(&history[..3], 1, approx_tokens).is_empty());
     }
 
     #[test]
@@ -1165,13 +1227,16 @@ mod tests {
             message("tool_call", "<tool_call>{}</tool_call>"),
             message("tool_result", &big),
         ];
-        assert_eq!(plan_history_fold(&history, 500), vec![1..2, 2..5]);
+        assert_eq!(
+            plan_history_fold(&history, 500, approx_tokens),
+            vec![1..2, 2..5]
+        );
     }
 
     #[test]
     fn history_fold_puts_an_appendable_summary_after_the_first_message() {
         let history = conversation(10);
-        let plan = plan_history_fold(&history, 500);
+        let plan = plan_history_fold(&history, 500, approx_tokens);
         let folded = fold_history(&history, &plan, fake_summary).unwrap();
         assert_eq!(folded[0], history[0]);
         assert_eq!(
@@ -1182,7 +1247,7 @@ mod tests {
 
         // A later fold extends the summary instead of rewriting it, and
         // never folds the summary itself.
-        let plan = plan_history_fold(&folded, 500);
+        let plan = plan_history_fold(&folded, 500, approx_tokens);
         assert_eq!(plan.first().map(|range| range.start), Some(2));
         let refolded = fold_history(&folded, &plan, fake_summary).unwrap();
         assert!(refolded[1].content.starts_with(&folded[1].content));
@@ -1192,7 +1257,7 @@ mod tests {
     #[test]
     fn history_fold_is_repeatable_so_the_next_turn_reuses_the_prefix() {
         let fold = |history: &[AgentMessage]| {
-            let plan = plan_history_fold(history, 500);
+            let plan = plan_history_fold(history, 500, approx_tokens);
             fold_history(history, &plan, fake_summary).unwrap()
         };
         let this_turn = fold(&conversation(10));

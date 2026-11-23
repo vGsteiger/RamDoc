@@ -444,7 +444,7 @@ fn tool_call_from_answer(answer: &str) -> Result<ToolExpectation, String> {
     serde_json::from_str(json.trim()).map_err(|error| format!("invalid tool-call JSON: {error}"))
 }
 
-fn json_contains(actual: &Value, expected: &Value) -> bool {
+pub(crate) fn json_contains(actual: &Value, expected: &Value) -> bool {
     match (actual, expected) {
         (Value::Object(actual), Value::Object(expected)) => expected.iter().all(|(key, value)| {
             actual
@@ -462,9 +462,15 @@ fn json_contains(actual: &Value, expected: &Value) -> bool {
 /// clinical tokens, exclusions and tool arguments remain individually visible
 /// so an aggregate score cannot hide a harmful category regression.
 pub fn score_case(case: &ClinicalCase, answer: &str) -> ClinicalScore {
+    score_expected(&case.expected, answer)
+}
+
+/// [`score_case`] for any declared expectation, e.g. the final answer of an
+/// agent trajectory.
+pub fn score_expected(expected_answer: &ExpectedAnswer, answer: &str) -> ClinicalScore {
     let normalized = folded(answer);
     let mut checks = Vec::new();
-    for expected in &case.expected.contains_all {
+    for expected in &expected_answer.contains_all {
         let passed = normalized.contains(&folded(expected));
         checks.push(CheckResult {
             check: format!("contains:{expected}"),
@@ -476,7 +482,7 @@ pub fn score_case(case: &ClinicalCase, answer: &str) -> ClinicalScore {
             },
         });
     }
-    for alternatives in &case.expected.contains_any {
+    for alternatives in &expected_answer.contains_any {
         let passed = alternatives
             .iter()
             .any(|expected| normalized.contains(&folded(expected)));
@@ -490,7 +496,7 @@ pub fn score_case(case: &ClinicalCase, answer: &str) -> ClinicalScore {
             },
         });
     }
-    for excluded in &case.expected.excludes {
+    for excluded in &expected_answer.excludes {
         let passed = !normalized.contains(&folded(excluded));
         checks.push(CheckResult {
             check: format!("excludes:{excluded}"),
@@ -502,7 +508,7 @@ pub fn score_case(case: &ClinicalCase, answer: &str) -> ClinicalScore {
             },
         });
     }
-    if let Some(exact) = &case.expected.exact {
+    if let Some(exact) = &expected_answer.exact {
         let passed = normalized == folded(exact);
         checks.push(CheckResult {
             check: "exact".to_string(),
@@ -514,7 +520,7 @@ pub fn score_case(case: &ClinicalCase, answer: &str) -> ClinicalScore {
             },
         });
     }
-    if let Some(expected) = &case.expected.tool_call {
+    if let Some(expected) = &expected_answer.tool_call {
         match tool_call_from_answer(answer) {
             Ok(actual) => {
                 let name_passed = actual.name == expected.name;
@@ -945,7 +951,7 @@ fn sha256_bytes(bytes: &[u8]) -> String {
     hex::encode(digest.as_ref())
 }
 
-fn sha256_path(path: &Path) -> Result<String, String> {
+pub(crate) fn sha256_path(path: &Path) -> Result<String, String> {
     let mut file =
         File::open(path).map_err(|error| format!("open '{}': {error}", path.display()))?;
     let mut context = DigestContext::new(&SHA256);
