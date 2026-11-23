@@ -7,6 +7,14 @@ on:
         description: Version tag to build
         required: true
         type: string
+      # Declared here too: an input missing from workflow_call evaluates to
+      # null, and null == false in expressions, which silently skipped the
+      # upload for every release.
+      publish:
+        description: Upload assets to the release and publish it
+        required: false
+        default: true
+        type: boolean
   workflow_dispatch:
     inputs:
       tag:
@@ -229,7 +237,8 @@ jobs:
     runs-on: ubuntu-latest
     # Upload only after the requested release build succeeds. A manual
     # dispatch with publish unticked is a dry run: build and verify only.
-    if: always() && needs.tauri-build.result == 'success' && inputs.publish != false
+    # Releases called from release.yml always publish.
+    if: always() && needs.tauri-build.result == 'success' && (github.event_name != 'workflow_dispatch' || inputs.publish)
     permissions:
       contents: write
 
