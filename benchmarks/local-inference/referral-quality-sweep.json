@@ -71,6 +71,20 @@
       "thinking_effort": "low",
       "no_think": false,
       "sampler": { "temperature": 0.35, "top_k": 40, "top_p": 0.9, "min_p": 0.05, "repeat_penalty": 1.05, "presence_penalty": 0.0, "seed": 0 }
+    },
+    {
+      "id": "family-qwen-document-low",
+      "description": "Issue #558 Qwen family document default: Qwen thinking sampler with a 0.05 min-p grounding floor.",
+      "thinking_effort": "low",
+      "no_think": false,
+      "sampler": { "temperature": 0.6, "top_k": 20, "top_p": 0.95, "min_p": 0.05, "repeat_penalty": 1.0, "presence_penalty": 0.0, "seed": 0 }
+    },
+    {
+      "id": "family-qwen-document-medium",
+      "description": "Issue #558 Qwen family document default at medium effort.",
+      "thinking_effort": "medium",
+      "no_think": false,
+      "sampler": { "temperature": 0.6, "top_k": 20, "top_p": 0.95, "min_p": 0.05, "repeat_penalty": 1.0, "presence_penalty": 0.0, "seed": 0 }
     }
   ],
   "cases": [

@@ -131,6 +131,26 @@ comparison misleading.
 This remains a small synthetic sample. It supports a RamDoc default for this model and task, not a
 broad claim about other models, other clinical documents, or real-world clinical correctness.
 
+## Model-family sampler defaults (issue #558)
+
+`GenerationTask::profile_for` picks the base sampler from the loaded model's `SamplerFamily`
+(`dokassist/src-tauri/src/llm/harness.rs`, vendor sources cited inline). Unknown models resolve to
+`Generic`, which keeps the samplers above. The `family-qwen-document-low` and
+`family-qwen-document-medium` arms reproduce the Qwen document default; run them on the development
+split alongside `current-low` and `current-medium` before relying on the family default:
+
+```bash
+cargo run --features benchmark-harness --bin referral-quality-sweep -- run \
+  --model /absolute/path/to/Qwen3-8B-Q4_K_M.gguf \
+  --output /private/tmp/ramdoc-referral-558-development.json \
+  --split development \
+  --arms current-low,current-medium,family-qwen-document-low,family-qwen-document-medium \
+  --repetitions 3
+```
+
+The suite pins one Qwen artifact, so other families need their own versioned suite file (same cases,
+a different pinned GGUF) before their defaults can be validated the same way.
+
 ## Why these knobs
 
 - The [Qwen3 model card](https://huggingface.co/Qwen/Qwen3-8B/blob/main/README.md#best-practices)

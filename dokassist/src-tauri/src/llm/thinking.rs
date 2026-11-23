@@ -112,10 +112,9 @@ pub fn generate_with_think_budget_and_sampler(
     sampler: Option<SamplerConfig>,
     emit: &dyn Fn(&str),
 ) -> Result<String, AppError> {
-    let mut profile = task.profile(effort);
-    if let Some(sampler) = sampler {
-        profile.sampler = sampler.validate().map_err(AppError::Validation)?;
-    }
+    let profile = task
+        .profile_with_override(engine.sampler_family(), effort, sampler)
+        .map_err(AppError::Validation)?;
     let system_prompt = if engine.chat_family().uses_plain_think_tags() {
         profile.effort.apply_to_system_prompt(system_prompt)
     } else {
