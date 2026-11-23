@@ -6,7 +6,8 @@ rust-version = "1.95"
 
 [lib]
 name = "dokassist_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+# rlib only (the default): staticlib/cdylib exist in the Tauri template for
+# iOS/Android, which RamDoc does not target, and linked the crate three times.
 
 [[bin]]
 name = "local-inference-benchmark"

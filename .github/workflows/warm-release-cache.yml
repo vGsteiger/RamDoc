@@ -1,0 +1,97 @@
+name: Warm Release Cache
+
+# Release builds (tauri-build.yml) cannot save a reusable cache: they run from
+# the PR-merge event, whose caches are scoped to that PR. This workflow builds
+# the same release target on main and saves it under the shared key that
+# tauri-build.yml restores, so releases only recompile what changed instead of
+# all ~575 crates plus llama.cpp from scratch.
+#
+# Keep the toolchain, target, rust-cache settings and build command in sync
+# with tauri-build.yml; any difference in the Rust environment changes the
+# cache key and the release falls back to a cold build.
+
+on:
+  push:
+    branches: [main]
+    # Only dependency or toolchain changes invalidate the cached dependencies;
+    # ordinary code changes only rebuild the app crates, which are not cached.
+    paths:
+      - 'dokassist/src-tauri/Cargo.toml'
+      - 'dokassist/src-tauri/Cargo.lock'
+      - 'dokassist/src-tauri/build.rs'
+      - 'dokassist/src-tauri/rust-toolchain.toml'
+      - 'dokassist/asr-worker/Cargo.toml'
+      - 'dokassist/asr-worker/Cargo.lock'
+      - 'dokassist/asr-worker/rust-toolchain.toml'
+      - '.github/workflows/warm-release-cache.yml'
+  schedule:
+    # Weekly: picks up new stable toolchains (which change the cache key) and
+    # keeps the cache from GitHub's 7-day eviction when no release restores it.
+    - cron: '23 3 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: warm-release-cache-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  warm:
+    name: Warm release cache - aarch64-apple-darwin
+    runs-on: macos-latest
+    # No job-level RUST*/CARGO*/CC*/CMAKE* env here: rust-cache hashes those
+    # variables into the key, and any that tauri-build.yml lacks would make the
+    # release look for a different key and miss the cache.
+
+    steps:
+    - name: Checkout code
+      # CRIT-7: Pinned to commit SHA for supply-chain security (tag: v4)
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+      with:
+        fetch-depth: 1
+
+    - name: Setup pnpm
+      # CRIT-7: Pinned to commit SHA for supply-chain security (tag: v4.2.0)
+      uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      with:
+        version: 9
+
+    - name: Setup Node.js
+      # CRIT-7: Pinned to commit SHA for supply-chain security (tag: v4)
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v4
+      with:
+        node-version: '24.21.0'
+        cache: pnpm
+        cache-dependency-path: dokassist/pnpm-lock.yaml
+
+    - name: Setup Rust
+      # CRIT-7: Pinned to commit SHA for supply-chain security (tag: v1)
+      uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
+      with:
+        toolchain: stable
+        target: aarch64-apple-darwin
+        cache: false
+
+    # On an exact key hit this restores, finds nothing to rebuild and skips
+    # saving, so an unchanged week costs a few minutes rather than a full build.
+    - name: Release build cache
+      uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      with:
+        shared-key: release-aarch64-apple-darwin
+        workspaces: |
+          dokassist/src-tauri
+          dokassist/asr-worker
+        save-if: true
+
+    - name: Install frontend dependencies
+      working-directory: ./dokassist
+      run: pnpm install --frozen-lockfile --prefer-offline
+
+    # The exact release build command (same --config, so the same TAURI_CONFIG
+    # reaches the build scripts and the dictation sidecar is built too), minus
+    # bundling and signing, which produce nothing worth caching.
+    - name: Build release (no bundle)
+      working-directory: ./dokassist
+      run: pnpm tauri build --target aarch64-apple-darwin --config src-tauri/tauri.bundle.conf.json --no-bundle

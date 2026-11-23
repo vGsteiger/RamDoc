@@ -65,10 +65,23 @@ jobs:
       with:
         toolchain: stable
         target: ${{ matrix.rust-targets }}
+        # The built-in cache points at the repo root, which has no Cargo.toml;
+        # the release cache is configured explicitly below.
+        cache: false
 
-    # No target/ cache here: release builds run from the PR-merge event, so any
-    # cache they save is scoped to that PR's ref and can never be restored by a
-    # later release; it only consumed the 10 GB repo cache quota.
+    # Restore-only: release builds run from the PR-merge event, so a cache they
+    # saved would be scoped to that PR's ref and never restored again. Instead
+    # warm-release-cache.yml builds the same target on main and saves it under
+    # this shared key, which every ref can restore. Keep the toolchain, target
+    # and cache settings here in sync with that workflow, or the keys diverge.
+    - name: Restore release build cache
+      uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      with:
+        shared-key: release-${{ matrix.rust-targets }}
+        workspaces: |
+          dokassist/src-tauri
+          dokassist/asr-worker
+        save-if: false
 
     - name: Install frontend dependencies
       working-directory: ./dokassist
