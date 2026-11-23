@@ -1,3 +1,4 @@
+use super::grammar::Grammar;
 use super::harness::{self, GenerationTask};
 use super::thinking::ThinkingEffort;
 use super::{engine::LlmEngine, prompts};
@@ -27,6 +28,8 @@ pub fn extract_metadata_with_prompt(
 ) -> Result<FileMetadata, AppError> {
     let user_message = prompts::metadata_extraction_prompt(document_text);
     let profile = GenerationTask::Extract.profile_for(engine.sampler_family(), ThinkingEffort::Low);
+    // The grammar makes the object well-formed by construction (#555).
+    let grammar = Grammar::file_metadata(engine.chat_family());
     let response = engine.generate_reasoning_off(
         system_prompt,
         &user_message,
@@ -38,8 +41,11 @@ pub fn extract_metadata_with_prompt(
             super::context_cache::OneOffTask::Extract,
             None,
         )),
+        Some(&grammar),
     )?;
-    // Models that reason regardless of the switch still emit a `<think>` block.
+    // Fallback for output the grammar did not shape: it is lazy for channel
+    // families and dropped if llama.cpp rejects it. Models that reason
+    // regardless of the switch still emit a `<think>` block.
     let response = harness::strip_think_blocks(&response);
     let json_str = strip_markdown_fences(&response);
     serde_json::from_str(json_str)
