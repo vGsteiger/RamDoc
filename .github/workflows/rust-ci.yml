@@ -60,7 +60,7 @@ jobs:
     - name: Install Rust toolchain
       if: needs.changes.outputs.rust == 'true'
       # CRIT-7: Pinned to commit SHA for supply-chain security (tag: v1)
-      uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f
+      uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc
       with:
         toolchain: ${{ matrix.rust }}
         components: rustfmt, clippy
